@@ -307,16 +307,51 @@ fi
 #    refresh. And the two prod-guard layers must carry the SAME word-boundary marker
 #    (sh spells it [0-9]*, ts spells it \d* — same semantics); a drifted pair means
 #    the advisory layer and the enforced layer disagree on what "prod" means.
+#
+#    FOUR lockstep pairs, not one (2026-09-06 parity audit, §4b finding 3). The files'
+#    OWN comments demand lockstep on three more literals, and nothing checked them:
+#    prod-guard.ts:15 "Keep this var-name set in lockstep with prod-guard.sh", and
+#    prod-guard.sh:101 "Keep these two case patterns in lockstep with prod-guard.ts's
+#    PLACEHOLDER_VALUE_RE / PLACEHOLDER_HOST_RE". Differential testing proved the two
+#    layers AGREE today (55 cases, 54 identical verdicts), so this pins the agreement
+#    rather than fixing a break — the same unchecked-hand-mirrored-pair shape Checks
+#    9b/9bb/9bc exist for. The var-name set is the load-bearing one: NARROWING it on one
+#    side silently unscreens a target on that layer, so a prod URL parked in the dropped
+#    var sails past that guard while the other still refuses — a divergence that presents
+#    as "the guard is inconsistent", not as an obvious break.
+#    Two of the three pairs are pinned PER-FILE rather than compared byte-to-byte,
+#    because the layers legitimately spell them in different languages (JS regex vs shell
+#    `case` glob) — exactly like the marker regex above.
 for f in scripts/prod-guard.sh scripts/resolve-spec-path.sh scripts/spec-links.sh scripts/post-run-checks.sh scripts/oracle-keys.txt; do
   [ -f "$f" ] || { echo "⚠️  $f missing — project scaffolded before it shipped; re-run /qa:init"; warn=$((warn+1)); }
 done
 if [ -f scripts/prod-guard.sh ]; then
   grep -qF '(^|[.-])(prod|production)[0-9]*($|[.-])' scripts/prod-guard.sh \
     || { echo "❌ scripts/prod-guard.sh: canonical prod-marker regex not found (drifted or removed)"; fail=$((fail+1)); }
+  # Pair 2 of 4 — screened var-name set. Byte-identical in both layers, so this same
+  # literal is asserted against the .ts below; a narrowed set unscreens a live target.
+  grep -qF '(BASE_URL[A-Z0-9_]*|API_URL|[A-Z0-9_]*_API_URL)' scripts/prod-guard.sh \
+    || { echo "❌ scripts/prod-guard.sh: screened var-name set drifted — must stay in lockstep with prod-guard.ts (a narrowed set silently stops screening a target on this layer)"; fail=$((fail+1)); }
+  # Pair 3 of 4 — placeholder VALUE sentinel (.ts spells it /changeme|[<>]/i).
+  grep -qF "*changeme*|*'<'*|*'>'*" scripts/prod-guard.sh \
+    || { echo "❌ scripts/prod-guard.sh: placeholder-value case pattern drifted — must stay in lockstep with prod-guard.ts's PLACEHOLDER_VALUE_RE"; fail=$((fail+1)); }
+  # Pair 4 of 4 — RFC-2606 placeholder HOST list, label-anchored (.ts spells it
+  # /(^|\.)example(\.(com|org|net))?$/i).
+  grep -qF 'example.com|*.example.com|example.org|*.example.org|example.net|*.example.net|example|*.example' scripts/prod-guard.sh \
+    || { echo "❌ scripts/prod-guard.sh: RFC-2606 placeholder-host case list drifted — must stay in lockstep with prod-guard.ts's PLACEHOLDER_HOST_RE"; fail=$((fail+1)); }
 fi
 if [ -f scripts/prod-guard.ts ]; then
   grep -qF '(^|[.-])(prod|production)\d*($|[.-])' scripts/prod-guard.ts \
     || { echo "❌ scripts/prod-guard.ts: canonical prod-marker regex not found (drifted or removed)"; fail=$((fail+1)); }
+  # Pair 2 of 4 — same literal as the .sh above (this pair IS byte-identical).
+  grep -qF '(BASE_URL[A-Z0-9_]*|API_URL|[A-Z0-9_]*_API_URL)' scripts/prod-guard.ts \
+    || { echo "❌ scripts/prod-guard.ts: screened var-name set drifted — must stay in lockstep with prod-guard.sh (a narrowed set silently stops screening a target on this layer)"; fail=$((fail+1)); }
+  # Pair 3 of 4 — PLACEHOLDER_VALUE_RE.
+  grep -qF 'changeme|[<>]' scripts/prod-guard.ts \
+    || { echo "❌ scripts/prod-guard.ts: PLACEHOLDER_VALUE_RE drifted — must stay in lockstep with prod-guard.sh's *changeme*/<>/ case pattern"; fail=$((fail+1)); }
+  # Pair 4 of 4 — PLACEHOLDER_HOST_RE.
+  grep -qF '(^|\.)example(\.(com|org|net))?$' scripts/prod-guard.ts \
+    || { echo "❌ scripts/prod-guard.ts: PLACEHOLDER_HOST_RE drifted — must stay in lockstep with prod-guard.sh's RFC-2606 case list"; fail=$((fail+1)); }
 fi
 # 8b. MCP server PAIRED-BUMP lockstep. As of Playwright 1.62 the MCP server ships BUNDLED with
 #     `playwright`, so .mcp.explore.json launches `npx -y playwright@<version> mcp`. That npx arg
