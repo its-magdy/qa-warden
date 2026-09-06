@@ -84,7 +84,10 @@ function resolveWorkers(): number | string | undefined {
   const raw = process.env.QA_WORKERS;
   const fallback = isCI ? 4 : undefined;
   if (!raw) return fallback;
-  if (/^\d+%$/.test(raw)) return raw;
+  // `[1-9]\d*%`, not `\d+%`: this function exists to stop a degenerate value reaching
+  // Playwright, and a bare `\d+%` rejected the integer `0` while waving through `0%` — the
+  // same zero-worker request spelled the other way.
+  if (/^[1-9]\d*%$/.test(raw)) return raw;
   const n = Number(raw);
   if (Number.isInteger(n) && n > 0) return n;
   // eslint-disable-next-line no-console
@@ -280,18 +283,30 @@ export default defineConfig({
     // tests would silently run again). Fold both instead:
     //   grepInvert: process.env.QA_RUN_QUARANTINE === '1' ? /@mobile/ : /@quarantine|@mobile/
     // This project sets NO grepInvert of its own, so the top-level quarantine exclusion applies.
+    // Spread `siteProjectDefaults` — do NOT hand-type `testIgnore`/`dependencies` here. That is
+    // the drift this const exists to prevent, and a hand-typed `testIgnore: ['**/*.setup.ts']`
+    // drops the two `_`-scratch globs, so this lane collects probe byproducts the other lanes
+    // ignore. Same `(?:\s|$)` tag boundary as the app/admin greps above: a bare /@mobile/ also
+    // matches @mobile-only / @mobile-safari and pulls those into the Pixel-7 viewport.
     // {
     //   name: 'mobile',
     //   use: { ...devices['Pixel 7'], baseURL: APP_BASE_URL },
-    //   grep: /@mobile/,
-    //   testIgnore: ['**/*.setup.ts'],
-    //   dependencies: ['setup'],
+    //   grep: /@mobile(?:\s|$)/,
+    //   ...siteProjectDefaults,
     // },
     // Uncomment to expand browser coverage. Keep chromium as the default
     // smoke target — it's what the agents author against.
+    // A cross-browser project is still a SITE project: it needs the same `grep` +
+    // `siteProjectDefaults` as `app`, not a bare `use:`. Without `grep` it collects the
+    // @site:admin specs too and runs them against APP_BASE_URL; without the defaults it has no
+    // `dependencies: ['setup']` (every storageState spec runs unauthenticated) and re-runs the
+    // `*.setup.ts` files as ordinary tests (F-018). Mirror the `app` project and change only
+    // the device. For a second SITE on this browser, copy the `admin` block instead.
     // {
     //   name: 'firefox',
-    //   use: { ...devices['Desktop Firefox'] },
+    //   use: { ...devices['Desktop Firefox'], baseURL: APP_BASE_URL },
+    //   grep: /@site:app(?:\s|$)|^(?!.*@site:)/,
+    //   ...siteProjectDefaults,
     // },
     // WebKit != Safari iOS. Playwright's
     // WebKit build approximates Safari on desktop; mobile Safari quirks
@@ -299,7 +314,9 @@ export default defineConfig({
     // For real iOS Safari coverage, use BrowserStack / Sauce Labs real devices.
     // {
     //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
+    //   use: { ...devices['Desktop Safari'], baseURL: APP_BASE_URL },
+    //   grep: /@site:app(?:\s|$)|^(?!.*@site:)/,
+    //   ...siteProjectDefaults,
     // },
   ],
 });
