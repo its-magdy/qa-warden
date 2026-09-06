@@ -105,6 +105,15 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
+  // Retries run at the END of the suite, one at a time in a single worker, instead of being
+  // interleaved with the rest of the run (Playwright's default, 'immediate'). Requires >= 1.62
+  // — verified against the v1.62.1 type declarations, not a blog; we pin 1.62.1.
+  // Why it matters here: an interleaved retry re-runs the failed test WHILE the rest of the
+  // suite is still mutating shared server state, so a retry can go green for a reason that has
+  // nothing to do with the fix (or stay red because a *different* test raced it). That turns a
+  // real defect into "flaky" and a race into "passed on retry" — both are the green-but-wrong
+  // outcome this toolkit exists to block. Isolating retries costs wall-clock, not correctness.
+  retryStrategy: 'isolated',
   // Validated above in resolveWorkers() — a malformed QA_WORKERS warns and falls back
   // rather than reaching Playwright as NaN/0.
   workers: resolveWorkers(),
