@@ -232,8 +232,11 @@ delete them to make the toolkit sound more complete than it is.
   CI check and expect the same protection. This used to be operator discipline — no agent pinned
   a `model:`, so the reviewer could silently run its judgment checks (2b/2c/2d/2e/14) on a cost
   tier, and A-04's advisory made that degradation visible rather than silent (a guard, not a pin).
-  **That is now a pin:** every agent declares an explicit `model:` — `reviewer` and `ideation` on
-  **opus**, the other four on **sonnet**. A pin RAISES the floor; it does not close the hole. Claude
+  **That is now a pin:** every agent declares an explicit `model:` — `reviewer`, `ideation` and
+  `planner` on **opus**, the other three on **sonnet**. A pin RAISES the floor; it does not close
+  the hole — and note it also LOWERS the ceiling: an operator running `claude --model opus` who
+  invokes a sonnet-pinned agent gets sonnet, because the pin (priority 3) beats the session model
+  (priority 4). The pin is a fixed tier, not a minimum. Claude
   Code resolves a subagent's model in this order: (1) the `CLAUDE_CODE_SUBAGENT_MODEL` env var,
   (2) a per-invocation `model` parameter, (3) this frontmatter pin, (4) the session model — so the
   pin sits at priority 3 and an env var or a caller-supplied override silently beats it. **Verified**
@@ -244,9 +247,17 @@ delete them to make the toolkit sound more complete than it is.
   substituted; a family-alias match (an older permitted version of the same tier) is tried before
   falling back to the inherited model. **This is exactly why A-04's advisory is kept rather than retired:** the pin covers
   the common case, and the advisory is the only thing that surfaces the uncommon one. The rule the split follows: an agent whose weak output
-  surfaces as a *red test* (exploration, planner, generator, healer — all grounded by a live AX
+  surfaces as a *red test* (exploration, generator, healer — all grounded by a live AX
   snapshot or an actual run) can inherit a cheaper tier safely; an agent whose weak output is a
   *silently missing* finding — an unenforced assertion contract, an unenumerated case — cannot.
+  **The `planner` was moved to opus because this rule had it on the wrong side.** Its output is the
+  *oracle*, and nothing downstream compares an oracle to reality — F-38 below says so outright, and
+  the two backstops it names are both scoped by the planner's own text: step-8b injects only against
+  invariants the planner chose to *declare*, and Check 2c's blocking FAIL is *title-anchored* (F-39),
+  so a vaguer planner title silently downgrades the reviewer's FAIL to a WARN. A planner omission
+  therefore produces no red test and no finding — it shrinks the net. It is also the cheapest agent
+  to raise (16 turns, 3 reads, 1 write, no browser loop) and runs only at authoring time, so the
+  "~$0 nightly" claim — which rests on agent-free replay — is untouched.
   A-04's advisory survives in reduced form: it now names the five checks as LLM-reasoned and WARNs
   only if the pin appears to have been overridden. The durable fix is to lift the prose "broken
   if…" statement into `must_fail_when:` (planner) so step-8b covers it.
