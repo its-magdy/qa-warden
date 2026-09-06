@@ -68,6 +68,23 @@ correctly. Group admin specs under an `admin/` area only for organization
 (Why routing is tag-based, and the trap in re-introducing a path-routed project:
 `reference/DESIGN.md` §"Site routing is tag-based, not path-based".)
 
+**Existing spec? This becomes a REVISION, and the planner must not overwrite it (⛔ data loss).**
+After `SPEC_PATH` resolves, check it before delegating:
+```bash
+[ -f "$SPEC_PATH" ] && echo "EXISTS — revision, not authoring: $SPEC_PATH"
+```
+If it exists, say so in the delegation: tell the planner it is **revising `$SPEC_PATH`** and
+name the specific change. The planner's Process 4c makes this a `Read` + `Edit` path and
+forbids `Write` on an existing file — a one-pass rewrite silently destroys hand-added
+`scenarios:`, `must_fail_when:`/`invariant_holds_when:` entries, `# waived:` lines (the
+Check-14 / `/qa:coverage` dim-5 audit trail), the `basis:` pairing, and answered Open
+questions, while every downstream check stays green on the reduced spec. This is also the
+path `.healer-needs-spec-update` routes through (`${CLAUDE_PLUGIN_ROOT}/reference/sentinel-actions.md`),
+where only a narrow old→new copy change is wanted and the surrounding oracle must survive.
+If the story wholesale replaces the existing oracle rather than amending it, the planner
+STOPs and hands the overwrite decision back — retire the old spec with `/qa:retire` first,
+then re-run this command clean.
+
 The planner reads:
 
 1. **Hot tier** — `specs/_context/app.context.md` for the `sites:` table.

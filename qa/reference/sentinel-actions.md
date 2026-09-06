@@ -15,7 +15,7 @@ orphaned sentinel means a failure everyone believes was triaged is still live.
 | `.healer-needs-seed` | re-run the auth setup project: `npx playwright test --project=setup --retries=0 --reporter=line` (rewrites `fixtures/auth.<site>.json`; `--reporter=line` so this setup-only side run can never pose as the run-of-record) |
 | `.healer-needs-data` | re-run the data-seeding path (`test-data-seed` skill) or restore/re-create the entity named in the sentinel — auth setup will NOT fix this |
 | `.healer-needs-migrate` | `/qa:impact field=<old-field>`, then hand-edit `fixtures/schemas/<entity>.ts` (the factory→fixture cascade propagates), then `/qa:gen` the affected specs |
-| `.healer-needs-spec-update` | route the recorded old→new copy to the planner (`/qa:new-spec` revision of the named spec) — the oracle belongs to the spec; do NOT edit the test's assertion yourself |
+| `.healer-needs-spec-update` | route the recorded old→new copy to the planner: re-run `/qa:new-spec <area/feature>` on the NAMED EXISTING spec — the planner's Process 4c detects the file exists and takes its `Read` + `Edit` revise path, amending only the changed copy and leaving the rest of the oracle byte-identical (it will NOT one-pass rewrite the file). The oracle belongs to the spec; do NOT edit the test's assertion yourself |
 
 This table is the single source for the sentinel contract. Its consumers are `/qa:heal` (the
 primary loop), `/qa:batch-fix` (same loop around its representative-failure triage), and
