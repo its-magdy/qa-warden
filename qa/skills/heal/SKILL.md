@@ -12,8 +12,10 @@ browser (interactive MCP replay, step 3) *before* any `npx playwright test`, so 
 missing, re-run `/qa:init` to stamp it.) This is the one browser-driving command whose first
 action can be a live-browser step, so the guard cannot be left to `globalSetup`.
 
-Delegate to the `healer` subagent (runs on the session-selected model; signals
-for a stronger model on second re-fail, Playwright MCP enabled) to triage
+Delegate to the `healer` subagent (pinned `model: sonnet` in its frontmatter, so it
+runs at that tier in place of the session model and cannot raise it mid-run — it
+signals for a stronger model on second re-fail and the OPERATOR re-runs it higher;
+Playwright MCP enabled) to triage
 `artifacts/test-results/$ARGUMENTS/` (the configured `outputDir` — NOT
 repo-root `test-results/`).
 
@@ -29,7 +31,7 @@ The healer must:
 2. Read the failing `.spec.ts` and pre-failure DOM snapshot.
 3. **If invoked interactively** (started with `--mcp-config .mcp.explore.json`), replay via
    Playwright MCP to observe the actual DOM state. **In a scheduled/CI run MCP is absent**
-   (`healer.md` §"MCP is interactive-only") — there, work from `trace.zip` + the pre-failure
+   (`healer.md` §"Tooling mode — CLI-first, MCP-optional") — there, work from `trace.zip` + the pre-failure
    snapshot + `error-context.md` alone; do not assume live MCP replay is available.
 4. Classify the failure into one of the healer's **10 buckets** (`healer.md`
    step 4) — broken locator | missing wait | changed text | stale
@@ -48,8 +50,8 @@ The healer must:
    run-of-record `/qa:report` reads; see `healer.md` step 6 / reviewer.md.)
 
 **Hard turn budget: 14.** After 14 turns on the same failure, stop and signal that
-a stronger model is required (the healer pins `model: sonnet`; it cannot raise
-its own tier mid-run — the operator raises the pin or re-runs the work higher). If still red after that re-run, give up,
+a stronger model is required (per the pin above, that signal is for the operator to
+act on — the healer cannot act on it itself). If still red after that re-run, give up,
 file a bug, and revert. Never silently retry past the budget (CLAUDE.md §Escalation rules).
 
 **Close the sentinel loop (YOU are the orchestrator the healer hands off to).**
