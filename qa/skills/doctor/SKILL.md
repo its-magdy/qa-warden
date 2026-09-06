@@ -66,6 +66,10 @@ does not fix anything — each finding names its repair:
   `templates/CLAUDE.md` and `agents/planner.md` — reconcile to CLAUDE.md (the stamped SoT).
   Only the shape expression is compared; rewording the trailing prose never fires this.
   A `did not parse` FAIL means the table format moved and shapes are UNCHECKED, not in sync.
+  It also pins `invariant_holds_when:` to the LIST form (`- invariant:`/`holds_when:` pairs) in
+  both mirrors — a bare scalar FAILs. That key is in the YAML schema block, not the table, so
+  the shape extractor cannot see it; it shipped scalar in CLAUDE.md and list in planner.md,
+  and the reviewer reads shapes from the stamped CLAUDE.md.
 - **Check 9bc (turn-budget ordering):** an agent's `maxTurns` ceiling is at or below its own
   prose turn budget. Raise the ceiling, don't lower the prose number: `maxTurns` hard-stops and
   returns PARTIAL output, running NO fallback, so pinned at the budget it preempts the behavior

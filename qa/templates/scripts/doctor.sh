@@ -527,6 +527,24 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
       done < <(printf '%s\n' "$pln_shapes")
     fi
   fi
+  # 9bb (cont). `invariant_holds_when:` SHAPE. Same drift class as the table above but invisible to
+  #      its extractor — this key lives in the YAML schema block, not the arg-shape table. It shipped
+  #      with TWO incompatible shapes: planner.md emitted a list of {invariant, holds_when} pairs
+  #      while templates/CLAUDE.md showed a bare scalar. The reviewer reads shapes from the STAMPED
+  #      CLAUDE.md, so it validated a scalar the planner never emits (Check 2e). Canonical = the LIST
+  #      form. Assert both mirrors declare the key and neither declares it inline (anything but a
+  #      comment after the colon is the scalar form).
+  for f in "$sot_tbl" "$pln_tbl"; do
+    [ -f "$f" ] || continue
+    if ! grep -qE '^[[:space:]]*invariant_holds_when:' "$f"; then
+      echo "❌ $(basename "$f"): no invariant_holds_when: declaration — the equality-domain shape is UNPINNED in this mirror (reviewer Check 2e reads it from the stamped CLAUDE.md)"; fail=$((fail+1)); continue
+    fi
+    if grep -qE '^[[:space:]]*invariant_holds_when:[[:space:]]*[^[:space:]#]' "$f"; then
+      echo "❌ $(basename "$f"): invariant_holds_when: is pinned as a SCALAR — canonical shape is a LIST of {invariant, holds_when} pairs; a scalar cannot say which equality it scopes, and the two mirrors disagreeing is what made reviewer Check 2e validate a shape the planner never emits"; fail=$((fail+1))
+    elif ! awk '/^[[:space:]]*invariant_holds_when:/{f=1;next} f{ if ($0 ~ /^[[:space:]]*(#|$)/) next; exit ($0 ~ /^[[:space:]]*-[[:space:]]*invariant:/) ? 0 : 1 } END{ if(!f) exit 1 }' "$f"; then
+      echo "❌ $(basename "$f"): invariant_holds_when: is not followed by a '- invariant:' list item — the block shape did not parse; equality-domain drift is UNCHECKED"; fail=$((fail+1))
+    fi
+  done
 fi
 
 # 9bc. Turn-budget ORDERING — the frontmatter `maxTurns` ceiling MUST stay strictly above the

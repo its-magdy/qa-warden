@@ -99,7 +99,12 @@ fail_if:                       # OPTIONAL — negative/error-path extra red-flag
   - "the order confirmation page appears"
 prompt_guardrail: |            # OPTIONAL — stops an agent "healing" an expected failure away
   This test expects an ERROR. Do not declare passed=true unless the error surface was observed.
-invariant_holds_when: "data.order.units == 1"   # OPTIONAL — precondition domain of an equality oracle (reviewer Check 2e)
+invariant_holds_when:          # OPTIONAL — precondition domain of an equality oracle (reviewer Check 2e).
+                               # LIST of {invariant, holds_when} pairs, mirroring the basis
+                               # integrity_invariants[]. Never a bare scalar: a spec may assert
+                               # more than one equality, and a scalar cannot say which one it scopes.
+  - invariant: "order-total == cart-total"
+    holds_when: "single-unit order — data.order.units == 1"
 output_schema:
   required: [passed, evidence, failed_step]
   evidence: { order_id: string, observed_total: number, screenshot_path: string }
