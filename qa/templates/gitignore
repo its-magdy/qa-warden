@@ -1,0 +1,82 @@
+# Node / build
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Secrets — NEVER commit. See .env.example for the billing-trap warning.
+# Ignore EVERY .env variant (.env, .env.local, .env.<anything>) and re-include
+# only the checked-in placeholder. The test-data-seed skill READS a live admin
+# bearer token (QA_ADMIN_TOKEN) from .env — the ONLY env file anything loads
+# (playwright.config.ts's bare dotenv.config() and the CLAUDE.md shell loader
+# both read .env alone; a token parked in .env.test would never be loaded). The
+# HUMAN puts it there (.claude/settings.json does NOT grant agents Write/Edit on
+# .env — it's outside the write-allowlist, so an agent write needs explicit
+# per-prompt human approval; an agent needing a new var asks the human or uses an
+# explicitly approved Bash append). A bare `.env`/`.env.*.local`
+# list would leave variant files committable (F-001). The `!.env.example`
+# negation keeps the template tracked.
+.env
+.env.*
+!.env.example
+
+# Playwright + QA runtime artifacts (regenerated every run) — with ONE carve-out:
+# artifacts/route-manifests/ is DURABLE per-/qa:gen data, not per-run output. It is
+# the sole input to /qa:impact and /qa:coverage's flow footprint (no grep fallback),
+# so it must survive a fresh clone/CI checkout — commit manifests with the spec/test
+# they belong to. `artifacts/*` (not `artifacts/`) because git cannot re-include a
+# path inside an excluded DIRECTORY; the negation below needs the wildcard form.
+artifacts/*
+!artifacts/route-manifests/
+test-results/
+playwright-report/
+playwright/.cache/
+blob-report/
+all-blob-reports/
+# playwright-cli session byproducts (DOM/AX snapshots + console logs) — never commit;
+# they can contain page content and are regenerated on every CLI drive. `.playwright/`
+# is the sibling scratch dir the CLI/MCP self-test leaves behind (RUN-20) — same deal.
+.playwright-cli/
+.playwright/
+# Microsoft's official @playwright/cli skill, installed into .claude/skills/ by
+# /qa:init every run (`npx playwright-cli install --skills`) — regenerated, not source,
+# and it churns on each re-init. The plugin ships its OWN thin companion skill
+# separately; don't commit the vendored official copy (F-006). `git add -f` if a team
+# deliberately wants it pinned for offline use.
+.claude/skills/playwright-cli/
+# Suite run output — regenerated every run, never source. Covers the /qa:report
+# summary, /qa:headless per-command JSON, and /qa:review url= findings so none of them
+# land as tracked VCS churn. If you WANT to keep a specific audit report, `git add -f`.
+reports/summary.md
+reports/headless-*.json
+reports/headless-*.log
+reports/audit-*.md
+reports/coverage-*.md
+# Wave-2 output of scripts/README.md's nightly recipe (`--reporter=json > reports/regression.json`)
+reports/regression.json
+
+# NOTE: bug reports under bugs/ ARE tracked source. The healer and CLAUDE.md
+# §"Bug-report schema" write triaged defects to bugs/<YYYY-MM-DD>-<slug>.md and link
+# them from `test.fixme(...)`, so they are the durable defect record, not throwaway
+# drafts — do NOT gitignore them. (A former `bugs/auto/` ignore rule was dead: no agent
+# ever wrote there, and ignoring it contradicted the tracked-bugs model.)
+
+# Playwright storageState — auth cookies. NEVER commit.
+# The seed writes per-site files: fixtures/auth.app.json, fixtures/auth.admin.json
+fixtures/auth*.json
+
+# `/qa:init --resync` backups. The resync force-refreshes toolkit-owned substrate
+# (package.json, playwright.config.ts, prod-guard.*, …) and backs up each changed file
+# to <file>.qa-bak first. They are transient — review, then delete — so they must never
+# be committed: a stray `playwright.config.ts.qa-bak` is a confusing near-duplicate of
+# the live substrate that later readers mistake for a real config.
+*.qa-bak
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editor / IDE — keep shared recommendations, drop per-user settings.
+.idea/
+.vscode/*
+!.vscode/extensions.json

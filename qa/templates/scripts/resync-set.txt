@@ -1,0 +1,53 @@
+# resync-set.txt — the ONE manifest of TOOLKIT-OWNED substrate files.
+#
+# Two consumers read this file; neither hand-enumerates the set any more:
+#   - bin/qa-scaffold  --resync : force-refreshes exactly these files (backing each up to .qa-bak)
+#   - scripts/doctor.sh Check 9 : byte-compares exactly these files against the shipped templates
+# Detection and repair MUST cover the SAME set (M-8): a file resynced but never drift-checked is
+# silently repaired yet never NUDGES the user to run --resync; a file drift-checked but never
+# resynced nags forever with no repair path. Two hand-kept lists could not hold that invariant —
+# this file is the single source, so adding a template is a ONE-line edit here.
+#
+# Enumerated on purpose (not a find-walk of templates/): --resync is DESTRUCTIVE-with-backup, so
+# it must touch only files with a SINGLE owner. Deliberately EXCLUDED, all shared-ownership:
+#   .env / .env.example  — users extend them for seed vars (doctor's stock-var containment
+#                          sub-check still catches a DELETED stock var)
+#   CLAUDE.md            — users customize project policy
+#   settings.json        — users add their own permission rules (jq-merged, never copied;
+#                          doctor Check 9c covers the retired-rule case a union merge can't remove)
+#   gitignore            — user-editable once stamped
+#   fixtures/test.ts     — users wire their own fixtures
+#   page-objects/README.md — user-authored notes land here
+#
+# Blank lines and `#` comments are ignored. Paths are relative to the project root and to
+# templates/. This file lists ITSELF so a change to the manifest propagates like any other.
+package.json
+package-lock.json
+playwright.config.ts
+tsconfig.json
+.mcp.json
+.mcp.explore.json
+scripts/prod-guard.sh
+scripts/prod-guard.ts
+scripts/resolve-spec-path.sh
+scripts/spec-links.sh
+scripts/post-run-checks.sh
+scripts/init.sh
+scripts/doctor.sh
+scripts/check-last-run.sh
+scripts/bug-status.sh
+scripts/retire-delete.sh
+scripts/README.md
+scripts/resync-set.txt
+scripts/runtime-dirs.txt
+scripts/oracle-keys.txt
+scripts/prod-guard-rails.txt
+.github/workflows/qa-nightly.yml.example
+specs/_context/_templates/area.md
+specs/_context/_templates/app.context.md
+specs/_context/_templates/basis.md
+specs/_context/_templates/cases.md
+fixtures/schemas/README.md
+fixtures/schemas/user.ts.example
+fixtures/factories/README.md
+fixtures/factories/user.ts.example

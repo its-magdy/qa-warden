@@ -1,0 +1,40 @@
+# prod-guard-rails.txt — the ONE manifest of SKILLS THAT MUST CARRY A PROD-GUARD RAIL.
+#
+# One consumer reads this file:
+#   - scripts/doctor.sh Check 9bd : every skill listed here must still invoke
+#                                   `bash scripts/prod-guard.sh` AND stop on a non-zero exit.
+#
+# WHY A MANIFEST AND NOT A WORDING DIFF. The rail is prose, and prose mirrors cannot `source`
+# a file — so the copies cannot be eliminated, only compared. But comparing the WORDING would
+# fire on every edit and get the check disabled: the eight sites deliberately carry TWO different
+# lead forms and materially different bodies (each names the specific hole it plugs — the
+# `playwright-cli` half, the repeat-each blast radius, the audit URL argument). What is invariant
+# is not the sentence; it is that the guard is INVOKED and that a non-zero exit STOPS the skill.
+# That is what Check 9bd compares, so a reword stays green and a deletion does not.
+#
+# WHY IT EXISTS AT ALL. These files are active trim candidates. A trim pass that drops the
+# "STOP if it exits non-zero" clause leaves a rail that runs the guard and ignores it — which is
+# how `flake-check` was already broken once (it ran the guard but never acted on its exit code,
+# and a repeat-each run multiplies the blast radius rather than reducing it). Nothing detected
+# that; a human did.
+#
+# DO NOT DELETE A RAIL to satisfy this check. On the `gen`/`new-spec`/`intake`/`explore`/`review`
+# CLI-driving paths this prose is the ONLY prod rail: the enforced `scripts/prod-guard.ts`
+# globalSetup fires only under `npx playwright test`, which `playwright-cli goto` never invokes.
+#
+# ADDING A SKILL THAT DRIVES A BROWSER OR RUNS TESTS: add its rail, then add one line here.
+# Check 9bd also WARNs on the reverse (a skill carrying a rail that is missing from this list),
+# so the two stay in lockstep in both directions.
+#
+# Blank lines and `#` comments are ignored. One skill directory name per line.
+#
+# --- lead form A: "Safety rail (CLAUDE.md §Environment)" (6) ---
+review
+explore
+gen
+intake
+new-spec
+run
+# --- lead form B: "Guard first (prod-safety)" (2) ---
+batch-fix
+heal

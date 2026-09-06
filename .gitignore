@@ -1,0 +1,14 @@
+# Toolkit-repo hygiene. NOTE: this is the MARKETPLACE/plugin repo's own ignore file —
+# it is NOT the template stamped into QA projects (that one is qa/templates/gitignore,
+# renamed to .gitignore by bin/qa-scaffold). Keep the two separate.
+
+# OS cruft — .DS_Store was previously committed at the repo root and in qa/.
+# bin/qa-scaffold already filters it out of template copies (`find … ! -name '.DS_Store'`),
+# so this only stops it re-entering the plugin repo itself.
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json

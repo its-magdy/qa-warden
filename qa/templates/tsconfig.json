@@ -1,0 +1,24 @@
+{
+  "//": "Tests and specs are TypeScript, strict mode on.",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "types": ["node"]
+  },
+  "include": ["tests/**/*.ts", "page-objects/**/*.ts", "fixtures/**/*.ts", "scripts/**/*.ts", "playwright.config.ts"],
+  "exclude": ["node_modules", "artifacts", "playwright-report", "dist"]
+}

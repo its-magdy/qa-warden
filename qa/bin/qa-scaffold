@@ -1,0 +1,323 @@
+#!/usr/bin/env bash
+# qa-scaffold — stamp the QA runtime substrate into a target project.
+#
+# Invoked by the /qa:init plugin command:
+#     "${CLAUDE_PLUGIN_ROOT}/bin/qa-scaffold" "${CLAUDE_PROJECT_DIR}" [--no-install]
+#
+# Idempotent and non-destructive: every file is created only if missing.
+# Existing files (.env, a customized CLAUDE.md, etc.) are left untouched — with ONE
+# documented exception: `.claude/settings.json`, which is additively jq-MERGED (union of
+# the allow/deny permission arrays, other keys preserved) rather than skipped, so the QA
+# write-scope rules land even in a project that already has a settings.json. The merge is
+# additive and order-normalizing but it does modify that one file (F-015).
+#
+# The plugin ships the brain (agents + skills). This script ships the
+# body (configs, scripts, fixtures, CLAUDE.md, permissions) that a Claude Code
+# plugin cannot install on its own.
+
+set -uo pipefail
+
+# --- locate plugin templates (this script lives in <plugin>/bin) -------------
+PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+TEMPLATES="$PLUGIN_ROOT/templates"
+
+# --- args --------------------------------------------------------------------
+TARGET="${1:-$PWD}"
+NO_INSTALL=0
+RESYNC=0
+for arg in "${@:2}"; do
+  case "$arg" in
+    --no-install) NO_INSTALL=1 ;;
+    --resync)     RESYNC=1 ;;
+  esac
+done
+# Use $TARGET (not $1) in the diagnostic: with zero args $1 is UNSET and `set -u`
+# aborts on the reference — the error message would be lost to "unbound variable".
+# Resolve into a SEPARATE var first: `TARGET=$(...) || diagnostic` would clobber
+# $TARGET with '' on failure and print "target dir not found: " with no path.
+abs="$(cd "$TARGET" && pwd)" || { echo "[qa-scaffold] target dir not found: $TARGET" >&2; exit 1; }
+TARGET="$abs"
+
+GREEN='\033[0;32m'; YELLOW='\033[0;33m'; RED='\033[0;31m'; NC='\033[0m'
+created()  { printf "${GREEN}[qa-scaffold] created${NC} %s\n" "$1"; }
+skipped()  { printf "${YELLOW}[qa-scaffold] exists ${NC} %s (skipped)\n" "$1"; }
+info()     { printf "[qa-scaffold]   %s\n" "$*"; }
+
+[ -d "$TEMPLATES" ] || { echo "[qa-scaffold] templates dir missing at $TEMPLATES" >&2; exit 1; }
+
+# --- --resync: force-refresh toolkit-owned substrate into an EXISTING project ---
+# The propagation fix for F-015/F-016. The normal scaffold below is skip-if-exists, and the
+# project deny-list forbids agents from repairing these files in place — so a plugin fix to
+# package.json / playwright.config.ts / prod-guard.* / a pinned dep NEVER reaches an
+# already-initialized project (the "fixed the recipe, but the cake's already baked" gap).
+# --resync force-overwrites ONLY the files the toolkit SOLELY owns; it never touches
+# user-authored files (.env secrets, a customized CLAUDE.md, .claude/settings.json, .gitignore,
+# fixtures/test.ts, or anything under specs/tests/page-objects/steps/bugs). Each changed file
+# is backed up to <file>.qa-bak first. Like the normal stamp it runs `cp` — NOT a Write/Edit
+# tool — so the project deny-list does not (and should not) block this human-invoked repair.
+if [ "$RESYNC" = "1" ]; then
+  echo "[qa-scaffold] --resync: refreshing toolkit-owned substrate in $TARGET"
+  # The toolkit-owned set is SINGLE-SOURCED in templates/scripts/resync-set.txt (which also
+  # documents why each shared-ownership file is excluded). doctor.sh Check 9 reads the SAME
+  # manifest, so detection and repair cannot drift apart (M-8) — adding a template is one
+  # line there, not two hand-kept lists here and in doctor.
+  MANIFEST="$TEMPLATES/scripts/resync-set.txt"
+  [ -f "$MANIFEST" ] || { echo "[qa-scaffold] resync manifest missing at $MANIFEST — cannot determine the toolkit-owned file set; reinstall the plugin" >&2; exit 1; }
+  RESYNC_SET="$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$MANIFEST" | grep -v '^$')"
+  # Copy failures are collected, not ignored — same fail-loud contract as the normal stamp
+  # below. `cp X && msg` reports success but DISCARDS the failure, and `set -uo pipefail` has
+  # no `-e`, so the unchecked form let 10 denied copies still reach the green "24 file(s)
+  # refreshed" banner with exit 0, leaving the MUST-land prod-guard.ts at its old content —
+  # and doctor's drift check then loops the user back to this very command (M-8).
+  # Unlike the normal stamp this loop is NOT in a subshell, so a plain variable suffices.
+  changed=0; RESYNC_ERRS=""
+  for rel in $RESYNC_SET; do
+    src="$TEMPLATES/$rel"; dst="$TARGET/$rel"
+    [ -f "$src" ] || continue
+    if [ -f "$dst" ] && cmp -s "$src" "$dst"; then info "up-to-date  $rel"; continue; fi
+    mkdir -p "$(dirname "$dst")"
+    # A failed backup must ABORT this file, never fall through to the overwrite: resync is
+    # documented DESTRUCTIVE-with-backup, and clobbering an unbacked file silently downgrades
+    # it to destructive-without-backup while a STALE .qa-bak misreports what was saved.
+    if [ -f "$dst" ]; then
+      if cp "$dst" "$dst.qa-bak"; then
+        info "backed up   $rel -> $rel.qa-bak"
+      else
+        # Entries stay space-free: the reporting loop below word-splits on $IFS.
+        RESYNC_ERRS="$RESYNC_ERRS $rel(backup-failed,left-untouched)"
+        continue
+      fi
+    fi
+    if cp "$src" "$dst"; then
+      created "$rel (resynced)"
+      changed=$((changed+1))
+    else
+      RESYNC_ERRS="$RESYNC_ERRS $rel"
+    fi
+  done
+  chmod +x "$TARGET"/scripts/*.sh 2>/dev/null || true
+  # Abort BEFORE the npm install and the done banner — a partially resynced substrate must not
+  # green-stamp, exactly as the normal stamp refuses on copy failure.
+  if [ -n "$RESYNC_ERRS" ]; then
+    printf "${RED}[qa-scaffold] ERROR${NC} resync FAILED for:\n" >&2
+    for rel in $RESYNC_ERRS; do printf '  - %s\n' "$rel" >&2; done
+    echo "[qa-scaffold] refusing to continue — the substrate is now PARTIALLY resynced. Fix the copy failure (permissions? disk space?), then re-run /qa:init --resync. Files already refreshed are safe to re-resync (it is idempotent); review any .qa-bak backups." >&2
+    exit 1
+  fi
+  if [ "$changed" -eq 0 ]; then
+    info "substrate already matches the shipped templates — nothing to resync"
+  elif [ "$NO_INSTALL" != "1" ] && command -v npm >/dev/null 2>&1; then
+    # A resynced package.json / lockfile means node_modules may be stale — reinstall to match.
+    # Fail loudly (set -uo pipefail has no -e) so a broken install can't green-stamp the banner.
+    info "substrate changed; running npm install to match..."
+    ( cd "$TARGET" && npm install ) || { printf "${RED}[qa-scaffold] ERROR${NC} npm install failed after resync — fix the dependency error and re-run\n" >&2; exit 1; }
+    info "npm install done"
+  elif [ "$NO_INSTALL" != "1" ]; then
+    info "npm not found — node_modules may now be STALE against the resynced package.json; install Node >=22 and run 'npm install' manually"
+  fi
+  echo "[qa-scaffold] resync done — $changed file(s) refreshed. Review any .qa-bak backups, then delete them."
+  exit 0
+fi
+
+# --- copy a single file if absent at destination ----------------------------
+copy_file() {  # copy_file <src-rel> <dst-rel>
+  local src="$TEMPLATES/$1" dst="$TARGET/$2"
+  [ -f "$src" ] || return 0
+  if [ -e "$dst" ]; then skipped "$2"; return 0; fi
+  mkdir -p "$(dirname "$dst")"
+  cp "$src" "$dst" && created "$2"
+}
+
+echo "[qa-scaffold] target: $TARGET"
+
+# --- copy every template file (skip-if-exists) --------------------------------
+# templates/ IS the manifest: every file under it ships verbatim, so adding a
+# template needs no matching line here (a hand-enumerated list silently strands
+# new templates — the ideation basis/cases templates hit exactly that). Two
+# exceptions: `gitignore` is renamed to `.gitignore`, and `settings.json` is
+# jq-MERGED below (never blind-copied). Note scripts/prod-guard.ts is among these
+# and MUST land — it is the ENFORCED globalSetup wired in playwright.config.ts;
+# without it every `playwright test` fails to resolve globalSetup. All copies
+# happen before the dependency install below.
+# Copy failures are collected, not ignored: a failed cp (unwritable dir, disk full) must never
+# reach the green done banner — that is a false-green scaffold, possibly missing the MUST-land
+# prod-guard.ts. Fed by a process substitution (NOT a pipe) so the loop runs in THIS shell and a
+# plain variable survives it, exactly as the --resync loop above does — same idiom, same script.
+# Entries stay space-free: the reporting loop below word-splits on $IFS.
+COPY_ERRS=""
+while read -r rel; do
+  case "$rel" in
+    gitignore) copy_file "$rel" ".gitignore" || COPY_ERRS="$COPY_ERRS $rel" ;;
+    *)         copy_file "$rel" "$rel"       || COPY_ERRS="$COPY_ERRS $rel" ;;
+  esac
+done < <(cd "$TEMPLATES" && find . -type f ! -name settings.json ! -name '.DS_Store' | sed 's|^\./||')
+if [ -n "$COPY_ERRS" ]; then
+  printf "${RED}[qa-scaffold] ERROR${NC} template copy FAILED for:\n" >&2
+  for rel in $COPY_ERRS; do printf '  - %s\n' "$rel" >&2; done
+  echo "[qa-scaffold] refusing to continue — a partial substrate would green-stamp a broken project. Fix the copy failure (permissions? disk space?) and re-run /qa:init." >&2
+  exit 1
+fi
+chmod +x "$TARGET"/scripts/*.sh 2>/dev/null || true
+
+# --- runtime dirs the subagents write into -----------------------------------
+# SINGLE-SOURCED in templates/scripts/runtime-dirs.txt, which scripts/init.sh (the plugin-free
+# bootstrap) reads too — so both entry points provably produce the same tree instead of relying on
+# a pair of "keep this brace list IDENTICAL" comments no code enforced.
+DIRS_MANIFEST="$TEMPLATES/scripts/runtime-dirs.txt"
+if [ -f "$DIRS_MANIFEST" ]; then
+  RUNTIME_DIRS="$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$DIRS_MANIFEST" | grep -v '^$')"
+  for d in $RUNTIME_DIRS; do mkdir -p "$TARGET/$d"; done
+  info "ensured runtime dirs"
+else
+  printf "${RED}[qa-scaffold] ERROR${NC} runtime-dir manifest missing at $DIRS_MANIFEST — cannot determine which directories to create; reinstall the plugin\n" >&2
+  exit 1
+fi
+
+# --- .env from example (only if no .env yet) ---------------------------------
+if [ ! -f "$TARGET/.env" ] && [ -f "$TARGET/.env.example" ]; then
+  cp "$TARGET/.env.example" "$TARGET/.env" && created ".env (from .env.example — EDIT IT)"
+elif [ -f "$TARGET/.env" ]; then
+  skipped ".env"
+fi
+
+# --- permissions: merge into .claude/settings.json ---------------------------
+# Plugin settings.json can only carry agent/subagentStatusLine keys, so the
+# QA write-scope + safety permission rules must be stamped here.
+mkdir -p "$TARGET/.claude"
+SETTINGS="$TARGET/.claude/settings.json"
+TMPL_SETTINGS="$TEMPLATES/settings.json"
+if [ -f "$TMPL_SETTINGS" ]; then
+  if [ ! -f "$SETTINGS" ]; then
+    # F-003 byte-idempotency: normalize allow/deny to sorted-unique on the FIRST write
+    # too (via the SAME jq `unique` the re-run merge below uses), so a committed
+    # settings.json is byte-identical to what a later /qa:init self-merge produces —
+    # no spurious diff / no /qa:doctor drift the first time anyone re-runs init.
+    if command -v jq >/dev/null 2>&1; then
+      norm="$(jq '.permissions.allow = ((.permissions.allow // []) | unique)
+                  | .permissions.deny  = ((.permissions.deny  // []) | unique)' \
+                "$TMPL_SETTINGS" 2>/dev/null)"
+      if [ -n "$norm" ]; then
+        printf '%s\n' "$norm" > "$SETTINGS" && created ".claude/settings.json"
+      else
+        cp "$TMPL_SETTINGS" "$SETTINGS" && created ".claude/settings.json"
+      fi
+    else
+      cp "$TMPL_SETTINGS" "$SETTINGS" && created ".claude/settings.json"
+    fi
+  elif command -v jq >/dev/null 2>&1; then
+    # union the allow/deny arrays; keep the project's other keys intact
+    merged="$(jq -s '
+      .[0] as $proj | .[1] as $tmpl |
+      $proj * {permissions: {
+        allow: (($proj.permissions.allow // []) + ($tmpl.permissions.allow // []) | unique),
+        deny:  (($proj.permissions.deny  // []) + ($tmpl.permissions.deny  // []) | unique)
+      }}' "$SETTINGS" "$TMPL_SETTINGS" 2>/dev/null)"
+    if [ -n "$merged" ]; then
+      printf '%s\n' "$merged" > "$SETTINGS" && info "merged permissions into .claude/settings.json"
+    else
+      cp "$TMPL_SETTINGS" "$TARGET/.claude/settings.qa-suggested.json"
+      info "could not auto-merge; wrote .claude/settings.qa-suggested.json for manual merge"
+    fi
+  else
+    cp "$TMPL_SETTINGS" "$TARGET/.claude/settings.qa-suggested.json"
+    info "jq not found; wrote .claude/settings.qa-suggested.json for manual merge"
+  fi
+fi
+
+# --- git init (optional convenience; the serial generator does not require it) ---
+if [ ! -d "$TARGET/.git" ]; then
+  # `set -uo pipefail` has no `-e`, so a failed `git init` (git absent) would
+  # short-circuit the `&&` SILENTLY and still print the green done-banner (F-016).
+  # Add an explicit else-breadcrumb so a missing git is visible, not swallowed.
+  if ( cd "$TARGET" && git init -q ); then
+    created ".git (git init)"
+  else
+    info "git not available (or git init failed); skipped — the serial generator does not require git"
+  fi
+else
+  skipped ".git"
+fi
+
+# --- dependencies ------------------------------------------------------------
+if [ "$NO_INSTALL" = "1" ]; then
+  info "--no-install set; skipping npm install + playwright browsers"
+else
+  if command -v npm >/dev/null 2>&1; then
+    info "running npm install (this can take a minute)..."
+    # Hard install steps must FAIL LOUDLY — `set -uo pipefail` has no `-e`, so a bare
+    # `&& info` would let a broken install fall through to a green "done" banner with no
+    # deps/browsers. Guard each with an explicit exit.
+    ( cd "$TARGET" && npm install ) || { printf "${RED:-}[qa-scaffold] ERROR${NC:-} npm install failed — fix the dependency error and re-run /qa:init\n" >&2; exit 1; }
+    info "npm install done"
+    info "installing Playwright browsers (chromium)..."
+    # chromium ONLY — the stamped config's active projects are all Desktop Chrome
+    # (firefox/webkit are commented out), so a bare `install --with-deps` would pull
+    # ~700MB+ of engines nothing can launch. Matches the install-browsers npm script
+    # + scripts/init.sh. --with-deps still pulls OS libs on CI Linux.
+    ( cd "$TARGET" && npx playwright install --with-deps chromium ) || { printf "${RED:-}[qa-scaffold] ERROR${NC:-} playwright browser install failed\n" >&2; exit 1; }
+    info "browsers installed"
+    # Install Microsoft's OFFICIAL @playwright/cli agent skill into the project.
+    # This is the authoritative, auto-updating command reference — our
+    # skills/playwright-cli/SKILL.md is only a thin project companion (decision
+    # rules + recipes), NOT a copy of Microsoft's tool list. Re-runs on every
+    # /qa:init so a `@playwright/cli` bump refreshes the skill.
+    info "installing the official playwright-cli agent skill (playwright-cli install --skills)..."
+    ( cd "$TARGET" && npx playwright-cli install --skills ) \
+      && info "official playwright-cli skill installed" \
+      || info "could not install the official skill; run 'npx playwright-cli install --skills' manually"
+    # Reachability self-test — TWO stages, because `--version` alone false-greens (F-026).
+    #   Stage 1: `npx playwright-cli --version` proves the npx entrypoint resolves (the
+    #            CLI is a LOCAL devDependency, not on PATH — recipes must use `npx`).
+    #   Stage 2: actually LAUNCH a browser and snapshot it. `--version` never launches a
+    #            browser, so it prints "reachable" even when the required Chromium
+    #            executable is missing (the F-002 skew). The override now pins
+    #            playwright-core to a single STABLE revision so `playwright install`
+    #            fetches exactly the browser the CLI needs — this probe VERIFIES that at
+    #            init time instead of dying on the first healer run in CI. `--browser
+    #            chromium` forces the bundled build (not a system-Chrome channel) so a
+    #            missing bundled executable actually surfaces here.
+    PWCLI_VER="$(cd "$TARGET" && npx playwright-cli --version 2>/dev/null)"
+    if [ -n "$PWCLI_VER" ]; then
+      info "playwright-cli reachable via 'npx playwright-cli' ($PWCLI_VER)"
+      if ( cd "$TARGET" \
+            && npx playwright-cli open "data:text/html,<h1>qa-scaffold self-test</h1>" --browser chromium >/dev/null 2>&1 \
+            && npx playwright-cli snapshot >/dev/null 2>&1 ); then
+        ( cd "$TARGET" && npx playwright-cli close >/dev/null 2>&1 || true )
+        # F-005: sweep the self-test's own snapshot leftovers so a just-scaffolded tree is
+        # clean (the probe's `snapshot` writes .playwright-cli/page-*.yml). Scoped rm of the
+        # exact probe output only — NEVER `rm -rf` a dir.
+        rm -f "$TARGET"/.playwright-cli/page-*.yml 2>/dev/null || true
+        info "playwright-cli launched a real browser + snapshotted (browser executable present)"
+      else
+        ( cd "$TARGET" && npx playwright-cli close >/dev/null 2>&1 || true )
+        printf "${RED:-}[qa-scaffold] ERROR${NC:-} playwright-cli resolved but could NOT launch a browser — the Chromium executable is missing or the core is skewed. Run 'npx playwright install chromium' and re-run /qa:init; do NOT trust a green suite until this passes.\n" >&2
+        exit 1   # fail loudly like the npm/browser install steps — otherwise the done banner below green-stamps a scaffold that cannot drive a browser
+      fi
+    else
+      printf "${RED:-}[qa-scaffold] ERROR${NC:-} 'npx playwright-cli --version' failed — the CLI did not resolve at all (strictly worse than a missing browser: every discovery/authoring command depends on 'npx playwright-cli'). Check the @playwright/cli install and re-run /qa:init; do NOT trust a green scaffold until this passes.\n" >&2
+      exit 1   # fail loudly like the browser probe below — a soft WARN here inverted severity: total CLI breakage passed while a mere missing browser failed
+    fi
+  else
+    info "npm not found; install Node >=22 then run 'npm install' + 'npx playwright install' + 'npx playwright-cli install --skills' manually"
+  fi
+fi
+
+cat <<'NEXT'
+
+[qa-scaffold] done.
+
+Next:
+  1. Edit .env  — replace BASE_URL_APP=CHANGEME with your staging/QA host (NOT prod) + set QA_USER_* creds.
+        Minimum to start: BASE_URL_APP + one QA_USER_EMAIL / QA_USER_PASSWORD pair. Everything else in .env is optional.
+  2. /qa:explore                              build specs/_context/app.context.md (site/auth map)
+  3. /qa:explore mode=area site=app area=auth   area context — REQUIRED before intake (intake hard-gates on it)
+  4. /qa:intake auth/login                    interview -> basis.md (pins the oracle: what "correct" means)
+  5. /qa:ideate auth/login                    SFDIPOT checklist -> cases.md
+  5b. /qa:approve auth/login                  record your approve/prune — REQUIRED before new-spec (the gate: new-spec STOPs on un-approved cases)
+  6. /qa:new-spec auth/login                  draft your first spec
+  7. /qa:gen specs/auth/login.md              compile spec -> .spec.ts
+  8. /qa:review                               reviewer gates the assertion contract (run on every PR)
+  9. /qa:run mode=smoke                       run the @smoke suite
+
+  New to these terms (oracle, basis, SFDIPOT, assertion contract)? Run /qa:help or open reference/glossary.md.
+NEXT

@@ -1,0 +1,74 @@
+# qa-nightly — the $0-LLM run-of-record. Rename to qa-nightly.yml to arm it, then add the
+# repo secrets below (Settings → Secrets → Actions). prod-guard fails CLOSED on a missing/
+# placeholder BASE_URL — an unarmed workflow goes red, never silently green.
+name: qa-nightly
+on:
+  schedule:
+    - cron: '30 2 * * *'        # 02:30 UTC nightly — adjust to your off-peak window
+  workflow_dispatch: {}          # manual trigger for debugging the workflow itself
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Every BASE_URL_* / QA_* the suite reads — mirror your .env (secrets, not committed).
+      BASE_URL_APP: ${{ secrets.QA_BASE_URL_APP }}
+      QA_USER_EMAIL: ${{ secrets.QA_USER_EMAIL }}
+      QA_USER_PASSWORD: ${{ secrets.QA_USER_PASSWORD }}
+      # BASE_URL_ADMIN / QA_ADMIN_* / seed-API vars: add here if your suite uses them.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          # PINNED to 24, deliberately NOT `lts/*`. package.json pins @types/node to the 24 line on
+          # the stated rule "types = the LTS you actually run in CI" (typing ahead of the runtime
+          # types APIs that don't exist yet). `lts/*` FLOATS: Node 26 enters LTS on 2026-10-28, at
+          # which point `lts/*` silently becomes 26 while the types stay on 24 — breaking that
+          # invariant with no signal. Bump this in LOCKSTEP with package.json's @types/node and
+          # engines.node, never on its own.
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # chromium only — matches the scaffold; the active config projects are all Desktop Chrome.
+      # Do NOT cache browser binaries (official guidance: restore ≈ download; deps aren't cacheable).
+      - run: npx playwright install --with-deps chromium
+      - name: Prod-guard (fail-closed — same guard the agents run)
+        run: bash scripts/prod-guard.sh
+      - name: Run suite (run-of-record — CI fires the json sink; QA_RUN_OF_RECORD for explicitness)
+        run: QA_RUN_OF_RECORD=1 npx playwright test
+      # Single job → no shard merge needed. If you shard later, use the matrix + merge-reports
+      # recipe (CLAUDE.md §Reporting pipeline: blob shards → npx playwright merge-reports).
+      - name: Build HTML report from blob
+        if: ${{ !cancelled() }}
+        run: npx playwright merge-reports --reporter html ./blob-report
+      # Action majors are pinned and bumped DELIBERATELY (checkout/setup-node/upload-artifact were
+      # all left on v5 while v7 shipped). upload-artifact is the one with a hard expiry — GitHub
+      # fully DISABLED v3 in Jan 2025 rather than merely deprecating it, so a stale major here is a
+      # nightly that stops uploading traces one day with no warning. Only `name`/`path`/
+      # `retention-days` are used below, all stable across these majors.
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: qa-nightly-${{ github.run_number }}
+          retention-days: 14
+          path: |
+            playwright-report/
+            artifacts/last-run.json
+            artifacts/test-results/**/trace.zip
+      - name: Failure breadcrumb
+        if: failure()
+        run: echo "::error title=qa-nightly red::Nightly run failed — download the qa-nightly artifact (trace.zip + last-run.json), then triage locally with /qa:heal <test-id>."
+      # Optional AI triage in CI (OFF by default — nightly stays $0 LLM). Requires an
+      # ANTHROPIC_API_KEY secret; uses the same entrypoint as skills/review/SKILL.md's CI snippet
+      # (anthropics/claude-code-action@v1, or the CLI: npm i -g @anthropic-ai/claude-code && claude -p).
+      # - name: AI heal (opt-in)
+      #   if: failure()
+      #   env: { ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} }
+      #   run: |
+      #     FAILED="$(jq -r '[.. | objects | .specs? // empty | .[] | select(.ok==false)][0].title // empty' artifacts/last-run.json 2>/dev/null || true)"
+      #     # if/fi, NOT `[ -n ... ] && …`: GH runs steps under `bash -e {0}` and takes the last
+      #     # command's exit code — with FAILED empty (jq shape miss, no last-run.json after a
+      #     # prod-guard/npm-ci failure) the bare && chain exits 1 and this heal step reports
+      #     # itself failed, burying the real cause. (Not `|| true` either — that would also
+      #     # swallow a genuine heal failure.)
+      #     if [ -n "$FAILED" ]; then npx @anthropic-ai/claude-code -p "/qa:heal $FAILED" --permission-mode acceptEdits; fi

@@ -1,0 +1,49 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// EXAMPLE (`.example`) — NOT compiled, and NOT the shipped app model. The toolkit
+// does not ship a guessed schema: `fixtures/schemas/<entity>.ts` is created on
+// demand, grounded in YOUR real app, the first time a spec uses the `factory:`
+// form (agents/generator.md §"Factory resolution"). The fields below are an
+// ILLUSTRATION of the pattern only — do not treat them as your app's real shape.
+// To hand-author: copy to `user.ts` (drop `.example`) and replace with the real
+// model discovered by `/qa:intake` / exploration.
+// ─────────────────────────────────────────────────────────────────────────────
+import { z } from "zod";
+
+/**
+ * The User schema is the single source of truth for what a user record looks like
+ * across this QA suite. Change a field here and TypeScript will compile-break
+ * every consumer (factories, seed, helpers) so you cannot ship a spec referencing
+ * an old shape.
+ *
+ * Keep this in sync with the product's actual user model. If the product changes
+ * shape (e.g. signup adds a phone field), update this schema FIRST, then run
+ * `npx tsc --noEmit` to find every spec/test that needs touching.
+ */
+export const UserSchema = z.object({
+  // NOTE: chaining `.email()` onto `z.string()` (as on the next line) is the correct
+  // Zod-3 idiom. This suite is pinned to Zod 3 on purpose (zod-fixture is broken on
+  // Zod 4 — see package.json "zod_comment"). Do NOT "modernize" to Zod 4's top-level
+  // spelling, where the format helper hangs directly off the `z` namespace — it does
+  // not exist until Zod 4. (Comment deliberately avoids the literal patterns doctor
+  // Check 7d greps for, so copying this file to user.ts can never draw a false ❌.)
+  email:    z.string().email().describe("Login identifier. Matches QA_USER_EMAIL in .env."),
+  name:     z.string().min(1).describe("Full display name shown in the UI after login."),
+  password: z.string().min(8).describe("Plaintext at fixture-time; never log or commit. Real logins resolve the password from process.env, not this field."),
+});
+
+export type User = z.infer<typeof UserSchema>;
+
+/**
+ * Admin extends User with an internal role enum. Keep separate so role logic
+ * doesn't bleed into customer-facing specs.
+ *
+ * The role values below are an ILLUSTRATIVE PLACEHOLDER, not a real product's
+ * roles — replace them with YOUR app's actual role set (e.g. `["user","admin"]`)
+ * before wiring `makeAdmin()` into any seed, or the factory will mint a role your
+ * backend rejects. Per the SoT note above, this schema should mirror the product;
+ * these sample values are only here so the file typechecks out of the box.
+ */
+export const AdminSchema = UserSchema.extend({
+  role: z.enum(["support", "billing", "superuser"]).describe("Internal role — PLACEHOLDER values; replace with the app's real roles."),
+});
+export type Admin = z.infer<typeof AdminSchema>;

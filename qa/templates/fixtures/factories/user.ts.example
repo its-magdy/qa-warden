@@ -1,0 +1,30 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// EXAMPLE (`.example`) — NOT compiled. This is a pattern illustration, not live
+// code. The toolkit does NOT ship a factory for a guessed entity model: a
+// factory is created on demand, GROUNDED IN YOUR REAL APP, the first time a spec
+// uses the `factory:` form (see agents/generator.md §"Factory resolution").
+// To hand-author instead: copy this to `user.ts` (drop `.example`), copy the
+// paired `../schemas/user.ts.example` to `../schemas/user.ts`, and replace the
+// fields with your app's real user model. Keep the schema as the single source
+// of truth so a shape change compile-breaks every consumer.
+// ─────────────────────────────────────────────────────────────────────────────
+import { createFixture } from "zod-fixture";
+import { UserSchema, AdminSchema, type User, type Admin } from "../schemas/user";
+
+/**
+ * Build a realistic User with defaults from the Zod schema. Pass `overrides`
+ * to pin any field your spec asserts on (e.g. `{ email: "alice@example.com" }`).
+ *
+ * Password is generated synthetically. Specs that need a known-good login must
+ * resolve the password from `process.env[<password_env>]` per CLAUDE.md, NOT
+ * from this factory.
+ */
+export const makeUser = (overrides: Partial<User> = {}): User => ({
+  ...createFixture(UserSchema),
+  ...overrides,
+});
+
+export const makeAdmin = (overrides: Partial<Admin> = {}): Admin => ({
+  ...createFixture(AdminSchema),
+  ...overrides,
+});

@@ -1,0 +1,34 @@
+# oracle-keys.txt — the closed oracle vocabulary, one key per line, as MACHINE-READABLE data.
+#
+# CLAUDE.md §"Test case format contract" remains the human SoT (it carries the semantics and the
+# per-key argument-shape table, which are prose and belong in prose). This file is the mechanical
+# half: the KEY SET, in the one form a script can read.
+#
+# It exists because doctor Check 2 used to hold a hand-typed copy of the 16 keys and then compare
+# CLAUDE.md and four plugin files AGAINST THAT COPY — a checker policing peers with its own
+# unpoliced mirror as the baseline, so a co-drifted copy silently blessed a wrong vocab everywhere.
+# The give-away was that the check had to add a cardinality self-check (`is my own list still 16?`)
+# on its own baseline. That is the same failure shape resync-set.txt and runtime-dirs.txt were
+# created to end: N consumers, one manifest, no hand-kept peer lists.
+#
+# ADDING OR REMOVING A KEY is a real vocab change and still means editing every ENUMERATING mirror
+# in the same commit — this file, CLAUDE.md's list + arg-shape table, agents/planner.md,
+# agents/generator.md, reviewer Check 4, and /qa:coverage's KEYS_RE. The prose mirrors cannot
+# `source` a file; what this manifest guarantees is that the CHECKER comparing them is not itself
+# one of the copies. Blank lines and `#` comments are ignored.
+text_visible
+url_matches
+count_equals
+value_between
+error_shown
+no_order_created
+attribute_equals
+element_state
+network_response_status
+response_body_contains
+download_received
+clipboard_contains
+storage_state
+upload_accepted
+dialog_dismissed
+a11y_violations_below

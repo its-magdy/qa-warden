@@ -1,0 +1,27 @@
+# runtime-dirs.txt — the ONE list of runtime directories the subagents write into.
+#
+# Two consumers read this file; neither hand-enumerates the set any more:
+#   - bin/qa-scaffold      : `mkdir -p` after stamping templates (the /qa:init path)
+#   - scripts/init.sh      : `mkdir -p` in step 2      (the plugin-free `npm run init` path)
+# Both entry points MUST produce the same tree. That invariant used to live in two paired prose
+# comments ("Keep this list IDENTICAL to …") on two hand-kept brace lists — a comment cannot
+# enforce anything, and the pair had already drifted elsewhere. Single-source it here, mirroring
+# scripts/resync-set.txt: adding a runtime dir is a ONE-line edit.
+#
+# A missing dir means the first agent write into it hits an approval wall, so the set must also
+# stay consistent with the `Write`/`Edit` allowlist in the stamped .claude/settings.json and the
+# writable-paths list in CLAUDE.md §"Tooling allowed paths".
+#
+# `steps/` holds reusable YAML step fragments (planner `include:`, generator resolves them) — it is
+# referenced by CLAUDE.md + the spec schema even though nothing ships in it, so it must be created.
+#
+# Blank lines and `#` comments are ignored. Paths are relative to the project root and must contain
+# no whitespace (consumers word-split on $IFS).
+artifacts
+bugs
+fixtures
+page-objects
+reports
+specs/_context
+steps
+tests

@@ -1,0 +1,182 @@
+# Tutorial: author your first test
+
+**You will learn to:**
+- turn a plain-language feature into an AI-written [Playwright](glossary.md) test,
+- watch that test pass,
+- **prove it would catch a bug** — so you know what "green" is worth.
+
+This is a guided walkthrough. Follow it top to bottom, in order. Every step shows what you'll
+see back, so you always know you're on track. When you're done you'll have one real, passing,
+human-readable test — and you'll have seen the plugin do the thing that makes it different:
+**refuse to pass when the check is a lie.**
+
+> **What this runs against.** You run this against **your own app** on a non-production URL
+> (localhost or staging). It uses a sign-in flow as the example — substitute your own
+> feature names; the shape is identical. *(A zero-setup bundled demo app is on the
+> roadmap — until then you supply the app.)*
+>
+> **You don't write or read test code.** The AI writes the [test](glossary.md) (the
+> TypeScript). You read the human-readable [spec](glossary.md) and watch a video — that's
+> the whole review surface. New words link to the **[glossary](glossary.md)**; you don't
+> need to learn them first.
+
+---
+
+## Before you start
+
+You need, once:
+- the plugin installed (`/plugin install qa@qa-toolkit`),
+- **your app running and reachable** on a **non-production** URL (localhost or staging),
+- a **test account** that already exists in that app (an email + password you can use).
+
+No Playwright knowledge required.
+
+---
+
+## Step 1 — stamp the project
+
+```
+/qa:init
+```
+Run this **once** per project. It drops the runtime files in (config, scripts, a policy file,
+and a `.env.example`) and installs dependencies. You'll see a list of created files ending in ✅.
+
+Now **copy `.env.example` to `.env`** and set the URL and the test account — **never point at
+production:**
+```
+BASE_URL_APP=http://localhost:3000        # your localhost or staging (a URL, not a real site)
+QA_USER_EMAIL=member@example.test          # your existing test account
+QA_USER_PASSWORD=your-test-password
+```
+Check it worked: run `/qa:doctor` — a healthy setup prints a short summary with **no ❌ blockers**. Doctor is read-only and **offline**: it confirms your config files, scripts, and the stock `.env` variables (including `BASE_URL_APP`) are in place — it does **not** reach `BASE_URL_APP` over the network. The next step (`/qa:explore`) is what actually opens your app in a browser and confirms the URL really works.
+
+## Step 2 — let the AI look at your app
+
+```
+/qa:explore
+```
+The exploration agent opens your app in a real browser and writes a short **[context](glossary.md)**
+file (`specs/_context/app.context.md`) describing what it found — the sites, how login works,
+the naming. The **first** run writes it as a `draft:` — open that file, fix anything wrong, and
+remove the `draft:` line to confirm it.
+
+> You're teaching the AI the lay of the land once. **Heads-up:** the first time you run
+> `/qa:new-spec` for a new area (next step), it will *also* do a one-time deeper exploration of
+> just that area — so Step 3 may open the browser again for a moment. That's expected.
+
+## Step 3 — draft the spec
+
+```
+/qa:new-spec auth/login
+```
+`auth/login` is the **[area](glossary.md)/feature** you're testing — a real value you type, not a
+placeholder. The planner opens the sign-in screen and writes a human-readable **[spec](glossary.md)**
+at `specs/auth/login.md`. Open it. The important part is the fenced **[oracle](glossary.md)** — the
+plugin's definition of "correct." A complete spec looks like this:
+
+```yaml
+name: successful login
+tags: [smoke, auth]                 # @smoke = the fast gate Step 6 runs
+site: app                           # which app (matches app.context.md)
+data:
+  user:
+    email: "member@example.test"    # inlined into the step below
+    password_env: "QA_USER_PASSWORD" # the password comes from your .env, never written here
+steps:
+  - "Go to the login page"
+  - "Fill Email with {{data.user.email}}"
+  - "Fill Password with the test account's password"
+  - "Click Sign in"
+oracle:                             # closed vocabulary — 16 allowed keys
+  url_matches: "/tasks"             # we land on the task list
+  text_visible: "My tasks"          # the page actually rendered
+```
+
+Read the oracle like a sentence: *end up on `/tasks` with "My tasks" visible.* **This is your
+one job:** read the oracle and ask *"would this actually catch the bug I care about?"* You can
+do that without ever reading the TypeScript. (Notice the password is never written in the spec —
+it comes from `QA_USER_PASSWORD` in your `.env`.)
+
+## Step 4 — compile it and run it green
+
+```
+/qa:gen specs/auth/login.md
+```
+The generator turns the spec into a real [test](glossary.md) at `tests/auth/login.spec.ts`, runs
+it once, and leaves it **green**. It also saves a short **`.webm` video** of the run — open it and
+watch the AI drive your real sign-in flow. *That video is your proof it tested the real thing* —
+you never read the `.spec.ts`.
+
+## Step 5 — let the gatekeeper check it
+
+```
+/qa:review
+```
+The **[reviewer](glossary.md)** confirms every step is actually asserted, every assertion is in the
+closed vocabulary, and nothing is green-but-empty. You'll get a short **PASS** report. (On a real
+pull request — a "PR", the change you ask a teammate to merge — a FAIL here *blocks the merge*.)
+
+## Step 6 — run the smoke gate
+
+```
+/qa:run mode=smoke
+```
+Runs the `@smoke`-tagged tests with **no AI in the loop** — exactly what your nightly does, at
+~$0. You'll see `1 passed`. The test passes — **but passing isn't the point yet.** A green test
+only matters if it would go *red* on a real problem. Let's prove it does.
+
+---
+
+## Step 7 — prove the test doesn't lie (no code needed)
+
+A passing test is worthless if it passes no matter what. Here's how to prove yours is real —
+by making the check *false* and watching it refuse to stay green:
+
+1. Open `specs/auth/login.md`.
+2. In the `oracle:`, change `text_visible: "My tasks"` to something the app never shows, e.g.
+   `text_visible: "Totally wrong text"`.
+3. Recompile: `/qa:gen specs/auth/login.md`. Because the oracle is now deliberately false, the test
+   **can't pass** — `/qa:gen` runs it once and reports it **red ❌ right there** (the generator never
+   parks a failing test as green). `/qa:run mode=smoke` then shows it red too.
+
+It goes **red ❌**, with the failing step and a link to a **[trace](glossary.md)** — open it at
+[trace.playwright.dev](https://trace.playwright.dev) (no install) and *see* every step and where
+it stopped. **This is the whole point:** the oracle said "Totally wrong text" must be visible, the
+app didn't show it, so the test refused to pass. Now change the oracle back to `"My tasks"`,
+re-run step 3 (`/qa:gen` again), and it's green again.
+
+> **What happens in real life when a test goes red.** You won't hand-break tests — the nightly
+> does it for you. When a run fails, you run `/qa:heal <test-id>` (the `<test-id>` is printed in
+> the red output). The **[healer](glossary.md)** reads the trace and:
+> - if a button just moved or was renamed (**locator drift**), it patches the [locator](glossary.md)
+>   and the test goes green — *it never changes what you asserted*;
+> - if the app itself is genuinely broken, it **files a bug and leaves the test red on purpose**;
+> - if your app's wording changed on purpose, it hands the spec back to the planner to update the
+>   oracle — it will **not** silently rewrite your check.
+>
+> That boundary — fix the plumbing, never quietly weaken the contract — is why a green suite here
+> means something.
+
+---
+
+## What just happened
+
+You went from a plain-language feature to a test that **passes when the app is right and fails
+when the check is wrong** — and you never wrote or read test code. The AI drafted; you read the
+spec and watched the video; the reviewer enforced; and you saw the test refuse to lie.
+
+**Honest limit (so green stays meaningful):** a test is only as good as its oracle. The plugin
+fights weak oracles hard (the reviewer, `must_fail_when`, metamorphic twins), but **no tool can
+prove an oracle is *complete*.** That's why your one standing job is the habit from Step 3: for
+each spec, skim the oracle and ask *"would this catch the bug I actually care about?"* If you're
+unsure, that's the signal to ask a developer.
+
+## Where to go next
+
+- **Test your own feature:** `/qa:new-spec <your-area>/<your-feature>`, then repeat steps 3–6.
+- **Not a coder, but you're the one signing off?** Read **[reviewing-without-code.md](reviewing-without-code.md)** — how to judge a test by its oracle + video (never the code), and the moments the plugin stops for your decision.
+- **You already have manual test cases?** Run `/qa:import-cases <area/feature>` with your export — see **[how-to-import-manual-cases.md](how-to-import-manual-cases.md)** for the full walkthrough.
+- **A P1 / money / compliance flow?** Use the **[rigor lane](glossary.md)**: `/qa:intake` →
+  `/qa:ideate` → `/qa:approve` before `/qa:new-spec` — it pins *what correct means* first.
+- **Stuck / what's next?** Ask `/qa:help` from inside your project.
+- **Every command, in full:** the repo's `DOCUMENTATION.md` — or, from inside a project, ask `/qa:help <command>` (every command self-documents; use this if you only have the installed plugin and not the repo checkout). **Why it works this way:** `DESIGN.md` (beside this file).

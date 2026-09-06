@@ -1,0 +1,60 @@
+---
+description: Triage a failing Playwright test via the healer subagent; patch selectors/waits or file a bug.
+argument-hint: <failing-test-id>
+disable-model-invocation: true
+---
+
+**Guard first (prod-safety).** Before delegating, run the canonical shell prod-guard —
+`bash scripts/prod-guard.sh` — and **STOP if it exits non-zero.** Healing drives a live
+browser (interactive MCP replay, step 3) *before* any `npx playwright test`, so the enforced
+`globalSetup` prod backstop has **not** engaged yet — a healer pointed at a prod-marked
+`BASE_URL` would otherwise open a live prod browser session with no STOP. (If the script is
+missing, re-run `/qa:init` to stamp it.) This is the one browser-driving command whose first
+action can be a live-browser step, so the guard cannot be left to `globalSetup`.
+
+Delegate to the `healer` subagent (runs on the session-selected model; signals
+for a stronger model on second re-fail, Playwright MCP enabled) to triage
+`artifacts/test-results/$ARGUMENTS/` (the configured `outputDir` — NOT
+repo-root `test-results/`).
+
+The healer must:
+
+1. Read the trace with the first-class **`npx playwright trace`** CLI (Playwright
+   1.59+) — the primary, headless/CI-safe recipe (do NOT use `npx playwright
+   show-trace`; it only opens a GUI and hangs in CI). The zip is at
+   `artifacts/test-results/$ARGUMENTS/trace.zip`. Full command sequence
+   (`trace open`/`actions`/`action`/`snapshot`) is in `healer.md` step 1; the old
+   `unzip -Z1` + `grep` + `unzip -p` extraction is only the **fallback** when
+   `npx playwright trace` is unavailable on the install.
+2. Read the failing `.spec.ts` and pre-failure DOM snapshot.
+3. **If invoked interactively** (started with `--mcp-config .mcp.explore.json`), replay via
+   Playwright MCP to observe the actual DOM state. **In a scheduled/CI run MCP is absent**
+   (`healer.md` §"MCP is interactive-only") — there, work from `trace.zip` + the pre-failure
+   snapshot + `error-context.md` alone; do not assume live MCP replay is available.
+4. Classify the failure into one of the healer's **10 buckets** (`healer.md`
+   step 4) — broken locator | missing wait | changed text | stale
+   specialist context | auth stale | data drift | env/infra down | contract
+   change | expected-failure (`must_fail_when`) still red | product defect. Only
+   broken-locator and missing-wait are patched in-place; the rest escalate
+   (sentinel/bug/planner/leave-red) rather than editing the test.
+5. **Patch selectors/waits only — NEVER assertions.** The oracle contract is
+   immutable from the healer's side.
+6. **If the root cause is a product defect, file
+   `bugs/<YYYY-MM-DD>-<slug>.md`** (CLAUDE.md §Bug-report schema) and revert
+   any patch attempt. Do not mutate the test to make the bug disappear.
+7. Re-run: `npx playwright test <spec> --retries=0 --reporter=line`. Green → write
+   the diff as a PR comment. (`--reporter=line` is load-bearing: a bare re-run fires
+   the config's `json` reporter and overwrites `artifacts/last-run.json` — the
+   run-of-record `/qa:report` reads; see `healer.md` step 6 / reviewer.md.)
+
+**Hard turn budget: 5.** After 5 turns on the same failure, stop and signal that
+a stronger model is required (the healer pins `model: sonnet`; it cannot raise
+its own tier mid-run — the operator raises the pin or re-runs the work higher). If still red after that re-run, give up,
+file a bug, and revert. Never silently retry past the budget (CLAUDE.md §Escalation rules).
+
+**Close the sentinel loop (YOU are the orchestrator the healer hands off to).**
+If the healer returns with a sentinel under `artifacts/`, perform its action and
+re-invoke the healer — never delete a sentinel without acting on it (`/qa:doctor`
+check 4 flags orphans). The sentinel→action table is single-sourced in
+`${CLAUDE_PLUGIN_ROOT}/reference/sentinel-actions.md` — read it and follow the row
+matching the sentinel you got.

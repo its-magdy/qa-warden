@@ -1,0 +1,46 @@
+{
+  "//": "AI-QA suite: TypeScript specs/tests, Playwright-replayed nightly at zero LLM cost.",
+  "name": "qa-suite",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AI-authored, Playwright-replayed QA suite. Claude Code authors specs and .spec.ts; Playwright runs deterministically at $0 LLM cost nightly.",
+  "scripts": {
+    "init": "bash scripts/init.sh",
+    "test": "playwright test",
+    "test:smoke": "QA_RUN_OF_RECORD=1 playwright test --grep @smoke",
+    "test:regression": "playwright test --grep @regression",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "show-report": "playwright show-report",
+    "install-browsers": "playwright install --with-deps chromium",
+    "typecheck": "tsc --noEmit"
+  },
+  "scripts_comment": "test:smoke sets QA_RUN_OF_RECORD=1 ON PURPOSE so it matches /qa:run mode=smoke: it is a run-OF-RECORD path and refreshes artifacts/last-run.json (the json reporter in playwright.config.ts is gated to CI || QA_RUN_OF_RECORD=1). Without it, `npm run test:smoke` and `/qa:run mode=smoke` were two ways to 'run smoke' with DIFFERENT reporting side-effects — the npm one never refreshed last-run.json, so a later /qa:report silently summarized a STALE prior run (F008). Agent verification runs (heal/gen/twin/doctor) deliberately stay OFF-record via `--reporter=line`, so they still never clobber it. The inline `VAR=1 cmd` form assumes a POSIX shell (bash/sh/zsh) — same assumption as the `bash scripts/*.sh` scripts here; on a bare Windows cmd shell without a POSIX shell, prefix via cross-env or run /qa:run mode=smoke instead.",
+  "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/cli": "0.1.17",
+    "@playwright/mcp": "^0.0.78",
+    "@playwright/test": "1.62.1",
+    "@types/node": "^24.0.0",
+    "dotenv": "^17.4.2",
+    "typescript": "^5.9.0",
+    "zod": "~3.25.0",
+    "zod-fixture": "^2.5.2"
+  },
+  "types_node_comment": "Pinned to @types/node 24 ON PURPOSE — 24 is the Active LTS line (EOL 2028-04); do NOT 'helpfully' bump to 26. @types/node tracks Node MAJORS, so typing against a version NEWER than the LTS you actually run in CI types APIs that may not exist at runtime (typing ahead of the runtime). Bump this only in lockstep with a real Node runtime upgrade (raise `engines.node` too). As of 2026-07 the latest published is 26.x (Node 26 = non-LTS Current until it enters LTS 2026-10) — deliberately NOT tracked. NOTE: this must stay a TOP-LEVEL comment key — a `//`-prefixed key INSIDE devDependencies makes npm try to resolve a package literally named `//types_node` and aborts the whole install.",
+  "typescript_comment": "Held on the 5.x line ON PURPOSE — do NOT auto-bump to 7. TS 7 (the Go-native compiler, GA 2026-07-08) is a real upgrade but a brand-new major; the recommended path is 5.x → (6.0-beta as a deprecation-flagging waypoint) → 7, and TS 7 broke the `import 'typescript'` programmatic API that ts-node/ts-jest/@typescript-eslint depend on. LOW blast radius here (Playwright transpiles .spec.ts with its own bundled esbuild — it never calls tsc; `typescript` is ONLY the `npm run typecheck` gate + editors) and this tsconfig is already TS7-clean (strict + ESNext, no es5/AMD/UMD), so a future move is mechanical — but there is no upside to riding a 3-day-old major in a scaffolding toolkit many users run. REVISIT DATE REACHED (checked 2026-08-03): TS 7.0.2 is published, so the 'wait for a few patch releases' precondition is now MET and this hold is a live decision, not a standing default — but it is deliberately NOT auto-bumped here, because 5.x -> 7 is a major compiler swap that must be proven on a typecheck-only branch (run `npm run typecheck` against TS 7 across a real generated suite) before it ships to every scaffolded project. Next reviewer: either do that branch and bump, or move this date forward with a reason. This is a COMPILER swap, not a language change — the authoring model writes identical .ts either way, so no idiom risk (unlike the zod pin).",
+  "zod_comment": "Pinned to the 3.25.x line ON PURPOSE — do NOT bump to Zod 4. zod-fixture@2.5.2 (its newest release) introspects Zod-3 internals and is BROKEN on Zod 4: createFixture(z.object(...)) throws 'No generator found for ZodObject' (verified empirically). Since the factory layer under fixtures/factories/ is the suite's defense against requirement-change cascades, a Zod 4 bump would break every generated fixture. (The schema/factory pair is NOT shipped — the generator creates fixtures/schemas/<entity>.ts on demand, grounded in the real app; a fixtures/schemas/user.ts.example illustrates the pattern.) The z.string().email() idiom the generator emits into fixtures/schemas/*.ts (and shown in the .ts.example) is the correct Zod-3 form (z.email() does not exist until Zod 4). Migrating to Zod 4 is a real project: replace or drop zod-fixture (whose newest release 2.5.2 — last published 2024-03, peer range zod>=3.0.0 that npm accepts for zod@4 but which throws at runtime on Zod 4 — has no Zod-4 support) with a Zod-4-NATIVE mock library — Zocker (supports zod/v4 and zod/v4-mini), NOT @anatine/zod-mock, which is itself stale and Zod-3-only — or hand-rolled factories, and migrate the schema idioms (z.string().email() → z.email()) together — not a version bump.",
+  "cli_comment": "@playwright/cli is pinned EXACTLY (0.1.17, no caret) ON PURPOSE — it is a pre-1.0 (0.x) package with no stability guarantee, and `/qa:init`'s scaffold self-test drives it (`npx playwright-cli`). A caret on a 0.1.x package DOES float within the minor (`^0.1.8` → the latest 0.1.x, currently 0.1.17), so a future 0.1.x patch could bump its nested ALPHA `playwright-core` or change a CLI flag and silently break init for a NEW user on a lockfile-less install — while the two `overrides` below force `playwright-core` back to stable 1.62.1 (verified: 0.1.17 launches a real browser on the forced stable core). Exact-pin removes that float, matching the exact-pin posture of `@playwright/test` and the overrides. Bump this MANUALLY (like @playwright/mcp) after verifying the new CLI works on the pinned stable core. Latest verified: 0.1.17 (published 2026-07-09).",
+  "mcp_comment": "LEGACY as of Playwright 1.62: the MCP server now ships BUNDLED with `playwright` itself, so .mcp.explore.json launches the bundled server, not this package. **The npx arg MUST stay version-pinned (`npx -y playwright@1.62.1 mcp`) and MUST equal `overrides.playwright` below — this is a PAIRED bump site, enforced by doctor.sh Check 8b.** A bare `npx -y playwright mcp` looks equivalent but is NOT: with no node_modules present (fresh clone, lockfile-less CI step) npx silently fetches the LATEST Playwright, reintroducing exactly the runner/core skew the `overrides` block exists to prevent — sourced from the explore config instead of the dep tree, so the overrides can't catch it. This standalone @playwright/mcp devDependency is kept only as a documented fallback for a caller still wired to the old standalone server; it is NOT referenced by .mcp.explore.json anymore. It remains on the 0.0.x line, where npm's caret does NOT float (illustrative: a `^0.0.77` would resolve to EXACTLY 0.0.77, not >=0.0.77 — the actual dep below is `^0.0.78`), so IF you still need it, bump it MANUALLY. Latest verified: 0.0.78 (July 2026).",
+  "overrides_comment": "Force a single STABLE Playwright core so `playwright install` and `playwright test` agree on ONE browser revision. Both `playwright` AND `playwright-core` are pinned: @playwright/cli and @playwright/mcp each hard-depend on an ALPHA `playwright-core` (e.g. 1.62.0-alpha), so pinning only `playwright` leaves a nested alpha core that needs a browser revision `npx playwright install` never fetches — the exact 'Executable doesn't exist' skew that dies on a clean CI runner (F-002). Overriding `playwright-core` in lockstep dedupes the WHOLE tree to 1.62.1 (verified 2026-08-03: @playwright/cli 0.1.17 + @playwright/mcp 0.0.78 launch a real browser on the forced stable core, and one `playwright install` covers everything). No alpha/beta anywhere. **`@playwright/test` above is ALSO pinned EXACTLY (`1.62.1`, no caret) — not just the two `overrides`:** `@playwright/test` hard-depends on a `playwright-core` at its own exact version, so a floating `^1.62.1` on a lockfile-less/regenerated install could resolve the runner to a newer 1.x while `overrides` force core back down to 1.62.1 — a runner/core skew that contradicts this very 'one stable core' guarantee (T-01). Exact-pinning the runner makes all three move in lockstep by construction. If @playwright/cli ever genuinely needs a newer core API, bump ALL THREE pins (@playwright/test + the two overrides) in lockstep to the next STABLE core.",
+  "overrides": {
+    "playwright": "1.62.1",
+    "playwright-core": "1.62.1"
+  },
+  "engines": {
+    "//": "Floor raised to 22 — Node 20 reached EOL 2026-04 (do not lower back; 18/20 are unsupported lines). 22 is the OLDEST still-supported LTS (maintenance to 2027-04); @types/node stays on 24 (Active LTS) per the comment above — floor = oldest supported runtime, types = the LTS you run in CI. Bump both together on the next runtime upgrade.",
+    "node": ">=22"
+  },
+  "packageManager": "npm@10.9.2"
+}
