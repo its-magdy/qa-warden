@@ -985,6 +985,53 @@ if [ -n "$TMPL" ] && [ -f "$TMPL/../reference/knowledge-map.md" ]; then
   [ -n "$phantom" ] && { echo "⚠️  /qa:help catalog lists a command with no skill: $(echo "$phantom" | tr '\n' ' ')— reference/knowledge-map.md names a /qa:* that does not exist (retired without removing its row)"; warn=$((warn+1)); }
 fi
 
+# 9f. Healer MCP tool-grant ↔ settings.json permission mirror. `agents/healer.md`'s `tools:`
+#     line and `templates/settings.json`'s `mcp__playwright__*` allow entries are a 17-entry
+#     list hand-typed TWICE, in two different syntaxes, in two different files — the same
+#     unchecked-hand-mirrored-pair shape Checks 9b/9bb/9bc/8 exist for, and the last pair in the
+#     substrate with nothing behind it. It has already been edited by hand once (15 -> 17 when
+#     the healer was granted browser_evaluate + browser_close) and the mirror was kept in sync
+#     only because someone remembered.
+#     Why each direction is a FAIL, not cosmetic drift:
+#       - in healer.md, NOT in the allow-list -> the healer's declared tool prompts at call
+#         time. The healer runs as a SUBAGENT: there is nobody to answer the prompt, so a tool
+#         its own prose mandates (HEAL01 re-probes with browser_evaluate before believing an
+#         empty reading) is simply unavailable, and it burns turns against a 14-turn budget
+#         discovering that.
+#       - in the allow-list, NOT in healer.md -> a standing pre-approval for a tool no agent
+#         declares. Harmless today, but it is how the two sides drift apart unnoticed, and an
+#         agent with an explicit `tools:` list cannot call it anyway.
+#     Arm 2 is the settings-side complement Check 9c does NOT cover: 9c catches a rule the
+#     toolkit RETRACTED that is stranded downstream; nothing caught a rule the toolkit ADDED
+#     that never reached an already-scaffolded project. Deliberately scoped to the mcp__ entries
+#     and not the whole allow[]: those are agent-capability grants with exactly one right
+#     answer, whereas a user legitimately deletes a POLICY rule they disagree with (that has
+#     happened) and a full-list subset check would nag them forever.
+if [ -n "$TMPL" ] && [ -f "$TMPL/settings.json" ] && [ -f "$TMPL/../agents/healer.md" ] && command -v jq >/dev/null 2>&1; then
+  # `tools:` is a comma-separated frontmatter scalar; settings.json is a JSON array. Normalize
+  # both to a sorted line set so the comparison is of SETS, not of formatting or order.
+  h_mcp=$(grep -m1 '^tools:' "$TMPL/../agents/healer.md" | tr ',' '\n' | grep -oE 'mcp__[a-z0-9_]+' | sort -u)
+  s_mcp=$(jq -r '.permissions.allow[]? | select(startswith("mcp__"))' "$TMPL/settings.json" 2>/dev/null | sort -u)
+  if [ -z "$h_mcp" ] || [ -z "$s_mcp" ]; then
+    echo "⚠️  healer/settings MCP mirror UNVERIFIED — could not extract one of the two lists (healer.md tools: line, or settings.json permissions.allow[])"; warn=$((warn+1))
+  else
+    only_h=$(comm -23 <(printf '%s\n' "$h_mcp") <(printf '%s\n' "$s_mcp") | grep . || true)
+    only_s=$(comm -13 <(printf '%s\n' "$h_mcp") <(printf '%s\n' "$s_mcp") | grep . || true)
+    [ -n "$only_h" ] && {
+      echo "❌ MCP mirror drift — declared in agents/healer.md 'tools:' but NOT allowed in templates/settings.json: $(printf '%s\n' "$only_h" | tr '\n' ' ')— the healer runs as a subagent, so this tool PROMPTS with nobody to answer and is effectively unavailable mid-heal. Add it to permissions.allow[]."; fail=$((fail+1)); }
+    [ -n "$only_s" ] && {
+      echo "❌ MCP mirror drift — allowed in templates/settings.json but NOT declared in agents/healer.md 'tools:': $(printf '%s\n' "$only_s" | tr '\n' ' ')— a standing pre-approval no agent can use (an explicit tools: list is a restriction). Add it to the healer or drop the rule."; fail=$((fail+1)); }
+  fi
+  # Arm 2 — did the shipped grants actually REACH this project? The scaffold's jq merge is an
+  # additive union, so the repair is a plain re-run of /qa:init (no hand edit, unlike 9c).
+  if [ -f .claude/settings.json ]; then
+    p_mcp=$(jq -r '.permissions.allow[]? | select(startswith("mcp__"))' .claude/settings.json 2>/dev/null | sort -u)
+    unstamped=$(comm -23 <(printf '%s\n' "$s_mcp") <(printf '%s\n' "$p_mcp") | grep . || true)
+    [ -n "$unstamped" ] && {
+      echo "⚠️  .claude/settings.json is missing MCP grants the plugin now ships: $(printf '%s\n' "$unstamped" | tr '\n' ' ')— this project was scaffolded before they were added. Re-run /qa:init (the permission merge is additive and runs on every init, so this needs no hand edit)."; warn=$((warn+1)); }
+  fi
+fi
+
 # 10. Site-id ↔ config-project routing (F-51: a site declared in app.context.md with no matching
 #     playwright.config project — specs target a phantom site and silently run zero tests; renumbered
 #     from the old "F-15" tag, which collided with the last-run-staleness F15 in check 1 above — the

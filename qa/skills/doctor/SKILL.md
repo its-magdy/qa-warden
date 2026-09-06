@@ -112,6 +112,20 @@ does not fix anything — each finding names its repair:
   the `| `/qa:name`` |` form — that is the invocation `/qa:help` owes the user, and accepting the
   bare shape for commands is how `metamorphic-relations` stayed uncatalogued while this check
   read green.
+- **Check 9f (healer MCP grant ↔ settings.json mirror):** the 17 `mcp__playwright__*` entries
+  are hand-typed twice — as `agents/healer.md`'s `tools:` list and as `templates/settings.json`'s
+  `permissions.allow[]` — and were the last hand-mirrored pair in the substrate with no check.
+  **FAIL, either direction.** Declared but not allowed: the healer is a SUBAGENT, so the tool
+  prompts with nobody to answer and a step its own prose mandates (HEAL01's `browser_evaluate`
+  re-probe) silently cannot run. Allowed but not declared: a standing pre-approval no agent can
+  reach, since an explicit `tools:` list is a restriction. Fix by editing both files together.
+  A separate **WARN** arm compares the shipped MCP grants against this project's
+  `.claude/settings.json`: this is the complement of 9c — 9c catches a rule the toolkit
+  RETRACTED and stranded downstream, this catches one it ADDED that never reached a project
+  scaffolded earlier. Repair is a plain `/qa:init` (the permission merge is additive and runs
+  every time), not a hand edit. Scoped to the `mcp__` entries on purpose: those are capability
+  grants with one right answer, whereas a user may legitimately delete a policy rule, and a
+  whole-allow-list check would nag them forever.
 - **Check 2 / 9b (vocab drift):** re-sync the 16-key mirror with CLAUDE.md (and, for
   9b, upgrade/re-stamp the plugin agents) in the same commit as any vocab change.
 - **Check 3 (vacuous smoke):** tag at least the P1 happy path `@smoke`, then
