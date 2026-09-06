@@ -80,7 +80,8 @@ site: app                           # MUST match a sites[].id in specs/_context/
 basis: checkout/coupon              # OPTIONAL — set on fanned-out specs; pairs the spec back to <feature>.cases.md/.basis.md
 compliance_relevant: false          # OPTIONAL — true for PCI/HIPAA/SOX-flagged flows (enables the reviewer's cross-vendor note)
 data:
-  user:    { email: "...", password_env: "QA_USER_PASSWORD" }
+  user:    { email: "...", password_env: "QA_USER_PASSWORD" }   # CREDENTIAL form: a pre-seeded login account. Exactly {email|username, password_env} — carved out of reviewer Check 10, no factory needed.
+  order:   { factory: "order", overrides: { units: 1 } }        # FACTORY form: REQUIRED for any entity you INSTANTIATE with non-credential fields. Inline literals (`order: { units: 1, currency: "USD" }`) where fixtures/factories/order.ts exists = reviewer Check 10 FAIL. `overrides:` pins only what the oracle asserts; the factory generates the rest, and the generator creates the schema+factory on demand.
   expected_total_range: [49.00, 50.50]
 steps:
   - include: login
