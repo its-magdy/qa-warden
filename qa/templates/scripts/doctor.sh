@@ -382,10 +382,19 @@ if [ -f package.json ] && [ -f .mcp.explore.json ]; then
   fi
 fi
 
-# 9. Substrate drift — toolkit-OWNED config/scripts agents cannot repair in place: a HARD-denied
-#    subset (package.json, package-lock.json, playwright.config.ts, prod-guard.sh/.ts — in
-#    settings.json deny[]) PLUS the write-allowlist-excluded rest (tsconfig.json, .mcp.json,
-#    .mcp.explore.json, resolve-spec-path.sh, .env — not in deny[], so per-prompt-approved, not blocked).
+# 9. Substrate drift — toolkit-OWNED config/scripts agents cannot repair in place. Three
+#    protection tiers, and this check is the only thing that covers all three:
+#      (a) HARD-DENIED in settings.json deny[] — package.json, package-lock.json,
+#          playwright.config.ts, tsconfig.json, .mcp.json, .mcp.explore.json, prod-guard.sh/.ts,
+#          and every scripts/*.sh EXCEPT init.sh. Blocked outright.
+#      (b) Write-allowlist-EXCLUDED — scripts/init.sh, scripts/README.md, and the four
+#          scripts/*.txt manifests, .github/**, .env. Not in deny[], so per-prompt-approved.
+#      (c) Inside a Write/Edit ALLOW glob — the resync-set members under specs/** and
+#          fixtures/**. These were once silently auto-writable (no deny, no prompt): an agent
+#          could clobber specs/_context/_templates/basis.md with a real feature's basis and
+#          every later /qa:intake would read the corrupted file as its template. Now denied by
+#          path, but keep this tier in mind when ADDING a resync-set entry under an allowed
+#          tree — the deny is per-path and does not follow automatically.
 #    /qa:init is skip-if-exists, so a plugin fix to any of these does NOT reach a project
 #    scaffolded before the fix — a shipped fix silently strands every existing project
 #    (F-015/F-016). Detect the drift here (read-only) against the shipped templates and name
@@ -859,18 +868,27 @@ fi
 #     actual execute form `sed 's/.*/id/e'` (an `e` before the closing quote) matched NONE of
 #     them. Over-blocking AND under-blocking at once; deny beats allow and cannot be
 #     interactively approved, so the agent had no recourse. They are replaced by the precise
-#     `Bash(sed *e'*)` / `Bash(sed *e"*)` pair. Flag any retired rule still present.
+#     `Bash(sed *e'*)` / `Bash(sed *e"*)` pair.
+#     A retraction is not always a DENY rule: an over-broad ALLOW strands identically. So the
+#     remedy text is selected PER RULE below instead of being hardcoded to the sed story — the
+#     first non-sed entry would otherwise have been reported with a sed fix. Flag any retired
+#     rule still present.
 if [ -f .claude/settings.json ]; then
   while IFS= read -r retired; do
     [ -z "$retired" ] && continue
-    grep -qF "\"$retired\"" .claude/settings.json 2>/dev/null && {
-      echo "⚠️  retired permission rule still in .claude/settings.json: \"$retired\" — the scaffold's jq merge is additive (union) and never removes a rule, so this must be deleted BY HAND. It over-blocks ordinary sed (the deny cannot be interactively approved); the replacements are \"Bash(sed *e'*)\" and \"Bash(sed *e\\\"*)\"."
-      warn=$((warn+1))
-    }
+    grep -qF "\"$retired\"" .claude/settings.json 2>/dev/null || continue
+    case "$retired" in
+      "Bash(sed "*) why="It over-blocks ordinary sed (the deny cannot be interactively approved); the replacements are \"Bash(sed *e'*)\" and \"Bash(sed *e\\\"*)\"." ;;
+      "Bash(printenv)") why="It auto-approves a BARE printenv — a full dump of every .env secret loaded into that shell (QA_ADMIN_PASSWORD, QA_TOTP_SECRET, QA_CLIENT_CERT_PASSPHRASE) into the transcript — and nothing ever consumed it: the mandated form is the SCOPED \"printenv \$base_url_env\" (agents/exploration.md), still covered by \"Bash(printenv *)\"." ;;
+      *) why="It was retracted from the shipped template." ;;
+    esac
+    echo "⚠️  retired permission rule still in .claude/settings.json: \"$retired\" — the scaffold's jq merge is additive (union) and never removes a rule, so this must be deleted BY HAND. $why"
+    warn=$((warn+1))
   done <<'RETIRED'
 Bash(sed *e)
 Bash(sed *e *)
 Bash(sed *e;*)
+Bash(printenv)
 RETIRED
 fi
 
