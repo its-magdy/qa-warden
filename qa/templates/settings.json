@@ -16,6 +16,8 @@
       "mcp__playwright__browser_generate_locator",
       "mcp__playwright__browser_console_messages",
       "mcp__playwright__browser_network_requests",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_close",
       "Bash(set -a)",
       "Bash(set +a)",
       "Bash([ -f *)",

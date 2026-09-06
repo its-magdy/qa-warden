@@ -7,7 +7,7 @@ model: sonnet
 # hot/area split narrowed scope.)
 maxTurns: 40
 color: cyan
-tools: Bash, Read, Write
+tools: Bash, Read, Write, Edit
 # Preloaded skill: playwright-cli drives
 # the live AX-tree snapshots this agent relies on in both hot and area modes.
 skills:
@@ -22,6 +22,7 @@ Source of truth for policy is `CLAUDE.md` at the repo root. Read it first. In pa
 - **ALWAYS drive an ISOLATED, uniquely-named session — never the shared `default`.** Pass `-s=explore-<area>-<n>` (a name unique to this run) on **every** `goto`/`snapshot`/`eval`/`click`, and `npx playwright-cli close -s=<name>` when done. The CLI defaults to a shared session named `default`; when a nightly run or another agent mutates it concurrently, you observe **phantom facts** — a wrong-password submit appears to succeed, a cleared token reappears, routes jump — and record them as false ground truth. You are the agent whose entire job is recording truth, so session isolation is mandatory here, not optional. (This is why `known_flaky_surfaces` carries a `cause: tooling` tag — a session-drop is a harness artifact, not a product flake.)
 - **Environment**: never target production. Run the **canonical shell prod-guard** — `bash scripts/prod-guard.sh` (CLAUDE.md §Environment): a *word-boundary* host match `(^|[.-])(prod|production)\d*($|[.-])` over **every** exported `BASE_URL_*`, with scheme + userinfo stripped so `user:pass@prod…` can't hide the host (the enforced `scripts/prod-guard.ts` globalSetup applies the same logic via a WHATWG URL parse; `QA_ALLOW_PROD=1` overrides the prod-marker check in both layers — placeholder/empty-target refusals have no env escape) — NOT a bare `contains "prod"` substring (which false-positives `product`/`reproduction` and false-negatives prod hosts named without "prod"). Stop and surface to the caller if it exits non-zero.
 - **Writable paths**: `Write(specs/**)` (both modes) and `Write(fixtures/auth.<site>.json)` (area mode only, when persisting storage state in step 3). The global `.claude/settings.json` allows `Write(fixtures/**)`; auth-state files are the single exception to "specs-only".
+- **`Write` CREATES, `Edit` UPDATES — on an existing context file, use `Edit`.** Most of this agent's actual job is *modification* of a file a human has since edited: bumping `last_verified:` (hot step 4), keeping the prior date and adding `draft: true` (hot step 4 / area step 7), preserving `volatility:` (area step 7), adding a reciprocal pointer to a **partner** area file (area step 8). A `Write` re-authors the whole file from what you happen to be holding, so every field you were never told to carry over is silently dropped — in `app.context.md` that means human-owned blocks like `staleness_tiers:`, `business_sources:`, `naming:`, `test_support:` and `oracle_vocab_ref:`, none of which appear in your Process steps. Losing `staleness_tiers:` is not cosmetic: it is the threshold reviewer Check 7 and the planner read to decide whether *any* area file is stale, so one clobber disables the freshness gate repo-wide. Reserve `Write` for a file that does not exist yet (the from-scratch draft paths in hot step 3 / area step 7); for anything already on disk, `Read` it and `Edit` the specific fields you verified. Same rule the healer follows (`agents/healer.md` §"Writable paths").
 
 ## Mode selection
 
