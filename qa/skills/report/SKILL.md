@@ -146,90 +146,23 @@ Output:
     the count describes *what ran*, and a smoke subset is not evidence the other lanes are green.
   - **Everything below the SCOPE line** — totals, the failures table, passed-with-retries,
     signature grouping, audit findings, durations, the parked-defects section, and the value
-    ledger — renders from the
-    `## Template` section below. The SCOPE line leads it: only this skill reads `--grep`
+    ledger — renders from
+    `${CLAUDE_SKILL_DIR}/reference/report-template.md` (read it; §Template below points there).
+    The SCOPE line leads it: only this skill reads `--grep`
     off `.config.argv`, so the anti-false-green qualification originates here (F-27).
   - A one-paragraph lead suitable for a PR comment or `#qa` Slack post.
 - Return the full Markdown block VERBATIM as your final response — this skill runs as a forked subagent, so the caller sees only what you return. Do not summarize, truncate, or replace it with a status line; the block itself is the deliverable the user pastes into a PR or Slack.
 
 ## Template
-```markdown
-# QA run — <lane> — <YYYY-MM-DD HH:MM>
-<Append ` (<commit-sha-short>)` ONLY when `config.metadata` carries it — see Inputs. A Playwright
-JSON report has no SHA on its own, so never fabricate one and never emit an empty `()`.>
 
-**SCOPE:** <the lane that actually ran — e.g. "smoke run-of-record — N smoke tests (a SUBSET;
-full suite NOT measured)". Derived from `--grep` in `.config.argv` above; render it FIRST and never present a filtered run as full-suite green (F-27).>
+The full output template — headline, SCOPE line, totals, failures table, passed-with-retries,
+signature grouping, audit findings, parked defects, value ledger and run metadata — lives in
+`${CLAUDE_SKILL_DIR}/reference/report-template.md`. **Read that file and render from it**; it is
+the sole owner of the report shape, so do not reconstruct the sections from memory.
 
-**Verdict:** <the one-paragraph go/no-go lead for the PR comment / Slack post. It MUST inherit the
-SCOPE qualification above — "N smoke tests passed" never "all tests passed" — and MUST be qualified
-rather than an unqualified "green to merge" whenever the Parked / known defects section below is
-non-empty (F-19), an audit reported violations, or SCOPE is NOT ESTABLISHED.>
-
-**Totals:** <N> specs · <P> passed · <FAILED> failed · <S> skipped · <RETRIED> retried · <FLAKY> flaky · wall-clock <hh:mm:ss>
-<Map each to `stats` in `last-run.json`: passed=`expected`, failed=`unexpected`, skipped=`skipped`,
-flaky=`flaky` (retried-then-passed). `<RETRIED>` counts retry ATTEMPTS and is NOT `<FLAKY>`.>
-**Flake budget:** <FLAKY>/<N> this run (the enforced threshold is CLAUDE.md §"Escalation rules": >5% flake over a rolling 14 days → `@quarantine`; flag anything trending toward it)
-**Durations:** p50 <s>s · p95 <s>s · vs prior run <±N%> · slowest 5: <spec> (<s>s), <spec> (<s>s), … (healer candidates if ALSO flaky)
-<Omit the `vs prior run` clause entirely when no prior local `reports/summary.md` exists — never
-render 0% from comparing the run to itself. Flag >20% regression explicitly.>
-
-## Failures (<FAILED>)
-| Spec | Signature | Retries |
-|---|---|---|
-| tests/checkout/new-address.spec.ts | `TimeoutError: locator.click` | 2 |
-| ... | ... | ... |
-
-## Passed with retries (<FLAKY>)
-<Every test that FAILED at least once and then passed. It is flaky, not passing — the flake SLO
-enforces against this table. Omit the section only when <FLAKY> is genuinely 0.>
-
-| Spec | Signature of the failed attempt(s) | Attempts |
-|---|---|---|
-| tests/settings/save.spec.ts | `TimeoutError: locator.click` | 3 (passed on 3rd) |
-
-## Top-3 failure signatures (grouped by message substring)
-1. **`TimeoutError: locator.click`** — 4 specs (checkout, login-mfa, settings-save, org-switch). Likely root cause: target rendered after an un-awaited async update (assert the settled post-condition, not the network). Owner suggestion: healer + test-data-seed review.
-2. **`expect(received).toHaveText(expected)`** — 2 specs (cart-empty-state, error-banner). Content drift, not a flake.
-3. **`net::ERR_CONNECTION_REFUSED`** — 1 spec (staging-smoke). Infra, not test.
-
-<details>
-<summary>Full failure details (<FAILED>)</summary>
-
-### tests/checkout/new-address.spec.ts
-- Attempts: 3 (2 retries, final: fail)
-- Duration: 42.1s
-- Error: `TimeoutError: locator.getByRole('button', { name: 'Pay' }).click()` timed out after 30000ms
-- Trace: `artifacts/test-results/<test-id>/trace.zip`
-- Screenshot: `artifacts/test-results/<test-id>/test-failed-1.png`
-- Healer verdict: <from triage notes or "not yet triaged">
-
-### ...
-</details>
-
-## Audit findings (a11y / visual)
-<Headline numbers from any `reports/audit-*.md` written by `/qa:review url=<url>` — WCAG violation
-counts by impact, and visual-diff count. Omit the section when no audit report exists. This is the
-one place a reviewer looks, so an audit that ran and found violations must not be invisible here.>
-
-## Parked / known defects (<n> open)
-<Every `bugs/*.md` still `Status: open`, from the `post-run-checks.sh` scan run above.
-When any is open the go/no-go lead MUST be qualified — never an unqualified "green to merge"
-over a standing, human-confirmed defect (F-19). "All N tests passed" describes *what ran*;
-this section describes *quality state*. Omit the section only when the count is truly zero.>
-
-## Value ledger (running counts — not a score)
-- App defects caught: <O> open, <FIXED> fixed (`bugs/*.md` — <slugs>; found-by: healer <n> · generator <n> · manual <n> · unrecorded <n>)
-- Test-side heals: <K> (heal-log: broken-locator <a> · missing-wait <b> · auth-stale <c> · data-drift <d> · stale-context <e>)
-- Spec-drift escalations owed/processed: <E> (changed-text <x> · contract-change <y>)
-_Counts since install. No rates, no percentages — a count you can audit beats a score you can game._
-
-## Run metadata   <!-- only when CI injects config.metadata — omit this section otherwise (see §Inputs) -->
-- Commit: <sha> (<branch>)
-- Triggered by: <actor> via <workflow>
-- Workers: <N>
-- Started: <iso8601> · Ended: <iso8601>
-```
+It is a separate file because this skill would otherwise sit over the ~5,000-token ceiling in
+`reference/knowledge-map.md`, which would place the output contract in the post-compaction
+truncation zone while this section still told you to render from it.
 
 ## Value-ledger derivation (deterministic — reuse, don't re-derive)
 - **Bug counts.** The `post-run-checks.sh` scan above ran `bug-status.sh --list-open`, which by
