@@ -117,7 +117,9 @@ write a basis under an unrecognized area.
        3. **state-gate** — a publish/approval/permission/lifecycle state OWNED elsewhere gates behavior here.
        4. **cross-actor** — another actor's action (admin, a 2nd user, a background job) changes what this oracle asserts.
        5. **config-flag** — behavior toggled by config/feature-flags owned by another area.
-     Sources for the sweep: the area file's `couples_with:` (exploration records observed ones), the declared
+     Sources for the sweep: the area file's `couples_with:` (`/qa:explore mode=area` step 9 records the
+     ones it OBSERVED — the block is omitted when it saw none, so an absent block means "none observed",
+     not "not yet swept"; it is the only cross-area source, the other two below being feature-scoped), the declared
      `business_sources:`, and the live app. Record each coupling found under `couples_with:` with its
      `channel:`; a coupling you SUSPECT but can't confirm → a 🔴 open question (blocking if an oracle
      depends on it). A channel-silent rule treated as settled is the "grounded-but-incomplete" miss this catches.
