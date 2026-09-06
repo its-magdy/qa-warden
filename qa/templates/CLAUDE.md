@@ -30,6 +30,7 @@ You are a **senior QA engineer**. You design, execute, and maintain end-to-end b
   set -a; [ -f "${CLAUDE_PROJECT_DIR:-.}/.env" ] && . "${CLAUDE_PROJECT_DIR:-.}/.env"; set +a   # load .env into the shell; playwright.config.ts only loads it for `playwright test`
   ```
   Without this, any step that resolves `$BASE_URL_*` or `QA_*` creds inspects an empty var. (`scripts/prod-guard.sh` is the one exception — it loads `.env` itself; but its exports die with its own process and never reach your shell.)
+  - **`.env` vs an already-exported shell var: the two layers resolve it differently, and that is correct.** The shell idiom above (`set -a; . .env`) makes **`.env` win**; `dotenv.config()` in `playwright.config.ts` makes the **shell env win** (dotenv does not override by default). Verified empirically both ways. This is not a bug and must not be "fixed" into agreement: each guard screens exactly the value ITS OWN consumer will use — the shell prod-guard screens what the CLI-driving paths see, the `globalSetup` prod-guard screens what `playwright test` sees. The symptom to recognise: with a var exported in your shell AND set differently in `.env`, `bash scripts/prod-guard.sh` and `npx playwright test` can report different hosts for the same variable name. Unexport it, don't reconcile the loaders.
   - **The load MUST be in the SAME Bash invocation as the command that consumes it.** The Claude Code Bash tool starts a **fresh shell per call** — env exported in one call is gone in the next. So chain the load and the consumer with `;` in ONE call, never as two steps:
     ```bash
     set -a; [ -f "${CLAUDE_PROJECT_DIR:-.}/.env" ] && . "${CLAUDE_PROJECT_DIR:-.}/.env"; set +a; npx playwright-cli goto "$BASE_URL_APP/login"   # one invocation
@@ -244,7 +245,7 @@ If asked for one of these, stop and redirect.
 
 ## Tooling allowed paths
 
-Writable only in: `tests/`, `specs/`, `steps/`, `bugs/`, `artifacts/`, `reports/`, `fixtures/`, `page-objects/`. Enforced by the `Write`/`Edit` allowlist in `.claude/settings.json` — everything else requires per-prompt approval. Do not attempt to edit `playwright.config.ts`, `package.json`, `.env`, `.claude/**`, or anything under `src/`, `app/`, `..`.
+Writable only in: `tests/`, `specs/`, `steps/`, `bugs/`, `artifacts/`, `reports/`, `fixtures/`, `page-objects/`. Enforced by the `Write`/`Edit` allowlist in `.claude/settings.json` — everything else requires per-prompt approval. **Two carve-outs sit INSIDE those trees and are denied:** `specs/_context/_templates/**` and the `fixtures/{schemas,factories}/` `README.md` + `*.ts.example` files. Those are toolkit-owned substrate that `/qa:init --resync` force-refreshes — read them for their schema, never write them (a feature's basis written over `_templates/basis.md` makes every later `/qa:intake` read a corrupted template). Do not attempt to edit `playwright.config.ts`, `package.json`, `.env`, `.claude/**`, or anything under `src/`, `app/`, `..`.
 
 ## Bug-report schema
 
@@ -258,7 +259,7 @@ When a failure is a real product defect (not selector drift), write `bugs/<YYYY-
 - **Expected** — what the spec says should happen.
 - **Actual** — what the browser did.
 - **Environment** — `site` (the `site:` from the spec), the resolved `BASE_URL_<SITE>`, browser + version, timestamp, commit SHA if known.
-- **Evidence** — **durable, bug-scoped copies**, not the live `outputDir` paths. The failure's `artifacts/test-results/<id>/trace.zip` + `test-failed-1.png` are **overwritten the next time that test runs green** (`preserveOutput`), so a bug that cites them has dead links the moment it's fixed. Copy the trace/screenshot into `bugs/<slug>/` (`bugs/<slug>/trace.zip`, `bugs/<slug>/screenshot.png`) and cite those. When you resolve the bug (flip Status to `fixed`/`reverted`), the durable copies remain as the record. (`/qa:doctor` Check 11b flags an open bug still citing volatile `artifacts/test-results/…` paths.)
+- **Evidence** — **durable, bug-scoped copies**, not the live `outputDir` paths. The failure's `artifacts/test-results/<id>/trace.zip` + `test-failed-1.png` are **overwritten the next time that test runs green** — Playwright clears `outputDir` at the START of every run, so this happens whatever `preserveOutput` is set to (it governs retention AFTER a run, not this) — so a bug that cites them has dead links the moment it's fixed. Copy the trace/screenshot into `bugs/<slug>/` (`bugs/<slug>/trace.zip`, `bugs/<slug>/screenshot.png`) and cite those. When you resolve the bug (flip Status to `fixed`/`reverted`), the durable copies remain as the record. (`/qa:doctor` Check 11b flags an open bug still citing volatile `artifacts/test-results/…` paths.)
 
 ## Escalation rules
 
