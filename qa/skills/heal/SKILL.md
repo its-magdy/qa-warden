@@ -47,7 +47,7 @@ The healer must:
    the config's `json` reporter and overwrites `artifacts/last-run.json` — the
    run-of-record `/qa:report` reads; see `healer.md` step 6 / reviewer.md.)
 
-**Hard turn budget: 5.** After 5 turns on the same failure, stop and signal that
+**Hard turn budget: 14.** After 14 turns on the same failure, stop and signal that
 a stronger model is required (the healer pins `model: sonnet`; it cannot raise
 its own tier mid-run — the operator raises the pin or re-runs the work higher). If still red after that re-run, give up,
 file a bug, and revert. Never silently retry past the budget (CLAUDE.md §Escalation rules).

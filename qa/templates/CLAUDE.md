@@ -256,7 +256,7 @@ When a failure is a real product defect (not selector drift), write `bugs/<YYYY-
 
 ## Escalation rules
 
-- **Healer budget:** hard limit 5 turns per failure — overridable via the `HEALER_TURN_BUDGET` env var (see `.env.example`; the healer reads it at start, defaulting to 5 when unset). After the budget, either ask the operator to raise the healer's `model:` pin (sonnet → opus) and re-run it once — the healer cannot switch its own model mid-run — or give up, file a bug, and revert the patch. Never silently retry past the budget.
+- **Healer budget:** hard limit 14 turns per failure — overridable via the `HEALER_TURN_BUDGET` env var (see `.env.example`; the healer reads it at start, defaulting to 14 when unset). After the budget, either ask the operator to raise the healer's `model:` pin (sonnet → opus) and re-run it once — the healer cannot switch its own model mid-run — or give up, file a bug, and revert the patch. Never silently retry past the budget.
 - **Reviewer failure blocks PR.** A missing-assertion, unlinked-fixme, locator-policy, or vocab violation is a merge blocker, not a warning.
 - **Flaky test quarantine:** any test flaking >5% over a rolling 14 days is auto-moved to a `@quarantine` tag and excluded from the gate until fixed — enforced by the `grepInvert` exclusion in `playwright.config.ts` (every default run skips the lane; run it explicitly with `QA_RUN_QUARANTINE=1 npx playwright test --grep @quarantine` — a CLI `--grep-invert` cannot override a config-level `grepInvert`, hence the env gate). Quarantine is time-boxed; quarantined >30 days = delete or rewrite.
 - **Prod target, oracle bypass, or `--bare` in any command:** refuse the request and flag to the user.

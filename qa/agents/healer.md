@@ -5,7 +5,7 @@ model: sonnet
 # maxTurns vs the prose turn budget: see reference/agent-budget-pattern.md.
 # HEALER_TURN_BUDGET can raise the prose budget at runtime (see ## Turn budget below) —
 # maxTurns reserves headroom for that too, clamped so the fallback always has room to run.
-maxTurns: 20
+maxTurns: 24
 color: orange
 tools: Bash, Read, Write, Edit, mcp__playwright__browser_navigate, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_fill_form, mcp__playwright__browser_press_key, mcp__playwright__browser_select_option, mcp__playwright__browser_hover, mcp__playwright__browser_snapshot, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_wait_for, mcp__playwright__browser_verify_text_visible, mcp__playwright__browser_verify_element_visible, mcp__playwright__browser_generate_locator, mcp__playwright__browser_console_messages, mcp__playwright__browser_network_requests
 # Preloaded skill: playwright-cli is the
@@ -157,10 +157,10 @@ You emit a unified diff to stdout (and write the patched file via the `Write` to
 - After the operator raises the pin (or re-runs the work at a stronger tier), if the test still cannot be greened within budget, classify as "product bug or spec drift I cannot reconcile", file to `bugs/` with what you know, and return.
 
 ## Turn budget
-- **Hard budget: 5 turns per failure**, configurable via `HEALER_TURN_BUDGET` env var, **clamped on BOTH ends** so the fallback always has room to run and a bad value can't zero the budget out (read it at start: `B="${HEALER_TURN_BUDGET:-5}"; case "$B" in ''|*[!0-9]*) B=5;; esac; echo "$(( B < 1 ? 1 : (B < 16 ? B : 16) ))"` — 16 is `maxTurns` minus the 4-turn fallback floor below; an unclamped override above it silently inverts the invariant Check 9bc only checks against the static prose "5". The lower clamp and the numeric-only `case` guard against a `0`/negative/typo'd value: bash arithmetic silently coerces a non-numeric `HEALER_TURN_BUDGET` to `0`, which would make the agent read itself as already out of budget on turn one and take the budget-exhausted arm on every failure — with no anomaly surfaced, since heal-log rows still write a plausible `escalated`/`bug-filed` outcome). Past the budget, stop — do not silently retry. Either escalate the model tier (once) or file a bug and revert the patch. This matches CLAUDE.md §"Escalation rules".
+- **Hard budget: 14 turns per failure**, configurable via `HEALER_TURN_BUDGET` env var, **clamped on BOTH ends** so the fallback always has room to run and a bad value can't zero the budget out (read it at start: `B="${HEALER_TURN_BUDGET:-14}"; case "$B" in ''|*[!0-9]*) B=14;; esac; echo "$(( B < 1 ? 1 : (B < 20 ? B : 20) ))"` — 20 is `maxTurns` minus the 4-turn fallback floor below; an unclamped override above it silently inverts the invariant Check 9bc only checks against the static prose "14". The lower clamp and the numeric-only `case` guard against a `0`/negative/typo'd value: bash arithmetic silently coerces a non-numeric `HEALER_TURN_BUDGET` to `0`, which would make the agent read itself as already out of budget on turn one and take the budget-exhausted arm on every failure — with no anomaly surfaced, since heal-log rows still write a plausible `escalated`/`bug-filed` outcome). Past the budget, stop — do not silently retry. Either escalate the model tier (once) or file a bug and revert the patch. This matches CLAUDE.md §"Escalation rules".
 - The budget counts tool-call iterations, not lines of reasoning.
-- **`HEALER_TURN_BUDGET` must stay at least 4 turns BELOW `maxTurns` (currently 20)** — so
-  16 is already the practical limit, and anything higher needs the frontmatter ceiling raised
+- **`HEALER_TURN_BUDGET` must stay at least 4 turns BELOW `maxTurns` (currently 24)** — so
+  20 is already the practical limit, and anything higher needs the frontmatter ceiling raised
   in the same edit.
   The frontmatter ceiling is a harness hard-stop that returns PARTIAL output and runs NO
   fallback — so an override above it would trade "file a bug and revert the patch" for a

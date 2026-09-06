@@ -279,7 +279,7 @@ delete them to make the toolkit sound more complete than it is.
   verdict-first rule (`agents/reviewer.md` §Inputs: write `PARTIAL REVIEW` + `FAIL
   (inconclusive-partial)` BEFORE the judgment pass, then revise N upward), which degrades to a
   truthful under-count instead of a false green; the ceiling only bounds a runaway;
-  healer 5→20 because `HEALER_TURN_BUDGET` can raise the prose budget at runtime and the env var
+  healer 14→24 because `HEALER_TURN_BUDGET` can raise the prose budget at runtime and the env var
   cannot raise the ceiling with it). The agent's own fail-safe fires first; the harness only
   catches a genuine runaway. Same shape as the model pins: a rule that lived only in prose now
   also has the harness mechanism behind it, without the mechanism displacing the rule.
