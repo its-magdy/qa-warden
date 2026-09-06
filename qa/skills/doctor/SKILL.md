@@ -62,6 +62,10 @@ does not fix anything — each finding names its repair:
   *resolved* test, so an **all-red run is fresh, not zero-test** (`expected` alone
   counts only PASSED tests). Corrupt/zero-test → fix the run and refresh via
   `/qa:run mode=smoke`; stale/missing → confirm which run you mean or re-run.
+- **Check 0b (ripgrep missing, WARN):** `rg` is an undeclared plugin-wide dependency. Install it
+  (`brew install ripgrep`) *before* running `/qa:retire` — a missing `rg` makes retire's
+  "is this shared?" consumer query return empty, which false-reads as "unused ⇒ safe to DELETE".
+  A fail-OPEN on a destructive path, so treat it as blocking for retire even though it is a WARN.
 - **Check 9bb (arg-shape drift):** a key's argument shape diverged between
   `templates/CLAUDE.md` and `agents/planner.md` — reconcile to CLAUDE.md (the stamped SoT).
   Only the shape expression is compared; rewording the trailing prose never fires this.
@@ -91,6 +95,23 @@ does not fix anything — each finding names its repair:
   its shapes are UNCHECKED, not in sync. `DOCUMENTATION.md` absent is a WARN — it lives outside
   the plugin dir and is unreachable from a scaffolded project. reviewer Check 4 is deliberately
   NOT compared: it quotes wrong shapes as counter-examples beside right ones.
+- **Check 9c (retired permission rule still in settings.json):** `.claude/settings.json` is
+  excluded from Check 9's byte-compare and from `--resync` (shared ownership — users add their own
+  rules), and the scaffold's jq merge is an additive UNION that can only ADD. So a rule the toolkit
+  **retracts** is stranded in every already-scaffolded project forever with nothing to notice it.
+  Delete the named rule by hand; `/qa:init --resync` will not do it for you.
+- **Check 9d (plugin layout regression):** a `commands/` directory reappeared. `commands/x.md` and
+  `skills/x/SKILL.md` BOTH produce `/qa:x` and coexist silently — nothing upstream complains. This
+  toolkit is skills-only so it can rely on `context: fork`, `allowed-tools` and bundled
+  `scripts/`+`reference/`, none of which exist on the command side. Port the command into a skill;
+  a split surface quietly ends those guarantees.
+- **Check 9e (`/qa:help` catalog vs the real skill set):** a user-invocable skill has no
+  **slash-form** row in `reference/knowledge-map.md`, or a row names something that no longer
+  exists. Add/remove the row. Note the two row shapes are not interchangeable: a capability skill
+  (`user-invocable: false`) is catalogued by a bare `| **name** |` row, but a real command needs
+  the `| `/qa:name`` |` form — that is the invocation `/qa:help` owes the user, and accepting the
+  bare shape for commands is how `metamorphic-relations` stayed uncatalogued while this check
+  read green.
 - **Check 2 / 9b (vocab drift):** re-sync the 16-key mirror with CLAUDE.md (and, for
   9b, upgrade/re-stamp the plugin agents) in the same commit as any vocab change.
 - **Check 3 (vacuous smoke):** tag at least the P1 happy path `@smoke`, then
@@ -103,6 +124,13 @@ does not fix anything — each finding names its repair:
   fine for optional-with-fallback vars).
 - **Check 7/7d (pins / idiom):** fix `package.json` / regenerate the offending
   `fixtures/schemas/` file in the pinned major's idiom.
+- **Check 8b (MCP paired-bump lockstep):** `.mcp.explore.json`'s `npx -y playwright@X.Y.Z mcp`
+  version must equal `overrides.playwright` in `package.json` — since 1.62 the MCP server ships
+  bundled with `playwright`, so these are one version, mirrored in two files. A **bare, unpinned**
+  `playwright` npx arg is itself a FAIL: with no `node_modules` (fresh clone, lockfile-less CI) npx
+  silently fetches the LATEST Playwright, recreating the runner/core skew the `overrides` block
+  exists to prevent — from the explore config, where `overrides` cannot reach it. Fix by bumping
+  both sites together, never by unpinning.
 - **Check 8/9 (canonical scripts / substrate drift):** `/qa:init --resync` (backs up
   drifted files to `*.qa-bak`). A missing stock var in `.env.example` → restore it from
   the shipped template, or park it commented (`# VAR=`) — the stock list is derived from

@@ -45,6 +45,8 @@ nothing is recorded.
      `☑` approved · `⏸` deferred (backlog, revisit later) · `⊘` waived (out-of-vocab, see banner) ·
      `~~strike~~` pruned (out of scope). A bare `☐` still means "not yet reviewed". Deferred, waived,
      and pruned rows all satisfy reviewer Check 14 (they need no scenario); only `☑` approved rows do.
+     **Write the banner line AND the row marker** — Check 14 accepts either as the human verdict, but
+     the banner is what a human reads and the marker is what survives a row being moved or re-sorted.
 4. **Close by printing the literal next commands — one per approved GROUP, not per row.**
    Do not restate the naming *rule* and leave the user to apply it: derive the slug yourself and
    emit the exact command line they can run, because this is the seam where the chain actually

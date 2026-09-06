@@ -75,6 +75,15 @@ shape below. Do not paraphrase, recompute, or estimate any number it emitted.
    `covered-features / total-basis-features`, printed beside the uncovered list — never alone.
    **`LEGACY(n)`** = covered by an unmanaged legacy suite — outside the assertion contract
    (no reviewer gate, no closed vocab); a caveat, not coverage parity.
+1b. **Spec-without-test** — an authored `specs/<area>/<feature>.md` with no compiled
+   `tests/<area>/<feature>.spec.ts`. **Lead with any row carrying the `← @smoke` marker:** a
+   `@smoke`-tagged spec that was never generated means the smoke GATE is blind to it — `--grep
+   @smoke` cannot run a test that does not exist, so a fully-broken P1 feature hides behind "no
+   test to fail" and the gate still reports green. This dimension exists because the gap is
+   invisible everywhere else: dim 1 is basis-DRIVEN (a spec authored without a basis is never
+   enumerated there, and the basis is optional), doctor Check 15 `continue`s past test-less specs,
+   and `/qa:impact` reads manifests, which an ungenerated spec never emitted. Name every row; the
+   fix is `/qa:gen <spec>`.
 2. **Assertion presence** — mean assertions/spec, and **any spec with 0 oracle keys** (name
    it — this echoes reviewer Check 1; the reviewer is the enforcing gate, this is visibility).
 3. **Lens gaps (self-reported)** — a lens marked `0` (or `✗`, or absent) instead of `✓` is an

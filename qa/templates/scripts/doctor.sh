@@ -883,10 +883,10 @@ if [ -n "$TMPL" ] && [ -f "$TMPL/../reference/knowledge-map.md" ]; then
   # Two catalog row shapes, both legitimate: the slash-command table uses `| \`/qa:<name>\` |`
   # — sometimes WITH an argument (`| \`/qa:run mode=smoke\` |`), so the name match must NOT
   # anchor on a closing backtick or every argumented command reads as an uncatalogued skill.
-  # the capability-skill table uses `| **<name>** |`. Accept either — a skill is catalogued if it
-  # appears in EITHER table; requiring the slash form would false-FAIL every capability skill.
-  kmrows=$( { grep -oE '^\| `/qa:[a-z0-9-]+' "$TMPL/../reference/knowledge-map.md" 2>/dev/null | sed 's/.*\/qa://; s/`//'
-              grep -oE '^\| \*\*[a-z0-9-]+\*\*' "$TMPL/../reference/knowledge-map.md" 2>/dev/null | sed 's/^| \*\*//; s/\*\*$//'; } | sort -u)
+  # The capability-skill table uses `| **<name>** |`. The two shapes are NOT interchangeable:
+  # the bare shape is what a `user-invocable: false` capability skill gets (it has no command to
+  # print), and the slash shape is what a real command needs. See the `missing` arm below.
+  kmslashrows=$(grep -oE '^\| `/qa:[a-z0-9-]+' "$TMPL/../reference/knowledge-map.md" 2>/dev/null | sed 's/.*\/qa://; s/`//' | sort -u)
   # A skill is user-invocable unless it says otherwise; only those need a catalog row.
   kmskills=""
   for d in "$TMPL"/../skills/*/; do
@@ -896,7 +896,14 @@ if [ -n "$TMPL" ] && [ -f "$TMPL/../reference/knowledge-map.md" ]; then
 "
   done
   kmskills=$(printf '%s' "$kmskills" | sort -u)
-  missing=$(comm -23 <(printf '%s\n' "$kmskills") <(printf '%s\n' "$kmrows") | grep . || true)
+  # A USER-INVOCABLE skill needs the SLASH row specifically, not just any row. Accepting either
+  # shape here (the original behaviour) let a real command hide behind a bare `| **name** |` row in
+  # the capability-skills table and read as catalogued — which is exactly how
+  # `metamorphic-relations` sat uncatalogued as a command while this check stayed green. The
+  # either-shape leniency exists for CAPABILITY skills (user-invocable: false), and those are
+  # already excluded from $kmskills above, so it buys nothing here. What /qa:help owes a user is
+  # the invocation; a row that never shows `/qa:<name>` cannot supply it.
+  missing=$(comm -23 <(printf '%s\n' "$kmskills") <(printf '%s\n' "$kmslashrows") | grep . || true)
   # The PHANTOM arm must use only the SLASH-form rows and compare against ALL skill dirs (not just
   # the user-invocable ones): the bare `| **name** |` shape is shared with the AGENTS table, and a
   # non-invocable capability skill legitimately has a row while being absent from $kmskills — both
