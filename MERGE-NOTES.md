@@ -16,7 +16,15 @@ This toolkit combines two earlier efforts:
 
 ## Decisions (locked with the user)
 
-1. **No hooks.** The lean toolkit had PreToolUse hooks (real-time assertion-edit block); they
+1. **No hooks.** *(**REVERSED 2026-09-20, session 8 of the audit remediation** — a narrow
+   `PreToolUse` layer now ships in `qa/hooks/`. The reversal was a SCOPING decision, not a
+   change of mind: a check earns a hook only when it is decidable from the proposed text
+   alone, so `assertion-contract.sh` denies the healer/verifier an edit that removes or
+   rewrites a pre-existing assertion — the very prohibition this decision left prose-only —
+   and `spec-lint.sh` moves four lexical reviewer FAILs earlier. Everything below still holds
+   for the rest of the reviewer, which cannot move: see `qa/hooks/README.md` and
+   `qa/reference/DESIGN.md` §"Why the oracle defenses exist".)* The lean toolkit had
+   PreToolUse hooks (real-time assertion-edit block); they
    were dropped. **Consequence folded in everywhere:** the **reviewer is now load-bearing** —
    its **Check 6 (mutation survival)** *(historical — today's Check 6 is metamorphic-twin
    verification; the mutation-style gate became `must_fail_when` + generator step-8b fault
@@ -59,7 +67,7 @@ This toolkit combines two earlier efforts:
 - Its plain-`expect()` oracle model (Test-Browser's closed-vocab + mutation/metamorphic is stronger).
 - Its suggest-only read-only healer (superseded by the heal-and-verify healer + reviewer gate).
 - Its `data/seed` contract (Test-Browser's Zod schemas + factories + `test-data-seed` skill is richer).
-- Its PreToolUse hooks (dropped per decision #1).
+- Its PreToolUse hooks (dropped per decision #1 — **later partially reinstated**, see the note there).
 
 ## Open risk to manage operationally
 "AI writes everything, human only approves" maximizes exposure to plausible-but-wrong tests.
