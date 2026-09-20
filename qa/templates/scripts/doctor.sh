@@ -558,6 +558,55 @@ if [ -f .env.example ]; then
   done
 fi
 
+# CLAUDE.md VOCABULARY CONTAINMENT — the second shared-ownership file, and the one excluded
+# above WITHOUT a containment complement. `--resync` refreshes the toolkit-owned set but
+# deliberately skips CLAUDE.md (users customise project policy), and the byte-compare above skips
+# it for the same reason. Both exclusions are right in isolation; together they leave the widest
+# hole in the upgrade path, because CLAUDE.md is where every new AUTHORING feature is documented
+# and the in-PROJECT agents read that file rather than the plugin.
+# MEASURED, not reasoned — a real 0.2.0 -> HEAD upgrade on a scratch install: after a clean,
+# green, exit-0 `/qa:init --resync` the stamped CLAUDE.md carried ZERO mentions of `fault:`,
+# `clock:`, `lock:` or `verifier`. The runtime was current and the vocabulary was a whole release
+# behind, and doctor said nothing. The shipping vehicle for every new feature was the one file
+# the upgrade could not deliver.
+# WHY CONTAINMENT AND NOT A SECTION DIFF. The obvious shape — byte-compare the toolkit-owned
+# SECTIONS — is refuted by that same upgrade: the `## ` heading set is IDENTICAL across it
+# (19 = 19) while the 93 new lines landed INSIDE ten pre-existing sections. A section-level check
+# reports green on precisely the release it would have been built for. What arrives is SYMBOLS
+# scattered through prose the user is invited to edit, so police the symbols — the
+# prod-guard-rails.txt lesson (compare the invariant, never the wording) applied to a file that
+# cannot be resynced at all.
+# The required set is DERIVED, like STOCK_VARS above: manifest x shipped template. Presence
+# anywhere satisfies it, so rewording and user additions are free and only a DELETION is
+# reported. Not the oracle keys — Check 2 already greps those against this same file from
+# scripts/oracle-keys.txt, and `lock:` must never be added there (it is a TestDetails field, not
+# an oracle key, and that manifest also feeds Check 9b and /qa:coverage's KEYS_RE).
+# WARN, never FAIL: alone among Check 9's findings the repair is not a command but a hand-merge,
+# and a repair the toolkit cannot perform must not be louder than the ones it can (substrate
+# drift and 9f arm 2 are both WARNs with a one-command fix). A FAIL would red every upgrading
+# consumer's CI for a condition only a human can clear.
+if [ -n "$TMPL" ] && [ -f "$TMPL/CLAUDE.md" ] && [ -f CLAUDE.md ]; then
+  VOCAB="$TMPL/scripts/claude-md-vocab.txt"
+  if [ ! -f "$VOCAB" ]; then
+    echo "⚠️  scripts/claude-md-vocab.txt not found in $TMPL — CLAUDE.md vocabulary DELIVERY is UNVERIFIED (this clone predates the manifest; run /qa:init --resync to stamp it)"; warn=$((warn+1))
+  else
+    # Strip FULL-LINE comments only — unlike the sibling manifests, a row here carries prose in
+    # its why-field, so the usual `s/#.*$//` would truncate it mid-sentence.
+    while IFS='|' read -r sym swhy; do
+      [ -n "$sym" ] || continue
+      # Anchored exactly as Check 9i anchors the step symbols, so `lock:` cannot match `unlock:`.
+      if ! grep -qE "(^|[^a-zA-Z_])$sym" "$TMPL/CLAUDE.md"; then
+        # The 9c stranded-rule shape, inverted: a manifest demanding a symbol the toolkit no
+        # longer ships would nag every consumer about a retired feature forever. Report the
+        # MANIFEST as stale and check nothing downstream of it.
+        echo "⚠️  claude-md-vocab.txt requires \`$sym\` but the SHIPPED templates/CLAUDE.md no longer mentions it — the manifest is stale (drop the line) or the symbol was dropped from the template by mistake"; warn=$((warn+1)); continue
+      fi
+      grep -qE "(^|[^a-zA-Z_])$sym" CLAUDE.md \
+        || { echo "⚠️  CLAUDE.md never mentions \`$sym\` — $swhy. /qa:init --resync does NOT refresh CLAUDE.md (shared ownership), so this is a HAND-MERGE, not a command: diff yours against $TMPL/CLAUDE.md and copy the missing prose across."; warn=$((warn+1)); }
+    done < <(grep -v '^[[:space:]]*#' "$VOCAB" | sed 's/[[:space:]]*$//' | grep -v '^$')
+  fi
+fi
+
 # 9b. Plugin-side vocab drift (F-09) — check 2 greps the 16 keys against the PROJECT's CLAUDE.md
 #     ONLY, but the planner/generator/reviewer that actually COMPILE specs live in the plugin, and
 #     that is exactly where drift lands after a plugin upgrade (a project CLAUDE.md can be in sync
@@ -1201,13 +1250,21 @@ fi
 #     scripts/oracle-keys.txt and are policed by nothing else: the whole contract is prose spread
 #     across four files, and each one, dropped, fails SILENTLY in a different direction.
 #     Arm 1 (CHAIN COMPLETENESS, symbol-keyed). planner.md authors the step, generator.md compiles
-#       it, reviewer.md validates it, templates/CLAUDE.md is the stamped SoT the in-PROJECT reviewer
-#       reads (it cannot read the plugin). Drop it from the planner and the capability exists but
-#       nothing can ask for it — §9's own "a capability that only lands in the generator is one the
-#       planner can never ask for". Drop it from the generator and the planner authors a step that
-#       compiles to nothing. Drop it from CLAUDE.md and a scaffolded project's reviewer has no
-#       definition to validate against. Keyed on the literal step SYMBOLS, never on wording, so a
+#       it, reviewer.md validates it, templates/CLAUDE.md is what gets STAMPED into a project (the
+#       in-PROJECT reviewer reads its own copy and cannot read the plugin). Drop it from the planner
+#       and the capability exists but nothing can ask for it — §9's own "a capability that only
+#       lands in the generator is one the planner can never ask for". Drop it from the generator and
+#       the planner authors a step that compiles to nothing. Drop it from the template and no future
+#       stamp carries the definition. Keyed on the literal step SYMBOLS, never on wording, so a
 #       reword stays green and a deletion does not.
+#       SCOPE — read this arm as the SHIPPING SOURCE, never as delivery. All four links are
+#       PLUGIN-side files, `templates/CLAUDE.md` included, so this arm is green whenever the
+#       toolkit still ships the symbols, no matter what any already-scaffolded project holds.
+#       That gap is real and was measured: a 0.2.0 project upgraded to HEAD kept a CLAUDE.md with
+#       zero `fault:`/`clock:` while this arm stayed green, because `--resync` cannot refresh a
+#       shared-ownership file. The delivered copy is policed by the CLAUDE.md containment
+#       sub-check in Check 9 (manifest: scripts/claude-md-vocab.txt), which WARNs rather than
+#       FAILs there because its repair is a hand-merge. The two are complements, not duplicates.
 #     Arm 2 (SCOPE OWNERSHIP, the 9g arm-3 / 9h arm-2 shape). The healer's prohibition on
 #       INTRODUCING a stub or a clock call is enforced by assertion-contract.sh, and that arm must
 #       be scoped to the HEALER ALONE. Both directions are real failures: widen it to the verifier
@@ -1221,7 +1278,7 @@ fi
 #       prose files still demand the pairing. Cross-checks the named key against the manifest.
 if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   # Arm 1: both step symbols must be present in all four links of the chain.
-  sit_chain="$TMPL/CLAUDE.md:the stamped SoT|a scaffolded project's reviewer has no definition to validate against — it cannot read the plugin
+  sit_chain="$TMPL/CLAUDE.md:the SHIPPING SOURCE|no future stamp carries the definition at all, and the CLAUDE.md containment sub-check in Check 9 — which is what polices the already-stamped copies — has nothing left to deliver
 $TMPL/../agents/planner.md:the AUTHOR|the capability exists but no spec can ask for it
 $TMPL/../agents/generator.md:the COMPILER|a declared step compiles to nothing
 $TMPL/../agents/reviewer.md:the VALIDATOR|an unproven stub ships green"

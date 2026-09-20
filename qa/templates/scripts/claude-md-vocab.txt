@@ -1,0 +1,45 @@
+# claude-md-vocab.txt — the ONE manifest of TOOLKIT-OWNED SYMBOLS that must survive in a
+# project's stamped CLAUDE.md.
+#
+# One consumer reads this file:
+#   - scripts/doctor.sh Check 9 (CLAUDE.md vocabulary containment) : every symbol listed here
+#     must appear in the SHIPPED templates/CLAUDE.md *and* in the project's own CLAUDE.md.
+#
+# WHY THIS EXISTS. CLAUDE.md is shared-ownership: users customise project policy, so it is
+# excluded from `--resync` (bin/qa-scaffold) and from Check 9's byte-compare (see the
+# exclusion list in scripts/resync-set.txt). Both exclusions are correct in isolation. Together
+# they leave a hole, and it is the widest one in the upgrade path: CLAUDE.md is where every new
+# AUTHORING feature is documented, and the in-project agents read THAT file, not the plugin.
+# Measured on a real 0.2.0 -> HEAD upgrade: after a clean, green, exit-0 `/qa:init --resync`
+# the stamped CLAUDE.md had ZERO mentions of `fault:`, `clock:`, `lock:` or `verifier`. The
+# runtime was current and the vocabulary was a whole release behind, and nothing said a word.
+#
+# WHY A SYMBOL MANIFEST AND NOT A SECTION DIFF. The obvious shape — compare the toolkit-owned
+# SECTIONS of CLAUDE.md — is refuted by the data. Across that same upgrade the `## ` heading set
+# is IDENTICAL (19 sections before, 19 after) while the 93 new lines landed INSIDE ten
+# pre-existing sections. A section-level check would report green on precisely the release it
+# would have been built for. What actually arrives is SYMBOLS scattered through prose the user
+# is invited to edit — so police the symbols, exactly as prod-guard-rails.txt polices an
+# invocation rather than a wording.
+#
+# NOT THE ORACLE KEYS. Those are Check 2's, read from scripts/oracle-keys.txt against this same
+# file. In particular `lock:` MUST NOT be added there: it is a `TestDetails` field, not an
+# oracle key (CLAUDE.md §"Reporting pipeline" says so outright), and oracle-keys.txt is also
+# read by Check 9b and by /qa:coverage's KEYS_RE — widening it would corrupt the closed
+# vocabulary in three consumers to patch a fourth.
+#
+# THE CHECK IS A FLOOR. Presence anywhere in the file satisfies it, like a commented `# VAR=`
+# satisfying the .env.example stock-var containment next to it. Rewording is free; only a
+# DELETION is reported. And it WARNs rather than FAILs: unlike every other drift Check 9 finds,
+# the repair is not a command — CLAUDE.md is shared-ownership, so it is a hand-merge.
+#
+# ADDING A FEATURE THAT SHIPS IN CLAUDE.md: add one line here. Symbols are matched literally,
+# anchored the way Check 9i anchors the step forms — `(^|[^a-zA-Z_])<symbol>` — so `lock:`
+# does not match `unlock:`.
+#
+# Format: <symbol>|<why its absence costs something>. Full-line `#` comments and blank lines
+# are ignored; `#` is NOT stripped mid-line, because the why-text is prose.
+fault:|the situation step that stubs a network dependency. A scaffolded project's reviewer reads its definition from THIS file and cannot read the plugin, so a spec that declares one has nothing to validate it
+clock:|the situation step that controls time — the SFDIPOT Time lens is not authorable without it, and the in-project reviewer has no definition to validate against
+lock:|the cross-file mutual-exclusion field the generator emits, together with the sharding caveat that VOIDS it. Absent, a reader adopts the sharding recipe and silently loses every lock
+verifier|the agent that grades the generator's output. Absent from the roster, the split reads as a single authoring agent and the `// verified:` stamp reviewer Check 2b trusts has no documented author

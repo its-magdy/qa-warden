@@ -152,6 +152,30 @@ directory is a one-line edit here; keep it consistent with the `Write`/`Edit`
 allowlist in `.claude/settings.json` and CLAUDE.md §"Tooling allowed paths",
 or the first agent write into the new directory hits an approval wall.
 
+## `claude-md-vocab.txt` — the CLAUDE.md delivery manifest
+
+Also not a script: the list of toolkit-owned **symbols** that must survive in a project's own
+`CLAUDE.md`. It closes the widest hole in the upgrade path. `CLAUDE.md` is shared-ownership, so
+it is excluded from `--resync` *and* from Check 9's byte-compare — both correct in isolation, but
+together they mean the file every new authoring feature ships in is the one file an upgrade
+cannot deliver, and the in-project agents read that file rather than the plugin. Measured on a
+real `0.2.0` → HEAD upgrade: after a clean, green, exit-0 `/qa:init --resync` the stamped
+`CLAUDE.md` carried zero mentions of `fault:`, `clock:`, `lock:` or `verifier`, and doctor said
+nothing.
+
+Why symbols and not sections: across that same upgrade the `## ` heading set was **identical**
+(19 before, 19 after) while the 93 new lines landed *inside* ten pre-existing sections — a
+section-level diff would report green on exactly the release it would have been built for. So it
+polices symbols, the way `prod-guard-rails.txt` polices an invocation rather than a wording.
+
+The required set is derived (manifest × shipped template), so a symbol retired from the template
+reports the *manifest* as stale instead of nagging consumers about a dead feature. Presence
+anywhere in the file satisfies it — rewording and user additions are free, only a deletion is
+reported — and it **WARNs**, because alone among Check 9's findings the repair is a hand-merge
+rather than a command. Not the oracle keys: those are Check 2's, and `lock:` must never be added
+to `oracle-keys.txt` (it is a `TestDetails` field, and that manifest also feeds Check 9b and
+`/qa:coverage`). Shipping a feature documented in `CLAUDE.md` is a one-line edit here.
+
 ## `prod-guard-rails.txt` — the prod-guard rail manifest
 
 Also not a script: the single list of skills that must carry a prod-guard rail in prose.

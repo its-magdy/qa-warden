@@ -155,15 +155,32 @@ does not fix anything — each finding names its repair:
   green write except `QA_HOOKS_OFF=1`. Arms 2 and 3 key on symbols — an agent filename, a check
   number — never on wording, so a reword stays green and a re-parenting does not. Fix by
   restoring the wiring, never by deleting the hook to make the check pass.
+- **Check 9, CLAUDE.md vocabulary containment:** the delivery half of the upgrade path.
+  `CLAUDE.md` is shared-ownership, so it is excluded from `--resync` *and* from Check 9's
+  byte-compare — yet it is where every new authoring feature is documented, and the in-project
+  agents read it rather than the plugin. Measured on a real `0.2.0` → HEAD upgrade: after a
+  clean, green, exit-0 `/qa:init --resync` the stamped `CLAUDE.md` had zero mentions of `fault:`,
+  `clock:`, `lock:` or `verifier`, and doctor said nothing. The symbols come from
+  `scripts/claude-md-vocab.txt` and are gated on the shipped template, the same derive-don't-
+  hand-enumerate shape as the `.env.example` stock-var containment beside it. **Sections were
+  refuted by measurement** — the `## ` heading set was identical across that upgrade (19 = 19)
+  while 93 new lines landed inside ten pre-existing sections, so a section diff would have
+  reported green on the very release it was built for. **WARNs, never FAILs:** alone among
+  Check 9's findings the repair is a hand-merge against the shipped template, not a command, and
+  a repair the toolkit cannot perform must not be louder than the ones it can.
 - **Check 9i (the situation-step chain — `fault:` / `clock:`):** the two structured `steps:`
   forms that make the SFDIPOT Interfaces/Operations and Time lenses generatable. They are
-  deliberately **not** oracle keys, so `scripts/oracle-keys.txt` does not carry them and nothing
-  else polices them — the whole contract is prose across four files. **Arm 1, chain
+  deliberately **not** oracle keys, so `scripts/oracle-keys.txt` does not carry them — the whole
+  contract is prose across four files. **Arm 1, chain
   completeness:** the planner AUTHORS the step, the generator COMPILES it, the reviewer
-  VALIDATES it, and `templates/CLAUDE.md` is the stamped SoT the in-*project* reviewer reads
-  (it cannot read the plugin). Each link, dropped, fails in its own silent direction — a missing
-  planner mirror is the audit's own *"a capability that only lands in the generator is one the
-  planner can never ask for"*. Keyed on the step SYMBOLS, never on wording. **Arm 2, scope
+  VALIDATES it, and `templates/CLAUDE.md` is what gets STAMPED into a project (the in-*project*
+  reviewer reads its own copy and cannot read the plugin). Each link, dropped, fails in its own
+  silent direction — a missing planner mirror is the audit's own *"a capability that only lands
+  in the generator is one the planner can never ask for"*. Keyed on the step SYMBOLS, never on
+  wording. **Read arm 1 as the shipping SOURCE, not delivery:** all four links are plugin-side
+  files, so it stays green however stale an already-scaffolded project's own `CLAUDE.md` is. The
+  delivered copy is Check 9's CLAUDE.md containment sub-check (below), which is where `fault:`
+  and `clock:` are actually policed downstream. **Arm 2, scope
   ownership:** the healer's prohibition on *introducing* a stub or a clock call is enforced by
   `assertion-contract.sh`, and that arm must scope to the **healer alone** — widen it to the
   verifier and its step-8b fault injection (which *is* a `page.route`) gets denied, breaking the

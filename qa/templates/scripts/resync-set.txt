@@ -41,6 +41,7 @@ scripts/README.md
 scripts/resync-set.txt
 scripts/runtime-dirs.txt
 scripts/oracle-keys.txt
+scripts/claude-md-vocab.txt
 scripts/prod-guard-rails.txt
 .github/workflows/qa-nightly.yml.example
 specs/_context/_templates/area.md
