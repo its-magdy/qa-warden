@@ -1,5 +1,5 @@
 ---
-description: Invoke the exploration subagent — hot mode (refresh app.context.md) or area mode (write specs/_context/<site>/<area>.md). Default = hot. Use when a site's auth/env has changed, an area's context file is missing or past its staleness tier, or planner/healer reports stale/missing context and hands off here.
+description: Invoke the exploration subagent — hot mode (refresh app.context.md) or area mode (write specs/_context/<site>/<area>.md). Default = hot ONLY on a bare invocation; an area invocation missing mode=/site=/area= STOPs rather than defaulting. Use when a site's auth/env has changed, an area's context file is missing or past its staleness tier, or planner/healer reports stale/missing context and hands off here.
 argument-hint: "[mode=hot | mode=area site=<id> area=<name>]"
 ---
 
@@ -13,8 +13,25 @@ ambiguity, it never becomes the selector authority.
 
 Two modes:
 
-- **`mode=hot`** (default) — refresh `specs/_context/app.context.md`: verify `sites:` table, auth flows per site, env vars, naming conventions. Updates `last_verified:` to today. Keep the hot tier tight (~80 lines, a tunable target). **First run (no `app.context.md` yet):** the exploration agent scaffolds a populated `draft: true` context and STOPS for a human to confirm before it counts as verified — the reviewer treats a `draft: true` hot tier as unverified. So the first `/qa:explore` produces a draft to review, not a finalized file.
+- **`mode=hot`** (the default only on a *bare* invocation — see the dispatch guard below) — refresh `specs/_context/app.context.md`: verify `sites:` table, auth flows per site, env vars, naming conventions. Updates `last_verified:` to today. Keep the hot tier tight (~80 lines, a tunable target). **First run (no `app.context.md` yet):** the exploration agent scaffolds a populated `draft: true` context and STOPS for a human to confirm before it counts as verified — the reviewer treats a `draft: true` hot tier as unverified. So the first `/qa:explore` produces a draft to review, not a finalized file.
 - **`mode=area site=<id> area=<name>`** — discover one product area on one site. Writes `specs/_context/<site>/<area>.md` with routes in scope, domain vocab, observed flakes, and cross-site contracts (if any). Selectors are NOT cached — the generator pulls them live at compile time.
+
+**Dispatch before you delegate — the default is a guard, not a fallback.** Check the arguments
+first; `agents/exploration.md` §"Mode selection" carries the same three arms, and this is the
+layer where a mistyped command can still be corrected for free:
+
+- **Nothing passed** → `mode=hot`, and say so (`mode=hot (defaulted — no mode given)`) so a
+  defaulted run is never mistaken for the area refresh someone meant to ask for.
+- **`site=` or `area=` present without `mode=area`** → **STOP** and echo the corrected command.
+  Do **not** fall through to hot.
+- **`mode=area` without both `site=` and `area=`** (including a positional `mode=area <area>`)
+  → **STOP** and name the missing key. Do not infer it.
+
+Why a STOP beats a best guess: hot mode's last step stamps `last_verified: <today>` on
+`app.context.md`, and reviewer Check 7 / doctor Check 5b read that date as "verified accurate as
+of". So a wrong-mode run does not merely do the wrong work — it marks context fresh that nobody
+verified, and reports the area the caller actually asked about as handled. (`/qa:doctor` Check 9j
+keeps this repo's own printed invocations well-formed for the same reason.)
 
 **Safety rail (CLAUDE.md §Environment):** run `bash scripts/prod-guard.sh` first — STOP and ask the user to confirm in-chat if it exits non-zero.
 

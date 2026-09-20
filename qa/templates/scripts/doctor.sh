@@ -197,7 +197,15 @@ if [ -f "$CTX" ]; then
     lv_epoch=$(date -d "$lv" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$lv" +%s 2>/dev/null)
     [ -z "$lv_epoch" ] && continue
     age_days=$(( (now - lv_epoch) / 86400 ))
-    [ "$age_days" -gt "$budget" ] && { echo "⚠️  stale context: $f (volatility=${vol:-reference}, last_verified $lv = ${age_days}d old > ${budget}d tier budget) — re-run /qa:explore mode=area"; warn=$((warn+1)); }
+    # Emit a COPY-PASTEABLE command, not the bare `mode=area` this used to print. exploration
+    # STOPs on a `mode=area` whose `site=`/`area=` is missing rather than guessing the area
+    # (agents/exploration.md §"Mode selection" arm 3), so a hint that omits them costs the reader
+    # a round-trip — and $f already carries both. Off the expected depth, fall back to placeholders.
+    site_id=$(printf '%s' "$f" | sed -nE 's|^specs/_context/([^/]+)/[^/]+\.md$|\1|p')
+    area_id=$(printf '%s' "$f" | sed -nE 's|^specs/_context/[^/]+/([^/]+)\.md$|\1|p')
+    if [ -n "$site_id" ] && [ -n "$area_id" ]; then expl="mode=area site=$site_id area=$area_id"
+    else expl="mode=area site=<id> area=<name>"; fi
+    [ "$age_days" -gt "$budget" ] && { echo "⚠️  stale context: $f (volatility=${vol:-reference}, last_verified $lv = ${age_days}d old > ${budget}d tier budget) — re-run /qa:explore $expl"; warn=$((warn+1)); }
   done < <(ctx_grep_l '^volatility:')
 fi
 
@@ -1255,6 +1263,72 @@ EOF
       printf '%s\n' "$KEYS" | grep -qx 'network_response_status' \
         || { echo "❌ templates/CLAUDE.md makes \`network_response_status\` the fired-proof for a response-fabricating \`fault:\` step, but that key is no longer in scripts/oracle-keys.txt — every fault: spec is now unauthorable while four files still demand the pairing (the 9c stranded-rule shape)"; fail=$((fail+1)); }
     fi
+  fi
+fi
+
+# 9j. /qa:explore INVOCATION SHAPE. `exploration` runs two modes off one arg string, and
+#     agents/exploration.md §"Mode selection" now STOPs on an under-specified one instead of
+#     silently defaulting to hot. That guard only helps if the commands this toolkit itself tells
+#     people to run are well-formed — and five of them were not: a bare `area=checkout` with no
+#     mode= (reference/test-case-ideation.md), three `mode=area` remediation hints carrying no
+#     site=/area= (doctor/coverage), and a second invocation later on a knowledge-map line whose
+#     FIRST one was fine. Both shapes fail SILENTLY and in the same direction — the caller wanted
+#     one area refreshed, and instead either a hot-tier run stamps `last_verified: today` onto
+#     app.context.md for a verification nobody requested (reviewer Check 7 and Check 5b above then
+#     read the area as handled while nothing was explored), or the agent STOPs and the reader
+#     pays a round-trip for a command this repo printed wrong.
+#     Keys on SYMBOLS — the literal `site=` / `area=` argument names — never on wording, so the
+#     prose around an invocation stays free to change. Three arms:
+#       Arm 1 — every `/qa:explore mode=area …` invocation carries BOTH keys. A `…`/`...` is the
+#               explicit opt-out for deliberate prose, so a doc may stay short, it just has to
+#               SAY it is eliding rather than look like a runnable command that isn't.
+#       Arm 2 — no `/qa:explore` leads with a bare `site=`/`area=` (the mode dropped in
+#               transcription) — the shape that used to silently run hot.
+#       Arm 3 — the agent's own §"Mode selection" still carries a STOP arm. Presence of the
+#               toolkit's STOP token in that section, not the sentence around it.
+#     Two properties this check needs and neither is free. (a) ADJACENCY is the anchor: only a
+#     `mode=area` IMMEDIATELY following `/qa:explore` is an invocation, so a capability table
+#     whose first cell is `/qa:explore` and whose second says `mode=area` (knowledge-map.md's
+#     command table) stays prose — matching it would have made this the check that gets disabled,
+#     the property 9bb and 9bd are each built around. (b) PER-INVOCATION, not per-line: the arg
+#     capture is bounded to argument-shaped tokens rather than "rest of line", because a greedy
+#     capture swallows a second invocation further along the same line — which is exactly where
+#     the fifth offender was hiding, and is 9bd's cross-site false-green class at line granularity.
+if [ -n "$TMPL" ] && [ -d "$TMPL/.." ]; then
+  PLUG=$(cd "$TMPL/.." 2>/dev/null && pwd)
+  # Bounded to argument-shaped tokens (`k=v`, `<placeholder>`, an ellipsis) so `grep -o` yields
+  # one line PER INVOCATION rather than one per source line.
+  EXPL_RE='/qa:explore`?[[:space:]]+`?mode=area([[:space:]]+(…|\.\.\.|[a-z]+=[^[:space:]`",;)]+|<[a-z]+>))*'
+  expl_scan() { grep -rnoE "$1" "$PLUG" --include='*.md' --include='*.sh' --include='*.json' 2>/dev/null
+                grep -rnoE "$1" "$PLUG/bin" 2>/dev/null; }
+  # Arm 1.
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    inv=${hit#*:}; inv=${inv#*:}
+    case "$inv" in *…*|*...*) continue ;; esac
+    case "$inv" in
+      *site=*area=*|*area=*site=*) continue ;;
+    esac
+    echo "❌ ${hit%%:*}:$(printf '%s' "${hit#*:}" | cut -d: -f1): \`$inv\` is an under-specified /qa:explore invocation — a mode=area run needs BOTH site= and area=, and exploration STOPs rather than guessing the missing one (agents/exploration.md §\"Mode selection\" arm 3). Add both keys, or a trailing … if this is deliberately prose"
+    fail=$((fail+1))
+  done <<EOF
+$(expl_scan "$EXPL_RE" | sed "s|^$PLUG/||")
+EOF
+  # Arm 2.
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    inv=${hit#*:}; inv=${inv#*:}
+    echo "❌ ${hit%%:*}:$(printf '%s' "${hit#*:}" | cut -d: -f1): \`$inv\` — a /qa:explore invocation leading with \`site=\`/\`area=\` and no \`mode=area\`. Before the §\"Mode selection\" arm-2 guard this silently ran HOT MODE: it stamped last_verified:today on app.context.md and left the requested area unexplored, with both freshness gates reading it as done. Write \`/qa:explore mode=area site=<id> area=<name>\`"
+    fail=$((fail+1))
+  done <<EOF
+$(expl_scan '/qa:explore`?[[:space:]]+`?(site|area)=[^[:space:]`",;)]*' | sed "s|^$PLUG/||")
+EOF
+  # Arm 3.
+  expl_a="$PLUG/agents/exploration.md"
+  if [ ! -f "$expl_a" ]; then
+    echo "❌ agents/exploration.md is MISSING — /qa:explore has no agent to dispatch to"; fail=$((fail+1))
+  elif ! awk '/^## Mode selection/{f=1;next} /^## /{f=0} f' "$expl_a" | grep -q 'STOP'; then
+    echo "❌ agents/exploration.md §\"Mode selection\" no longer carries a STOP arm — an under-specified invocation falls back to a silent \`mode=hot\` default, which bumps app.context.md's last_verified: for a verification nobody ran while the requested area goes unexplored (both freshness gates then read it as done)"; fail=$((fail+1))
   fi
 fi
 

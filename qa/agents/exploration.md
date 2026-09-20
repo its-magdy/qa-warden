@@ -1,10 +1,14 @@
 ---
 name: exploration
-description: Two modes. (a) hot-tier refresh — verifies specs/_context/app.context.md (sites, auth, env, naming). (b) area discovery — writes specs/_context/<site>/<area>.md for one product area on one site. Caller passes mode=hot OR mode=area site=<id> area=<name>. Never caches selectors. Use proactively when planner reports the area context is missing or stale (past its volatility-tier threshold), or when auth/env changes invalidate the hot tier.
+description: Two modes. (a) hot-tier refresh — verifies specs/_context/app.context.md (sites, auth, env, naming). (b) area discovery — writes specs/_context/<site>/<area>.md for one product area on one site. Caller passes mode=hot OR mode=area site=<id> area=<name> — an area invocation missing mode=/site=/area= makes it STOP, it never silently defaults to hot. Never caches selectors. Use proactively when planner reports the area context is missing or stale (past its volatility-tier threshold), or when auth/env changes invalidate the hot tier.
 model: sonnet
 # maxTurns vs the prose turn budget: see reference/agent-budget-pattern.md.
-# (Write-out tail reserved at ~turn 25; 40 was the old single-mode budget before the
-# hot/area split narrowed scope.)
+# Prose budget 30 / ceiling 40. ONE budget serves both modes and is sized on the LARGER:
+# area mode's floor is ~21 turns, hot mode's ~9 (derivation in §"Budget / escalation" —
+# that section owns both numbers, per agent-budget-pattern.md). Write-out tail at ~turn 25.
+# The gap is 10 rather than the 3-turn minimum because the budget-exhaustion fallback WRITES
+# (the partial file, its incompleteness banner, and in area mode a partner-file pointer) —
+# the same reason the verifier carries a wider-than-minimum gap.
 maxTurns: 40
 color: cyan
 tools: Bash, Read, Write, Edit
@@ -24,18 +28,48 @@ Source of truth for policy is `CLAUDE.md` at the repo root. Read it first. In pa
 - **Writable paths**: `Write(specs/**)` (both modes) and `Write(fixtures/auth.<site>.json)` (area mode only, when persisting storage state in step 3). The global `.claude/settings.json` allows `Write(fixtures/**)`; auth-state files are the single exception to "specs-only".
 - **`Write` CREATES, `Edit` UPDATES — on an existing context file, use `Edit`.** Most of this agent's actual job is *modification* of a file a human has since edited: bumping `last_verified:` (hot step 4), keeping the prior date and adding `draft: true` (hot step 4 / area step 7), preserving `volatility:` (area step 7), adding a reciprocal pointer to a **partner** area file (area step 8). A `Write` re-authors the whole file from what you happen to be holding, so every field you were never told to carry over is silently dropped — in `app.context.md` that means human-owned blocks like `staleness_tiers:`, `business_sources:`, `naming:`, `test_support:` and `oracle_vocab_ref:`, none of which appear in your Process steps. Losing `staleness_tiers:` is not cosmetic: it is the threshold reviewer Check 7 and the planner read to decide whether *any* area file is stale, so one clobber disables the freshness gate repo-wide. Reserve `Write` for a file that does not exist yet (the from-scratch draft paths in hot step 3 / area step 7); for anything already on disk, `Read` it and `Edit` the specific fields you verified. Same rule the healer follows (`agents/healer.md` §"Writable paths").
 
-## Mode selection
+## Mode selection — a guard, not a default
 
-The caller passes one of (no mode given → default `mode=hot`, per below):
+Two modes, and **one agent runs both on purpose**: they are two stages of one job (area mode
+READS the `sites[]` table hot mode maintains), they share every discipline above — the shell
+prod-guard, the isolated `-s=` session, the `.env`-in-one-invocation load, `Write` CREATES /
+`Edit` UPDATES, never cache selectors — and neither grades the other, so splitting them buys no
+author-independence (the reason `generator`/`verifier` ARE two agents) and would duplicate that
+shared block into a second file for drift to open up in.
+
 - `mode=hot` — refresh `specs/_context/app.context.md` (the hot tier).
 - `mode=area site=<id> area=<name>` — discover one product area on one site; output is `specs/_context/<site>/<area>.md`.
 
-If no mode is given, default to `mode=hot`.
+Resolve the mode as the FIRST thing you do — before the prod-guard, before any `goto`, before any
+write. Three arms, and two of them STOP:
+
+1. **No `mode=`, no `site=`, no `area=`** → `mode=hot`. A legitimate default (`/qa:explore` on a
+   fresh project is meant to build the hot tier), but **announce it**: open your output with
+   `mode=hot (defaulted — no mode given)`. An unannounced default is what makes arm 2 invisible.
+2. **`site=` or `area=` present but no `mode=area`** → **STOP.** This is an area invocation whose
+   mode was dropped in transcription — do NOT fall through to hot. Echo the corrected command
+   (`/qa:explore mode=area site=<id> area=<name>`) and write nothing.
+3. **`mode=area` with `site=` or `area=` missing**, including a positional form like
+   `mode=area <area>` → **STOP.** Do NOT infer the missing key from the hot tier, from a caller
+   hint, or from the most recently touched spec. Name the missing key and stop.
+
+**Why those are STOPs and not best-effort guesses.** Both wrong arms end in a *dated,
+authoritative-looking file*, which is this agent's one unrecoverable failure:
+- Falling through to hot stamps `last_verified: <today>` on `app.context.md` (hot step 4) for a
+  verification nobody requested and nobody read. Reviewer Check 7 and doctor Check 5b read that
+  date as "verified accurate as of" — the inaccurate-but-fresh failure hot step 4, area step 7 and
+  §"Accuracy discipline" each guard against, reached through the front door instead.
+- Guessing the area writes `specs/_context/<site>/<guessed>.md` dated today. `agents/planner.md`
+  step 3 and `/qa:intake` both hard-gate on that file's *existence and freshness*, so a guessed
+  area file satisfies the gate for an area nobody explored.
+Either way the caller's actual request — refresh THIS area — is silently never performed, while
+the freshness gate now reports it done. Stopping costs one round-trip; neither outcome is
+detectable afterwards.
 
 ## Inputs
 - The hot-tier file `specs/_context/app.context.md` (read first to discover `sites:` and pick the right `base_url_env`).
 - Credentials referenced by the site's `creds:` block (env-only). Never log passwords.
-- Optional caller hint on which area to bias toward.
+- Optional caller hint on which area to bias toward — a hint only, and never a substitute for a missing `area=`: in area mode an absent key is §"Mode selection" arm 3 (STOP), not something to fill in from the hint.
 
 ## Process — hot mode
 
@@ -90,6 +124,6 @@ Size target: keep the area file tight — ~150 lines is a tunable default, not a
 - Never re-run a full-app crawl. The eager-crawl pattern is deprecated in this template.
 
 ## Budget / escalation
-- **Turn budget: 30 turns** for either mode (was 40 in the old single-mode design; the narrower scope shrinks the budget). Reserve the tail for writing: at ~turn 25, stop exploring and spend the remaining budget writing what you have, with an incompleteness note at the top.
+- **Turn budget: 30 turns** — ONE budget for both modes, sized on the larger. **Area mode's floor**, on a five-route area: prod-guard (1) + read `app.context.md` (1) + resolve `BASE_URL` (1) + authenticate and persist storage state (2) + the depth-2 BFS walk at the assert-then-snapshot pair §"Accuracy discipline" (a) mandates, 2 × 5 routes (10) + the grey-box `data-testid` sweep (1) + `close -s=` (1) + read `_templates/area.md` (1) + write the area file (1) + the step-8 reciprocal pointer, read + edit (2) = **21**. **Hot mode's floor** is ~9 for two sites (prod-guard, read, then resolve+goto+snapshot per site, close, the `.env.example` diff, one edit), so it never binds — which is why one number is enough for both. The 9 turns of slack go to the one quantity that genuinely varies, the BFS breadth. Reserve the tail for writing: at ~turn 25, stop exploring and spend the remaining budget writing what you have, with an incompleteness note at the top.
 - If the staging app is unreachable or login is broken, do NOT fabricate vocab. Write a one-paragraph file describing the blocker and stop.
 - You cannot invoke other subagents. If the work exceeds your scope, summarize what's missing in the file header and return to the caller.

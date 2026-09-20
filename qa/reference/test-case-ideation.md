@@ -39,7 +39,7 @@ the reviewer alike). This is the open risk the intake→ideate front-end (`/qa:i
 **Two new commands close the gap, before `/qa:new-spec`:**
 
 ```
-/qa:explore  area=checkout   → app-observed area context              (exists)
+/qa:explore  mode=area site=app area=checkout  → app-observed area context  (exists)
 /qa:intake   checkout/coupon → the "test basis" (understanding)       NEW
    ⟵ human reviews the basis (GIGO checkpoint)
 /qa:ideate   checkout/coupon → candidate-case CHECKLIST               NEW

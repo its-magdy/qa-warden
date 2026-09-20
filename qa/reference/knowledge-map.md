@@ -15,7 +15,7 @@ context; THIS file is read on demand for catalog / workflow-order / "what does X
 /qa:init                         once per project — stamp runtime substrate, then edit .env
    ↓
 /qa:explore                      hot tier  → specs/_context/app.context.md   (sites, auth, env, naming)
-/qa:explore mode=area …          area tier → specs/_context/<site>/<area>.md  (REQUIRED before intake — intake hard-stops without it; new-spec/planner also STOPs on a missing/stale area file and has /qa:new-spec run /qa:explore mode=area then re-invoke — the planner never drafts from the hot tier alone)
+/qa:explore mode=area …          area tier → specs/_context/<site>/<area>.md  (REQUIRED before intake — intake hard-stops without it; new-spec/planner also STOPs on a missing/stale area file and has /qa:new-spec run /qa:explore mode=area … then re-invoke — the planner never drafts from the hot tier alone)
    ↓   ── "what to test" sub-chain (optional but intended) ──
 /qa:intake  <area/feature>       interview → <feature>.basis.md   (pins the ORACLE — what "correct" means; needs the area file above)
                                  ↳ if app.context.md declares business_sources:, CONSULTS them to ground each rule + stamp provenance, and runs a multi-channel COUPLING SWEEP; asks you on any source-vs-app conflict

@@ -103,7 +103,7 @@ if [ -n "$MANIFESTS" ]; then
   TESTED=$(printf '%s\n' "$MANIFESTS" | tr '\n' '\0' | xargs -0 jq -r '.routes[]?' 2>/dev/null | sort -u)
   echo "-- declared in an area file but touched by NO compiled test (planned, untested):"
   comm -23 <(printf '%s\n' "$DECL") <(printf '%s\n' "$TESTED") | sed '/^$/d; s/^/  ⚠ /'   # drop the blank line printf emits for an empty DECL/TESTED so it never prints a phantom "  ⚠ " gap (m-12)
-  echo "-- touched by tests but declared in NO area file (unplanned/undocumented — refresh /qa:explore mode=area, or an API/login route area files legitimately don't list — review prompt, not defect list):"
+  echo "-- touched by tests but declared in NO area file (unplanned/undocumented — refresh /qa:explore mode=area site=<id> area=<name>, or an API/login route area files legitimately don't list — review prompt, not defect list):"
   comm -13 <(printf '%s\n' "$DECL") <(printf '%s\n' "$TESTED") | sed '/^$/d; s/^/  ⚠ /'   # drop the blank line printf emits for an empty DECL/TESTED (m-12)
 else echo "— (no route manifests; dim-0 unavailable)"; fi
 

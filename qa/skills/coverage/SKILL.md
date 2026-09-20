@@ -67,7 +67,7 @@ shape below. Do not paraphrase, recompute, or estimate any number it emitted.
 **Per-dimension reporting:**
 0. **Route plan vs footprint** — both directions are WARN-only review prompts, not defect
    lists: a declared-but-untested route is *planned, untested*; a tested-but-undeclared
-   route means either the area file needs an `/qa:explore mode=area` refresh or it is an
+   route means either the area file needs an `/qa:explore mode=area site=<id> area=<name>` refresh or it is an
    API/login route area files legitimately don't list.
 1. **Requirement coverage** — features with a basis but **no spec** (uncovered — name them,
    lead with these); features with a spec but **fewer assertions than 🔵 rules**

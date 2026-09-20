@@ -172,13 +172,28 @@ does not fix anything — each finding names its repair:
   for a response-fabricating `fault:` is a paired `network_response_status` oracle — chosen so the
   feature needs no 17th key, which makes the rule depend on a key it does not own. Retire that key
   and every `fault:` spec becomes unauthorable while four files still demand the pairing.
+- **Check 9j (/qa:explore invocation shape):** `exploration` dispatches two modes off one
+  argument string, and its §"Mode selection" guard STOPs on an under-specified invocation rather
+  than falling through to a silent `mode=hot`. The guard's value depends on the commands *this
+  repo* prints being well-formed, and five were not when the check was written. **Arms 1 and 2
+  key on the argument SYMBOLS** (`site=`, `area=`), never on wording, and treat a trailing
+  `…` as the explicit opt-out for prose — so a doc may elide, it just may not look like a
+  runnable command that isn't one. **Arm 3 keys on the STOP token** inside the agent's own
+  §"Mode selection", because that guard is ordinary defensive prose and so an ordinary trim
+  candidate. Both failure shapes are silent and identical in effect: a `mode=area` missing a key
+  costs a round-trip, and a dropped `mode=` runs HOT — stamping `last_verified: today` on
+  `app.context.md` for a verification nobody requested, after which Check 7 and Check 5b both
+  read the area the caller asked about as freshly handled while nothing was explored. Fix the
+  invocation (or add the `…`); never widen the agent's default to make the check pass.
 - **Check 2 / 9b (vocab drift):** re-sync the 16-key mirror with CLAUDE.md (and, for
   9b, upgrade/re-stamp the plugin agents) in the same commit as any vocab change.
 - **Check 3 (vacuous smoke):** tag at least the P1 happy path `@smoke`, then
   `/qa:run mode=smoke`.
 - **Check 4 (orphaned sentinels):** close the loop per the sentinel→action table in
   `${CLAUDE_PLUGIN_ROOT}/reference/sentinel-actions.md` — re-seed / re-explore / migrate as the sentinel names.
-- **Check 5/5b (stale or draft context):** `/qa:explore mode=area <area>` to refresh,
+- **Check 5/5b (stale or draft context):** `/qa:explore mode=area site=<id> area=<name>` to refresh
+  (both keys — exploration STOPs on either one missing rather than guessing; Check 5b prints the
+  exact command for each stale file),
   then clear `draft:` / bump `last_verified:`.
 - **Check 6 (undeclared env):** declare the variable in `.env.example` (commented is
   fine for optional-with-fallback vars).
