@@ -155,6 +155,23 @@ does not fix anything — each finding names its repair:
   green write except `QA_HOOKS_OFF=1`. Arms 2 and 3 key on symbols — an agent filename, a check
   number — never on wording, so a reword stays green and a re-parenting does not. Fix by
   restoring the wiring, never by deleting the hook to make the check pass.
+- **Check 9i (the situation-step chain — `fault:` / `clock:`):** the two structured `steps:`
+  forms that make the SFDIPOT Interfaces/Operations and Time lenses generatable. They are
+  deliberately **not** oracle keys, so `scripts/oracle-keys.txt` does not carry them and nothing
+  else polices them — the whole contract is prose across four files. **Arm 1, chain
+  completeness:** the planner AUTHORS the step, the generator COMPILES it, the reviewer
+  VALIDATES it, and `templates/CLAUDE.md` is the stamped SoT the in-*project* reviewer reads
+  (it cannot read the plugin). Each link, dropped, fails in its own silent direction — a missing
+  planner mirror is the audit's own *"a capability that only lands in the generator is one the
+  planner can never ask for"*. Keyed on the step SYMBOLS, never on wording. **Arm 2, scope
+  ownership:** the healer's prohibition on *introducing* a stub or a clock call is enforced by
+  `assertion-contract.sh`, and that arm must scope to the **healer alone** — widen it to the
+  verifier and its step-8b fault injection (which *is* a `page.route`) gets denied, breaking the
+  negative control the oracle-defense layer rests on; narrow it to nobody and the healer can stub
+  a genuinely-broken backend green. **Arm 3, stranded contract** (the 9c shape): the fired-proof
+  for a response-fabricating `fault:` is a paired `network_response_status` oracle — chosen so the
+  feature needs no 17th key, which makes the rule depend on a key it does not own. Retire that key
+  and every `fault:` spec becomes unauthorable while four files still demand the pairing.
 - **Check 2 / 9b (vocab drift):** re-sync the 16-key mirror with CLAUDE.md (and, for
   9b, upgrade/re-stamp the plugin agents) in the same commit as any vocab change.
 - **Check 3 (vacuous smoke):** tag at least the P1 happy path `@smoke`, then

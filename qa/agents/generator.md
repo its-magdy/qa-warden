@@ -144,6 +144,89 @@ Map YAML oracle keys to Playwright assertions as follows (closed vocabulary only
 - `dialog_dismissed: { type: 'confirm'|'alert'|'prompt', accept?: bool }` → register `page.on('dialog', d => accept ? d.accept() : d.dismiss())` BEFORE the action, then assert post-dialog state.
 - `a11y_violations_below: { max_critical: 0, max_serious: 0 }` → invoke the `axe-a11y` skill (`@axe-core/playwright`) and assert violation counts by impact. **Scan the full page by default** (`new AxeBuilder({ page }).analyze()`); use `.include(region)` ONLY when the spec's oracle is explicitly region-scoped — narrowing to `main`/a section silently passes over violations in the header/nav (the most-reused chrome), and `.exclude()` only unfixable third-party widgets.
 
+## Situation steps -> `page.route` / `page.clock`
+
+Two `steps:` entries are structured maps, not prose (alongside `include:`). They set up the
+situation; they never assert it. Compile them as follows — every API form below was checked against
+the pinned **Playwright 1.62.1** type declarations, not a blog.
+
+- `fault: { url, status?, body?, json?, abort?, times? }` -> one `page.route(...)` registration.
+  **Register it BEFORE the action that triggers the request** — and before the `page.goto` if the
+  request fires during load; a route installed after the request is in flight never sees it. Emit the
+  registration inside the `test.step(...)` that the spec's `fault:` step sits in, and always through a
+  **counted handler**, never a bare arrow:
+
+  ```ts
+  let payFaults = 0;                                  // one counter per fault step
+  await page.route('**/api/payments/**', async (route) => {
+    payFaults++;
+    await route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"upstream"}' });
+  });                                                  // add { times: n } only when `times:` is declared
+  ```
+
+  `json:` compiles to `route.fulfill({ json })` (Playwright serialises and sets the content type);
+  `body:` compiles to `body` + an explicit `contentType`. `abort: "<errorCode>"` compiles to
+  `route.abort('<errorCode>')` and is mutually exclusive with `status`/`body`/`json` — if a spec
+  declares both, STOP and return it to the planner rather than picking one.
+
+  **Fired-proof (mandatory — this is the whole reason the counter exists).** A route glob that
+  matches nothing is silent: the real server answers and every oracle passes for the wrong reason.
+  - **Response-fabricating fault** (`status`/`body`/`json`): the spec MUST carry a paired
+    `network_response_status: { url, status }` oracle, which you compile as usual. That assertion IS
+    the fired-proof — a missed stub yields the real status and the test goes red. If the spec has a
+    response `fault:` and **no** such paired oracle, that is a planner defect: stop and hand it back
+    (reviewer Check 2 would FAIL it as an orphan step anyway).
+  - **`abort:` fault**: there is no response to assert on, so emit the counter assertion yourself,
+    immediately after the triggering action and before the outcome assertions:
+    ```ts
+    expect(payFaults, 'fault step never fired — the route glob matched no request').toBeGreaterThan(0);
+    ```
+    This is a **barrier** expect under Hard rule 3's R-26 carve-out (it proves the precondition the
+    outcome assertions depend on), so it needs no backing `oracle:` item and is not an orphan.
+
+  Emit `await page.unrouteAll({ behavior: 'ignoreErrors' })` at the end of a scenario only when the
+  stub must not outlive it inside a shared page; a per-test `page` fixture is torn down anyway, so do
+  not add it by reflex.
+
+- `clock: { ... }` -> one `page.clock` call. Exactly one sub-key per step:
+
+  | sub-key | compiles to | fires timers? |
+  |---|---|---|
+  | `install_at` | `await page.clock.install({ time: new Date('<iso>') })` | installs fake timers |
+  | `advance` | `await page.clock.runFor('<ticks>')` | **every** timer it passes through |
+  | `advance_idle` | `await page.clock.fastForward('<ticks>')` | each due timer **at most once** |
+  | `pause_at` | `await page.clock.pauseAt(new Date('<iso>'))` | jumps, then pauses |
+  | `fixed_time` | `await page.clock.setFixedTime(new Date('<iso>'))` | none — `Date.now()` is pinned, timers keep running |
+  | `system_time` | `await page.clock.setSystemTime(new Date('<iso>'))` | none — a time *shift* (DST, timezone) |
+
+  **`install_at` must be emitted before the first navigation** — Playwright's own guidance is to
+  install the clock before `goto`, at a time slightly before the intended test time, so timers run
+  normally during page load; installed afterwards the page can hang. If the spec's first navigating
+  step is an `include: login`, the clock line goes above it.
+
+  **`advance` vs `advance_idle` is load-bearing, not a synonym.** A polling/auto-refresh UI
+  (`setInterval`) only updates if every intervening tick fires -> `advance`. A session-expiry or
+  token-TTL case is the closed-laptop-lid shape, where firing each due timer once is the realistic
+  behaviour -> `advance_idle`. Choosing the wrong one means the behaviour under test never triggers:
+  the oracle then fails to fire and you ship a mystery red, or worse, the scenario passes because
+  nothing changed. Compile what the spec declared; do not substitute.
+
+**Neither form belongs in a page object.** `page-objects/**` models the application's surface, not
+the network or the wall clock, and a stub buried in a shared POM silently applies to every spec that
+imports it. Reviewer Check 11 FAILs a `page.route`/`page.clock` under `page-objects/**`.
+
+**`routeFromHAR` is banned** — a suite replayed from a recorded HAR stays green through every
+server-side regression. It is a reviewer Check 11 FAIL and a `PreToolUse` hook deny; do not emit it,
+and do not emit `recordHar` either (nothing in this toolkit reads a HAR, and a recorded one carries
+`Authorization`/`Cookie` headers).
+
+**Never introduce either form on your own initiative.** A `page.route`/`page.clock` call in a shipped
+test must trace to a declared `fault:`/`clock:` step in the paired spec. Reaching for a stub because
+a real dependency is flaky, or for the clock because something is slow, converts an environment
+problem into a permanently fabricated test — escalate instead. (The one sanctioned exception is the
+**verifier's** step-8b fault-injection probe, which is in-test, temporary, and reverted before the
+spec ships.)
+
 **Worker-scoped data seeding (hybrid auth+data rule):** if the YAML `data:` block contains anything beyond credentials (orders, carts, products, organizations), the generator MUST call the `test-data-seed` skill to emit a worker-scoped fixture, NOT inline literals. `storageState` is for auth; mutable data goes through API seeding per worker with `testInfo.parallelIndex` for uniqueness.
 
 **Parallel-safety of state-mutating specs (the trigger is MUTATION, not just a declared `data:` entity).** The shipped `playwright.config.ts` runs `fullyParallel: true` with `workers > 1` in CI. Any spec that **creates, deletes, or updates server-side state** — via the UI *or* a test-support API — is a mutating spec, **even if its `data:` block is credential-only** (e.g. a login + "add task" + assert count flow that seeds via `POST /api/test/reset`). Mutating specs MUST isolate their state per worker; otherwise sibling workers race (one worker's reset wipes rows another just created, and `toHaveCount(n)` sees a racing count). Enforce ONE of:
@@ -234,6 +317,7 @@ Wire each page object into `fixtures/test.ts` (a fixture per object) so specs ne
 4. Read `specs/_context/<site>/<area>.md` for vocabulary and cross-site contracts.
 4b. Read the feature's `.basis.md` if present (batch with the step-4 Read) for `test_data.mutates_server_state` — it drives YOUR parallel-safety decision at step 6 (§"Parallel-safety of state-mutating specs": worker-scoped isolation vs. the `mode:'serial'` hatch, never a bare `.parallel`). The `verifier` reads the same key for its own twin-form decision; read it anywhere else and the two of you judge different inputs. Skip silently if absent — absent is NOT `false`; take the safe arm.
 5. For each route referenced in `steps:`, run `npx playwright-cli -s=gen-<feature> goto "$BASE_URL<route>" && npx playwright-cli -s=gen-<feature> snapshot` (chained in ONE invocation — `snapshot` takes an optional selector, not a URL; the env-loaded `$BASE_URL` must also live in this same call) against the resolved site's BASE_URL and extract role+name locators from the live AX tree. Do NOT rely on locators recorded in any doc. Sessions persist until closed (daemon-backed) — close after the last route: `npx playwright-cli close -s=gen-<feature>`, so the batch doesn't leak orphan browsers.
+   - **A `fault:` step's `url:` is a REQUEST pattern, not a navigable route — do not sweep it.** It is an API endpoint glob (`**/api/payments/**`); `goto`-ing it yields JSON or a 404 and wastes a turn. Sweep the pages the prose steps name; the fault URL needs no snapshot. It DOES belong in your step-8 handoff route list, though — the spec genuinely depends on that endpoint, so `/qa:impact route=/api/payments` must be able to find it (the F-17 shape).
    - **Reuse pass:** before writing, check `page-objects/<area>/` for a class/method that already covers each flow, AND scan sibling spec files for the same flow inlined. Call an existing page object if present. For a reusable flow (login, checkout, shared widget) or one you find inlined elsewhere, CREATE a page object from the live-validated locators, wire it into `fixtures/test.ts`, and update the other call sites to use it.
 6. Write `tests/<path>.spec.ts` in one pass. Imports (including any page objects via `fixtures/test.ts`), `BASE_URL` const(s), `test.use({ storageState })`, `test.describe`, per-scenario `test(...)` carrying the structured `{ tag: [...] }` argument that surfaces the spec's `tags:` (`@smoke`/`@regression`/…) **and** `@site:<id>` (see §"Template resolution → Spec tagging"). Specs call page-object methods, not raw inlined selectors, for any shared flow.
    - **Pin every shared oracle value in `tests/<area>/<feature>.oracle.ts`, not as a literal in the spec file (F-33).** Whenever the oracle fixes a constant the test asserts — an expected total, an exact `error_shown` string, a refusal message asserted identically across paths — `export` it from that plain NON-spec module and import it into the `.spec.ts`. The verifier's twins import the same constant, so an oracle-value change is a one-file edit instead of a two-file edit whose naive half leaves a red twin. Do **not** let the twin import the parent `.spec.ts` to get it (A-04: importing a spec file re-registers every parent `test(...)` into the importer — duplicate ghost tests and doubled module-scope side effects); the shared module exists precisely so neither file imports the other. Name it in your step-8 handoff.

@@ -32,7 +32,23 @@ timing of four lint FAILs and the enforcement of one contract.
 | Hook | Fires for | Denies |
 |---|---|---|
 | `assertion-contract.sh` | `agent_type` = `healer` or `verifier`, editing `tests/**/*.spec.ts` | An edit that **removes or rewrites** an assertion that existed before it |
-| `spec-lint.sh` | any write to `tests/**/*.ts` or `page-objects/**/*.ts` | reviewer Check 1 (assert on a literal), Check 5 (`waitForTimeout` / `networkidle`), Check 9 (raw CSS/XPath), Check 11 (`.only`) |
+| `assertion-contract.sh` | `agent_type` = `healer` **only** | An edit that **introduces** a `page.route`/`context.route` network stub or a `page.clock.*` call where the before-text had none |
+| `spec-lint.sh` | any write to `tests/**/*.ts` or `page-objects/**/*.ts` | reviewer Check 1 (assert on a literal), Check 5 (`waitForTimeout` / `networkidle`), Check 9 (raw CSS/XPath), Check 11 (`.only`, `routeFromHAR`) |
+
+The healer stub/clock arm is the newest and is a **different shape** from the others: it guards
+against an addition, not a removal, because both constructs turn a red test green *without touching
+a single assertion* — so the subset test above cannot see either. A backend that is genuinely down
+is the most valuable signal the nightly produces, and `page.clock.runFor(2000)` is a sleep the
+`waitForTimeout` ban does not lexically catch. It is **scoped to the healer alone, deliberately**:
+the verifier's step-8b fault injection *is* a `page.route`, so widening this arm by one agent would
+deny the negative control the whole oracle-defense layer rests on. It compares **counts**, so
+healing a locator inside a scenario that legitimately declares a `fault:` step stays allowed.
+
+`routeFromHAR` is the one construct in the network family that is banned outright rather than
+governed: a suite served from a recorded HAR asserts the frontend against a frozen backend and
+stays green through every server-side regression. It is purely lexical and has no legitimate use
+here, so it clears the same bar as the other four. **`page.route` itself is NOT hooked for anyone
+but the healer** — a declared `fault:` step compiles to one.
 
 Both are **subset** tests, never equality: adding an assertion passes, removing one does not.
 Both scan only the text being written — never the rest of the file — so a pre-existing
@@ -51,6 +67,9 @@ one, and saying so precisely is the point of this section.
 | 11, credential regex | `reviewer.md` documents this one against itself: *"a deterministic CI running this regex false-FAILs a spec the LLM reviewer would (correctly) reason past."* It carries three carve-outs (presence sentinels, `WRONG_`/`INVALID_` negative fixtures, comment lines) and its own note that the regex is "the floor, not the whole gate" — positional secrets need judgment. Denying on it would block a correct wrong-password test every time, which trains bypass. |
 | 11, inline base URLs | `toHaveAttribute('href', 'https://…')` on an external link is a legitimate oracle, not a navigation target. Same false-FAIL shape. |
 | 7, 8, 12, 13, 15 | Repository-wide reads (context freshness, `sites[]` table, consumer counts, diff direction). Not available at write time. |
+| 2, `fault:` fired-proof | Needs the paired spec: the question is whether a `fault:` step has a `network_response_status` oracle backing it. Lexically invisible. |
+| 5, undeclared `page.clock` | Same reason, and it is the arm that matters most for the clock: the *call* is legal, and only the paired spec's `steps:` says whether it was declared. The hook can only catch the healer **introducing** one (which it does); a generator emitting an undeclared clock call is the reviewer's. |
+| 11, `page.route`/`page.clock` in `page-objects/**` | Decidable from the text alone, and a candidate — left out to keep this layer small and its deny surface predictable. A POM stub is rare, and the reviewer FAILs it. Revisit if it ever shows up in practice. |
 
 ## Safety properties
 
@@ -99,3 +118,8 @@ jq -nc '{tool_name:"Edit",agent_type:"healer",cwd:"'$PWD'",
 
 Empty output = allowed. Run the same case with the edit inverted (nothing removed) and
 confirm it comes back empty — a gate that never allows is as broken as one that never denies.
+
+For the healer stub/clock arm specifically, the ALLOW cases are the ones worth keeping in a
+regression table, because they are what a too-eager pattern would break: the **verifier** adding a
+`page.route` probe, the healer re-pointing a locator inside a scenario that already stubs, and a
+healer comment that merely *names* `page.route(`. All three must come back empty.

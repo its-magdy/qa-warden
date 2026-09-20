@@ -1129,6 +1129,76 @@ if [ -n "$TMPL" ] && [ -d "$TMPL/../hooks" ]; then
   fi
 fi
 
+# 9i. The SITUATION-STEP chain (`fault:` / `clock:`) — the two step forms that make the SFDIPOT
+#     Interfaces/Operations and Time lenses generatable. Unlike an oracle key, these are not in
+#     scripts/oracle-keys.txt and are policed by nothing else: the whole contract is prose spread
+#     across four files, and each one, dropped, fails SILENTLY in a different direction.
+#     Arm 1 (CHAIN COMPLETENESS, symbol-keyed). planner.md authors the step, generator.md compiles
+#       it, reviewer.md validates it, templates/CLAUDE.md is the stamped SoT the in-PROJECT reviewer
+#       reads (it cannot read the plugin). Drop it from the planner and the capability exists but
+#       nothing can ask for it — §9's own "a capability that only lands in the generator is one the
+#       planner can never ask for". Drop it from the generator and the planner authors a step that
+#       compiles to nothing. Drop it from CLAUDE.md and a scaffolded project's reviewer has no
+#       definition to validate against. Keyed on the literal step SYMBOLS, never on wording, so a
+#       reword stays green and a deletion does not.
+#     Arm 2 (SCOPE OWNERSHIP, the 9g arm-3 / 9h arm-2 shape). The healer's prohibition on
+#       INTRODUCING a stub or a clock call is enforced by assertion-contract.sh, and that arm must
+#       be scoped to the HEALER ALONE. Both directions are real failures: widen it to the verifier
+#       and its step-8b fault injection — which IS a page.route — gets denied, breaking the negative
+#       control the oracle-defense layer rests on; narrow it to nobody and the healer can stub a
+#       genuinely-broken backend green, converting a real outage into a test that passes forever.
+#     Arm 3 (STRANDED CONTRACT, the 9c shape). The fired-proof for a response-fabricating `fault:`
+#       is a paired `network_response_status` oracle — chosen precisely so the feature needs NO 17th
+#       key. That makes the rule depend on a key it does not own: retire `network_response_status`
+#       from the closed vocabulary and every `fault:` spec becomes unauthorable, while the four
+#       prose files still demand the pairing. Cross-checks the named key against the manifest.
+if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
+  # Arm 1: both step symbols must be present in all four links of the chain.
+  sit_chain="$TMPL/CLAUDE.md:the stamped SoT|a scaffolded project's reviewer has no definition to validate against — it cannot read the plugin
+$TMPL/../agents/planner.md:the AUTHOR|the capability exists but no spec can ask for it
+$TMPL/../agents/generator.md:the COMPILER|a declared step compiles to nothing
+$TMPL/../agents/reviewer.md:the VALIDATOR|an unproven stub ships green"
+  while IFS=: read -r sf sdesc; do
+    srole=${sdesc%%|*}; scost=${sdesc#*|}
+    [ -n "$sf" ] || continue
+    if [ ! -f "$sf" ]; then
+      echo "⚠️  situation-step mirror not found at $sf — the fault:/clock: chain is UNVERIFIED"; warn=$((warn+1)); continue
+    fi
+    for sym in 'fault:' 'clock:'; do
+      grep -qE "(^|[^a-zA-Z_])$sym" "$sf" \
+        || { echo "❌ ${sf##*/} never mentions \`$sym\` — that file is $srole in the situation-step chain (CLAUDE.md §\"Situation steps\"), so with the link dropped, $scost. Nothing else in this toolkit reads that step form, so the loss is silent."; fail=$((fail+1)); }
+    done
+  done <<EOF
+$sit_chain
+EOF
+
+  # Arm 2: the healer-only stub/clock arm of the assertion hook must still scope to the healer,
+  # and must NOT have been widened to the verifier.
+  ach="$TMPL/../hooks/assertion-contract.sh"
+  if [ -f "$ach" ]; then
+    # Anchor on the block's own section header, NOT on the first `if [ "$agent" = … ]` in the
+    # file — an earlier one belongs to the removed-assertion branch and reads "verifier", which
+    # would make this arm FAIL on a correct hook. Losing the anchor degrades to the WARN below.
+    sarm=$(awk '/^# --- healer-only/{f=1} f && /^if \[ "\$agent" = "[a-z]+" \]; then/{print; exit}' "$ach" \
+             | sed -e 's/.*= "//' -e 's/".*//')
+    if [ -z "$sarm" ]; then
+      echo "⚠️  cannot read the stub/clock arm's agent scope out of hooks/assertion-contract.sh — Check 9i arm 2 is blind; re-anchor it if the script was restructured"; warn=$((warn+1))
+    elif [ "$sarm" != "healer" ]; then
+      echo "❌ the stub/clock arm in hooks/assertion-contract.sh scopes to '$sarm', not 'healer' — if that is the verifier, its step-8b fault injection (which IS a page.route) is now denied and the negative control the oracle-defense layer rests on cannot run"; fail=$((fail+1))
+    elif ! grep -q 'page\\.clock' "$ach"; then
+      echo "❌ hooks/assertion-contract.sh has a healer-scoped arm but no page.clock probe — the healer can introduce a fake-clock settle, which is a sleep the waitForTimeout ban does not lexically catch"; fail=$((fail+1))
+    fi
+  fi
+
+  # Arm 3: the fired-proof names an oracle key it does not own — it must still be in the manifest.
+  if [ -n "$KEYS" ] && [ -f "$TMPL/CLAUDE.md" ]; then
+    if grep -q 'network_response_status' "$TMPL/CLAUDE.md"; then
+      printf '%s\n' "$KEYS" | grep -qx 'network_response_status' \
+        || { echo "❌ templates/CLAUDE.md makes \`network_response_status\` the fired-proof for a response-fabricating \`fault:\` step, but that key is no longer in scripts/oracle-keys.txt — every fault: spec is now unauthorable while four files still demand the pairing (the 9c stranded-rule shape)"; fail=$((fail+1)); }
+    fi
+  fi
+fi
+
 # 10. Site-id ↔ config-project routing (F-51: a site declared in app.context.md with no matching
 #     playwright.config project — specs target a phantom site and silently run zero tests; renumbered
 #     from the old "F-15" tag, which collided with the last-run-staleness F15 in check 1 above — the

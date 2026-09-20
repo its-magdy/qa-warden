@@ -84,10 +84,13 @@ data:
   user:    { email: "...", password_env: "QA_USER_PASSWORD" }   # CREDENTIAL form: a pre-seeded login account. Exactly {email|username, password_env} — carved out of reviewer Check 10, no factory needed.
   order:   { factory: "order", overrides: { units: 1 } }        # FACTORY form: REQUIRED for any entity you INSTANTIATE with non-credential fields. Inline literals (`order: { units: 1, currency: "USD" }`) where fixtures/factories/order.ts exists = reviewer Check 10 FAIL. `overrides:` pins only what the oracle asserts; the factory generates the rest, and the generator creates the schema+factory on demand.
   expected_total_range: [49.00, 50.50]
-steps:
+steps:                       # prose lines, plus THREE structured forms: `include:`, `fault:`, `clock:`
   - include: login
   - "Navigate to {{base_url}}/cart"
   - "Apply coupon QA20"
+  # `fault:` (stub a network dependency) and `clock:` (control time) are SITUATION steps —
+  # the Interfaces/Operations and Time lens forms. Shapes + the fired-proof rule that keeps a
+  # silently-non-firing stub from passing green are in §"Situation steps" below.
 oracle:                      # closed vocabulary only
   text_visible: "Coupon applied"
   # locator is SEMANTIC only (getByTestId/getByRole/getByLabel) — never raw CSS
@@ -148,6 +151,58 @@ Closed **oracle vocabulary** (THE canonical list — the single source of truth 
 
 **Two assertions with the same key → write `oracle:` as a LIST of single-key maps, never a bare mapping.** A YAML mapping silently collapses duplicate keys, so `oracle: { element_state: {…aria-pressed=true}, element_state: {…aria-pressed=false} }` keeps only the last — a real assertion is dropped and the spec reads as covered (a false-pass, the exact failure this vocab guards against). When a scenario needs the same key twice (two `element_state`, two `text_visible`, …), emit `oracle:` as a sequence of one-key maps: `oracle:\n  - element_state: {…=true}\n  - element_state: {…=false}`. The reviewer FAILs a bare-mapping `oracle:` that carries a duplicate key.
 
+### Situation steps — `fault:` (network) and `clock:` (time)
+
+Two `steps:` entries are STRUCTURED maps rather than prose, alongside `include:`. They set up the
+*situation* the oracle is then asserted against — they are **never** assertions, and neither adds an
+oracle key (the fired-proof rule below is why none is needed). They exist so the SFDIPOT
+**Interfaces/Operations** and **Time** lenses are generatable at all: before them `/qa:ideate` could
+enumerate *"the payments API returns 503"* or *"the session expires after 30 minutes"* and the
+planner had no way to author either.
+
+Argument shapes (verified against the pinned Playwright 1.62.1 type declarations). **The key column
+deliberately carries the trailing colon** (`` `fault:` ``, not `` `clock` ``) — these are `steps:`
+keys, not oracle keys, and the colon is also what keeps them out of `/qa:doctor` Check 9bb's
+oracle-arg-shape extractor, which matches a bare `` `key` `` in column 1 and would otherwise count
+them as a 17th and 18th member of the closed vocabulary.
+
+| step key | argument shape |
+|---|---|
+| `fault:` | `{ url, status?, body?, json?, abort?, times? }` — `url` is a glob (`**/api/pay/**`) or `/regex/` matched against the request URL. Supply EITHER a fabricated response (`status` and/or `body`/`json`) OR `abort: "<errorCode>"` (a transport failure: `connectionfailed`, `connectionreset`, `internetdisconnected`, `namenotresolved`, `timedout`, `failed`, …) — never both. `times: n` retires the stub after `n` matching requests, which is how a *retry* case is expressed (fail once, let the real server answer the retry). |
+| `clock:` | `{ install_at?, advance?, advance_idle?, pause_at?, fixed_time?, system_time? }` — **exactly one per step**, so a scenario that installs then advances writes two `clock:` steps. `install_at:` starts fake time at an ISO instant and **MUST precede the first navigation** (Playwright's own guidance: install before `goto`, at a time slightly before the intended test time, or the page can hang during load). `advance:` fires every timer it passes through; `advance_idle:` jumps and fires each due timer *at most once* (the "closed the laptop lid" case). Durations are milliseconds or `"SS"` / `"MM:SS"` / `"HH:MM:SS"`. |
+
+**The fired-proof rule — a stub that does not fire is the false-green this feature risks.** A
+`fault:` whose `url` matches nothing is *silent*: the real server answers, the app behaves normally,
+and every oracle in the scenario passes for the wrong reason. So a `fault:` that fabricates a
+**response** MUST be paired with a `network_response_status: { url, status }` oracle item naming the
+same URL and the injected status. That key is already one of the 16 — **no new vocabulary** — and it
+is discriminating by construction: if the stub misses, the real response arrives with a different
+status and the test goes **RED**, not green. An `abort:` fault produces no response at all and cannot
+be proven that way, so the generator compiles a handler hit-count plus a barrier `expect(...)`
+(the R-26 carve-out) instead. Reviewer **Check 2** treats a `fault:` step carrying neither
+fired-proof as an **orphan step** and FAILs it.
+
+**A scenario with a `fault:` step may not be tagged `smoke`.** The smoke lane is the nightly
+"does this feature actually work" gate; a scenario whose dependency is fabricated cannot answer that,
+and a green smoke run standing on a stub is reassurance without evidence. Author fault scenarios as
+`regression`. `clock:` carries no such restriction — fake time still exercises the real stack.
+
+**HAR replay is BANNED.** `page.routeFromHAR(...)` / `browserContext.routeFromHAR(...)` anywhere under
+`tests/**` or `page-objects/**` is a reviewer **Check 11** FAIL and a write-time hook deny. Recording
+is not the problem, replay is: a suite served from a recorded HAR asserts the frontend against a
+frozen backend, so it stays green through every server-side regression — the exact inversion of what
+the nightly replay promises. (A recorded HAR is also a credential-bearing artifact: `recordHar`
+captures `Authorization` and `Cookie` request headers, and `mode: 'minimal'` omits the HAR's own
+cookie fields but is not a redaction guarantee. Nothing in this toolkit writes one.)
+
+**Honest limit — no request-side oracle.** The closed vocab can assert what the server *answered*
+(`network_response_status`, `response_body_contains`) but not what the client *sent*: there is no key
+for "the checkout POST carried `coupon=QA20`" or "the request set an `Idempotency-Key` header".
+`network_response_status` covers the *did it call that endpoint at all* half — a status assertion on
+`**/api/orders` cannot pass unless a request to it actually fired — but the payload is out of reach.
+This is the same deliberate gap as the relational `value_equals` one above, and the same rule
+applies: **do not invent a key for it**; record it under `# Open questions` / `# waived:`.
+
 ## Assertion style (enforced by reviewer)
 
 - Locators: the **7 official Playwright `getBy*` factories** — `getByRole`, `getByText`, `getByLabel`, `getByPlaceholder`, `getByAltText`, `getByTitle`, `getByTestId` — **only**. No XPath. No CSS.
@@ -194,7 +249,7 @@ Shared UI interactions live in **page objects**, not inlined into every spec —
 - **generator** — **`model: sonnet`** (pinned) + CLI, runs **serially** in the main working tree (one spec at a time). Reads spec's `site:` field, resolves `BASE_URL` via the hot-tier `sites:` table at compile time. Runs `playwright-cli snapshot` against each touched route — does not trust cached locators. Calls existing page objects and creates/updates them for reusable or repeated flows (serial, so no cross-generator conflict). Runs the new test once and leaves it green, then **hands off to the `verifier`** — it does **not** grade its own output (no self-commit, no worktree).
 - **verifier** — **`model: opus`** (pinned — a wrong CATCHES verdict produces no red test, only a `// verified:` comment reviewer Check 2b trusts). Invoked by `/qa:gen` immediately after the generator returns green, as a **separate** subagent call. Authors the metamorphic twins, fault-injects every declared `must_fail_when:`/`fail_if:` to prove the compiled `expect` goes RED on the defect (CATCHES vs BLIND — a BLIND oracle blocks and is parked `test.fixme` with a bug file), renames scenarios whose oracle cannot prove what their name claims, keeps the confirmation `.webm`, and writes the route manifest only once all of that is clear. **It may not edit any `expect(...)`** — a mis-compiled oracle goes back to the generator, a decorative one to the planner. That prohibition is what the split buys: until it existed, the agent that wrote the assertion also graded whether the assertion works.
 - **healer** — **`model: sonnet`** (pinned; operator raises the pin to escalate) + MCP. Invoked on failure only. Reads `trace.zip`, replays interactively, patches selectors/waits, never assertion contracts. **Heals at the page-object level when the broken locator is shared** (one fix → all consumers), then re-runs every consumer. If the area's specialist context is stale, it drops the `artifacts/.healer-needs-exploration` sentinel and returns — it cannot write context files; the orchestrator runs `/qa:explore mode=area …` and re-invokes it. Files `bugs/<slug>.md` if root cause is product.
-- **reviewer** — **`model: opus`** (pinned). Checks 2b/2c/2d/2e/14 are LLM judgment, and this agent is the *sole* enforcement of the assertion contract, so its tier is not left to the session (see the plugin's `reference/DESIGN.md` — plugin-side, not stamped into this repo). Read-only. **Load-bearing (no hooks):** the only enforcement of the assertion contract. Runs checks 1, 2, 2b–2e, 3–15 (WARN set: 2e/7/12/14/15; 2c is WARN except two mechanically-decidable FAIL sub-cases — a self-referential `value_between range:[x,x]`, or an explicit "exactly one/N" intent asserted with `text_visible` only). Enforces the oracle-defense checklist + locator policy across `tests/**` and `page-objects/**` + page-object abstraction sanity (WARN) + approved-case traceability (Check 14, WARN — an approved `.cases.md` case with no scenario and no waiver) + healed-locator drift (Check 15, WARN). Blocks PRs on violation. Warns when a spec touches an area whose `<site>/<area>` context is stale (past its `volatility:`-tier threshold from `staleness_tiers:`); fails when `site:` references an id not in the hot-tier `sites:` table.
+- **reviewer** — **`model: opus`** (pinned). Checks 2b/2c/2d/2e/14 are LLM judgment, and this agent is the *sole* enforcement of the assertion contract, so its tier is not left to the session (see the plugin's `reference/DESIGN.md` — plugin-side, not stamped into this repo). Read-only. **Load-bearing:** the sole *judgment* enforcement of the assertion contract. Two `PreToolUse` hooks ship with the plugin and are a FLOOR, not a gate — they deny four lexical FAILs (Checks 1/5/9/11) at write time and stop the healer/verifier weakening an assertion; they see one tool call, never a spec, a diff or a run, and they do not fire for the generator, for a human, or when the harness omits `agent_type`. Assume nothing upstream ran. Runs checks 1, 2, 2b–2e, 3–15 (WARN set: 2e/7/12/14/15; 2c is WARN except two mechanically-decidable FAIL sub-cases — a self-referential `value_between range:[x,x]`, or an explicit "exactly one/N" intent asserted with `text_visible` only). Enforces the oracle-defense checklist + locator policy across `tests/**` and `page-objects/**` + page-object abstraction sanity (WARN) + approved-case traceability (Check 14, WARN — an approved `.cases.md` case with no scenario and no waiver) + healed-locator drift (Check 15, WARN). Blocks PRs on violation. Warns when a spec touches an area whose `<site>/<area>` context is stale (past its `volatility:`-tier threshold from `staleness_tiers:`); fails when `site:` references an id not in the hot-tier `sites:` table.
 - **ideation** — **`model: opus`** (pinned — divergent SFDIPOT enumeration is where a weak model silently omits cases rather than failing). The "decide *what* to test" step (between explore and new-spec). Reads a feature's `.basis.md` (written interactively by `/qa:intake`) and writes a candidate-case **checklist** `.cases.md` — never specs or tests. Rotates SFDIPOT lenses (logging every empty lens), de-dups, risk-ranks (NIST + RCRCRC), runs a completeness critic (WARN on thin lenses; FAIL only on a declared-but-absent non-functional need). Routes on `kind:` (feature/enhancement/bug/refactor/characterization — the last is the sanctioned pin-observed-behavior path: golden-master rows marked `(provisional pin)` + tagged `@characterization`, no `must_fail_when:`; green means *unchanged*, not *correct*). A human approves/prunes the checklist; approved groups → `/qa:new-spec`. See the plugin's `reference/test-case-ideation.md` (not stamped into this repo).
 
 Invoke by name: "Use the `generator` subagent to compile `specs/checkout/coupon.md`." `/qa:gen` chains generator → verifier as two separate calls; no subagent can spawn another, so that handoff always routes through the orchestrating session.

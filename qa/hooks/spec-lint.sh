@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # spec-lint.sh — PreToolUse gate on writes into tests/** and page-objects/**.
 #
-# Denies the four reviewer FAILs that are decidable from the proposed text ALONE, with no
-# repository context, no paired spec, and no judgment:
+# Denies the reviewer FAILs that are decidable from the proposed text ALONE, with no
+# repository context, no paired spec, and no judgment — five patterns across four checks:
 #
 #   reviewer Check 1   assertion on a literal        (expect(true).toBe(true) — cannot fail)
 #   reviewer Check 5   page.waitForTimeout / networkidle
 #   reviewer Check 9   raw CSS/XPath locators
-#   reviewer Check 11  .only() markers
+#   reviewer Check 11  .only() markers, and routeFromHAR (HAR replay)
 #
 # Everything else in the reviewer stays with the reviewer. See hooks/README.md §"What is
 # NOT hooked" for the per-check reasoning — in particular Check 11's credential regex,
@@ -104,6 +104,19 @@ hit=$(first_match '\b(test|describe|it)\.only[[:space:]]*\(')
 [ -n "$hit" ] && report "Check 11 (no .only markers)" \
   "A .only() marker silently narrows the whole suite to one test — the #1 way a green CI run
 means nothing. Remove it; select with --grep or a project filter instead." "${hit#*:}"
+
+# --- Check 11: HAR replay ----------------------------------------------------------------
+# A suite served from a recorded HAR asserts the frontend against a FROZEN backend: it stays
+# green through every server-side regression, which inverts the one promise the nightly replay
+# makes. Purely lexical and admits no legitimate use anywhere under tests/ or page-objects/,
+# so it clears the same bar as the four above. `page.route()` is NOT banned — a declared
+# `fault:` step compiles to one, and the verifier's step-8b probe uses one.
+hit=$(first_match '\.routeFromHAR[[:space:]]*\(')
+[ -n "$hit" ] && report "Check 11 (no HAR replay)" \
+  "Replaying from a recorded HAR tests the frontend against a frozen backend — the suite stays
+green through every server-side regression, which is the opposite of what the nightly replay is
+for. To stub ONE dependency, have the planner declare a fault: step in the spec (CLAUDE.md
+section 'Situation steps'); it compiles to a narrow page.route with a mandatory fired-proof." "${hit#*:}"
 
 # --- Check 1: assertion on a literal ----------------------------------------------------
 # expect(true).toBe(true) / expect(1).toEqual(1): the asserted value is a constant in the test

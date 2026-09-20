@@ -19,6 +19,21 @@
 #
 # Both rules were prose-only until this hook. Both are decidable from the edit alone.
 #
+# A THIRD prohibition rides here because it has the same shape and the same scope: the healer
+# may not INTRODUCE a network stub or a fake-clock call (healer.md §"Anti-drift rule"). Both are
+# ways to make a red test green without touching a single assertion, so the subset test below
+# cannot see either of them:
+#   page.route(...)  - a genuinely broken backend is the most valuable signal the nightly
+#                      produces; stubbing it green converts a real outage into a test that
+#                      passes forever.
+#   page.clock.*     - runFor(2000) is a sleep that the waitForTimeout ban does not lexically
+#                      catch, i.e. the cheapest green on a timing flake.
+# Scoped to the HEALER ALONE, deliberately: the verifier's step-8b fault injection IS a
+# page.route, so extending this arm to the verifier would deny the negative control that the
+# whole oracle-defense layer rests on. Only an edit that ADDS one where the before-text had
+# none is denied - healing a locator inside a scenario that legitimately declares a `fault:`
+# step stays allowed.
+#
 # The test in both cases is SUBSET, not equality: every assertion present BEFORE the edit
 # must still be present after it. Additions pass (the reviewer's orphan-assert arm of
 # Check 2 handles those, and denying an addition would block the healer's sanctioned
@@ -152,6 +167,55 @@ untouched. That is the canonical silent-false-pass.
 Re-point the locator instead, or widen the matcher's own timeout — both keep the contract. If the
 assertion itself is now wrong, this is a contract-change or a product bug: classify it, file
 bugs/<slug>.md, revert, and kick the oracle back to the planner."
+fi
+
+# --- healer-only: no NEWLY INTRODUCED network stub or fake clock ----------------------
+# Counted, not merely grepped: the comparison is "more occurrences after than before", so an
+# edit inside a scenario that already carries a declared `fault:` step is untouched, and only
+# a net addition is denied. Comments are stripped first for the same reason spec-lint strips
+# them - a spec may legitimately NAME the construct in a `// covers oracle:` narration.
+if [ "$agent" = "healer" ]; then
+  strip_comments() {
+    awk '{ s = $0; sub(/^[ \t]+/, "", s)
+           if (s ~ /^(\/\/|\*|\/\*)/) { print ""; next }
+           if (match($0, /[^:]\/\/.*$/)) { print substr($0, 1, RSTART) } else { print $0 } }'
+  }
+  n_occurrences() { printf '%s\n' "$1" | strip_comments | grep -cE "$2" || true; }
+
+  # Two probes, spelled out rather than looped over packed "regex:label" strings: every
+  # obvious delimiter is already a regex metacharacter here, and `[[:space:]]` contains a
+  # colon, so a ${probe%%:*} split would silently truncate the pattern to `page\.route[[`
+  # and match nothing. A gate that quietly stops matching is worse than no gate.
+  probe_re=''; probe_what=''
+  for n in 1 2; do
+    if [ "$n" = 1 ]; then
+      probe_re='page\.route[[:space:]]*\(|context\.route[[:space:]]*\('
+      probe_what='a network stub (page.route)'
+    else
+      probe_re='page\.clock[[:space:]]*\.'
+      probe_what='a fake-clock call (page.clock)'
+    fi
+    re=$probe_re; what=$probe_what
+    b=$(n_occurrences "$before" "$re"); a=$(n_occurrences "$after" "$re")
+    [ "${a:-0}" -gt "${b:-0}" ] || continue
+    hook_deny "QA toolkit - the healer tried to INTRODUCE $what (PreToolUse hook).
+
+This edit to ${abs##*/} adds an occurrence that was not there before ($b -> $a).
+
+agents/healer.md §"Anti-drift rule": you patch selectors and waits. Neither of these is a patch.
+  - page.route  - a red test whose backend is genuinely broken is the most valuable signal the
+                  nightly produces. Stubbing that backend green converts a real outage into a
+                  test that passes forever. A dependency that is down or flaky is a PRODUCT BUG
+                  (file bugs/<slug>.md) or an ENVIRONMENT problem (escalate) - classify and stop.
+  - page.clock  - runFor(...)/fastForward(...) is a sleep the waitForTimeout ban does not
+                  lexically catch. It is legitimate only when a clock: step in the paired spec
+                  declared it; reviewer Check 5 FAILs an undeclared one. For a timing flake,
+                  re-point the locator or widen that matcher's own timeout: - both keep the
+                  contract.
+
+To disable this layer for the session, set QA_HOOKS_OFF=1 in Claude Code's own
+environment or in .claude/settings.json's \"env\" block (a hook never reads the project .env)."
+  done
 fi
 
 [ -n "$lost" ] && hook_deny "QA toolkit — the $agent tried to change an assertion (PreToolUse hook).

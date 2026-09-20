@@ -380,6 +380,19 @@ delete them to make the toolkit sound more complete than it is.
   key the reviewer couldn't structurally validate would weaken the closed-vocab guarantee).
   Sanctioned workarounds and the recipe for adding a new key beyond the current 16 if a project needs it are in
   `templates/CLAUDE.md` §"Honest limit — the relational / exact-equality gap".
+- **No request-side oracle, and HAR replay is refused outright.** The `fault:` / `clock:`
+  situation steps (`templates/CLAUDE.md` §"Situation steps") made the SFDIPOT
+  Interfaces/Operations and Time lenses generatable, and they did it **without a 17th oracle
+  key**: a stub sets up the situation, the existing 16 assert the app's degradation, and the
+  mandatory fired-proof for a response-fabricating stub is a paired `network_response_status`
+  — an existing key, discriminating by construction (a stub whose glob misses yields the *real*
+  status, so the test goes red rather than silently green). What is still out of reach is the
+  **request** side: no key expresses "the POST carried `coupon=QA20`" or "the request set an
+  `Idempotency-Key`". Deliberate, same reasoning as the relational gap above.
+  `routeFromHAR` replay is not a gap but a **refusal**: a suite served from a recorded HAR
+  asserts the frontend against a frozen backend and stays green through every server-side
+  regression, inverting the economic thesis at the top of this file. Nothing here records a HAR
+  either — a recorded one carries `Authorization` / `Cookie` request headers.
 - **Single-vendor multi-agent review shares blind spots.** All-Claude agents converge on
   the same failure modes under adversarial pressure (Nature 2026: a single compromised
   planner drops group accuracy 10–40%). For compliance-relevant specs a human *may*

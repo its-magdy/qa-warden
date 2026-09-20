@@ -45,10 +45,15 @@ data:
   user:    { email: "alice@example.com", password_env: "QA_ALICE_PW" }  # CREDENTIAL form — a reference to a PRE-SEEDED login account. Password is ALWAYS via _env, never a literal.
   order:   { factory: "order", overrides: { units: 1, currency: "USD" } }  # FACTORY form — REQUIRED for any ENTITY you instantiate (see the rule below). `factory:` names fixtures/factories/<entity>.ts; `overrides:` pins ONLY the fields your oracle asserts on.
   # other parametric data...
-steps:
+steps:                             # prose lines + THREE structured forms: include: / fault: / clock:
   - include: login                 # pulls from steps/login.yml
   - "Navigate to {{base_url}}/cart"
   - "Apply coupon QA20"
+  # SITUATION steps (optional) — the Interfaces/Operations and Time lens forms. They set up the
+  # situation, never assert it. Shapes below; the fired-proof rule is a HARD RULE further down.
+  # - fault: { url: "**/api/coupons/**", status: 503 }   # stub a dependency
+  # - clock: { install_at: "2026-03-01T09:00:00Z" }      # install fake time BEFORE the first goto
+  # - clock: { advance: "30:00" }                        # then move it
 oracle:                            # CLOSED VOCABULARY — see below
   text_visible: "Coupon applied"
   # locator is SEMANTIC only (getByRole/getByLabel/getByTestId) — NEVER raw CSS
@@ -166,6 +171,43 @@ Per-scenario oracles are allowed: a `scenarios:` entry MAY carry its own `oracle
 
 **Smoke-lane rule (tag discipline).** The **primary / governed happy-path** scenario of a **P1 / critical-priority area** MUST be tagged `smoke` — never `regression`-only. `/qa:run mode=smoke` (and any `--grep @smoke` nightly gate) selects ONLY `@smoke` tests, so a P1 flow tagged `regression`-only means the fast gate is **blind to a fully-broken feature** — a broken checkout/payment/login would sail through the smoke run green (RUN-20: a P1 money-path checkout shipped `regression`-only, so `--grep @smoke` never exercised it). Rule: **every P1/critical area has at least one `@smoke` scenario, and it is the governed happy-path.** Edge cases, negative paths, and heavier cross-input checks stay `regression`; the metamorphic twins are always `regression` (never `smoke`). When the area's `.basis.md` marks the feature `priority: P1`/`critical`, auto-tag its governed happy-path `smoke`. **In a multi-scenario spec, place that `smoke` tag on the ONE governed happy-path via its per-scenario `tags: [smoke]` (the scenario schema below), NOT on the spec-level `tags:` — a spec-level `smoke` tags every scenario's test, so `--grep @smoke` would select the whole file instead of just the happy path.** **P1 `must_fail_when` floor:** when the basis declares `priority: P1`/`critical`, the governed happy-path spec MUST declare at least one `must_fail_when:` naming the broken state the smoke lane must catch — even the trivial one ("the post-login dashboard fails to render"). This arms step-8b's negative-control for the flow where a vacuous green costs most. Viewport is expressed as a TAG, never an oracle key: a case that must run in a phone viewport puts `mobile` in `tags:` — the generator's tag rule emits `@mobile` and the opt-in `mobile` config project routes on it.
 
+### Situation steps — `fault:` (network) and `clock:` (time)
+
+These are the two step forms that make the SFDIPOT **Interfaces/Operations** and **Time** lenses
+authorable. `/qa:ideate` has always enumerated cases in those lenses ("the payments API returns
+503", "the session expires after 30 minutes"); until these forms existed you had no way to write
+one down, so the lens produced checklist rows that died at plan time. Reach for them when the
+situation the case needs **cannot be produced by driving the UI** — a dependency you do not control,
+or an elapsed duration nobody will sit through. Do NOT reach for them to make an ordinary flow
+easier; a stubbed happy path is a test of your own fixture.
+
+| step key | argument shape (emit these EXACT sub-keys) |
+|---|---|
+| `fault:` | `{ url, status?, body?, json?, abort?, times? }` — `url` is a glob (`**/api/pay/**`) or `/regex/`. EITHER a fabricated response (`status` and/or `body`/`json`) OR `abort: "<errorCode>"` (`connectionfailed`, `connectionreset`, `internetdisconnected`, `namenotresolved`, `timedout`, `failed`, …), never both. `times: n` retires the stub after `n` matching requests — that is how you express a **retry** case (fail once, let the real server answer the retry). |
+| `clock:` | `{ install_at?, advance?, advance_idle?, pause_at?, fixed_time?, system_time? }` — **exactly one per step**; installing then advancing is two `clock:` steps. `advance:` fires every timer it passes through (a polling/auto-refresh UI); `advance_idle:` jumps and fires each due timer at most once (the closed-laptop-lid case — session expiry noticed on the next interaction). Durations are milliseconds or `"SS"` / `"MM:SS"` / `"HH:MM:SS"`. |
+
+The trailing colon in column 1 is deliberate: these are `steps:` keys, not oracle keys, and the colon
+is what keeps them out of `/qa:doctor` Check 9bb's oracle-arg-shape extractor. Do not "tidy" it away.
+
+**Three hard rules come with them** (they are restated under §Hard rules because each one, violated,
+produces a green test that proves nothing):
+
+1. **Pair every response-fabricating `fault:` with a `network_response_status:` oracle** on the same
+   URL and the injected status. A `fault:` whose glob matches nothing is *silent* — the real server
+   answers and the scenario passes for the wrong reason. The paired oracle makes that case go RED
+   instead, because the real response carries a different status. `abort:` has no response to assert
+   on; the generator compiles a hit-count barrier for it instead, and you author nothing extra.
+2. **Never tag a `fault:` scenario `smoke`.** The smoke lane answers "does this feature actually
+   work"; a fabricated dependency cannot answer it. Fault scenarios are `regression`.
+3. **`clock: { install_at: … }` must be the FIRST step, before any navigation** (before an
+   `include: login` that navigates). Playwright installs fake timers into the page context; install
+   it after load and the page can hang on timers that never fire. Set it slightly *before* the
+   instant the case cares about, then `advance:` to the instant.
+
+What you still cannot express: **the request side**. There is no key for "the POST carried
+`coupon=QA20`" — see `CLAUDE.md` §"Situation steps" → Honest limit. Record it as an open question;
+do not invent a key.
+
 ### Negative / error-path specs
 Add an extra `fail_if:` list and a `prompt_guardrail:` stanza so the **healer** does not "heal" an expected failure away — the healer is its only consumer (`agents/healer.md` step 0 reads it alongside `must_fail_when:`/`fail_if:`, and its expected-failure bucket honours it by leaving the test red). The generator never reads this key; the reason it is authored at *plan* time is that the healer meets the spec long after, on a red nightly:
 ```yaml
@@ -200,6 +242,8 @@ prompt_guardrail: |
 - **Never** use free-form oracle assertions. Closed vocabulary only.
 - **Never anchor a `value_between` band to the *same element it asserts*.** The tight-band form (`range: [x, x]`) is the sanctioned equality proxy ONLY when `x` is a value read *earlier* from a **different** source — another element, a pre-checkout total, a seeded constant (scenario-2 style: order-total anchored to the cart-total read before checkout). Anchoring the band to the very locator under assertion — `value_between cart-total [{{cart_total}},{{cart_total}}]` where `{{cart_total}}` is itself read from `cart-total` at runtime — asserts a value equals itself: **always green, tests nothing** (F-16). If you mean "A equals a computed value," name the *other* anchor (sum of line totals, the pre-checkout total); if no such anchor exists in the closed vocab, record it under **Open questions** / `# waived:`, do not ship a self-referential band. The generator/reviewer will strengthen or WARN on it, but do not rely on that — author it discriminating.
 - **Natively-validated inputs: author the native-block oracle, NOT a server-error-string that can't fire (F-17).** When a scenario's invalid-input partition targets a field with HTML5 native constraints — `<input type="email">`, `required`, `pattern`, `min`/`max`/`maxlength` — a non-conforming payload (`not-an-email`, an empty required field, an over-max value) is blocked by the browser **before submit**: no request fires, no app error alert renders, the page does not navigate. So a provisional `error_shown: "Invalid …"` oracle for that partition is **structurally unsatisfiable** — the app never emits that string, so the assertion can never go green (it ships as a mystery red). Before authoring an invalid-input oracle, snapshot the field's `type`/constraint attributes (CLI `snapshot`, or the basis Example Map). For a natively-validated field, EITHER **(a)** author the *native-block* oracle — `url_matches` still on the form route + `storage_state` token `"<null>"` + no error surface (the browser blocked it; the server never saw it), and name the scenario for what it proves (`malformed-email-native-block`, not `…-server-reject`); OR **(b)** choose a payload that actually **reaches the server** (a syntactically-valid-but-unknown email for an auth-failure path) so a server `error_shown` oracle CAN fire. Never pin a server-error-string oracle on a payload native validation eats. (Best practice: for such fields the real observable is the browser's `ValidityState`/no-navigation, not an app message. The generator's step-8b catches this live and leaves it honestly red — but authoring it right avoids the mystery red.)
+- **A `fault:` step MUST be paired with a `network_response_status:` oracle, and a `fault:` scenario MUST NOT be tagged `smoke`.** These are the two ways a network stub turns into a false green, and both are yours to prevent at authoring time. (a) A `fault: { url, status }` whose glob matches no request is **silent** — Playwright does not warn, the real server answers, the app behaves normally and every oracle in the scenario passes *for the wrong reason*. Pairing it with `network_response_status: { url: "<same pattern>", status: <same status> }` makes a missed stub go **RED** (the real response carries a different status), so the fired-proof costs one oracle item and is discriminating by construction. An `abort:` fault produces no response and is exempt — the generator compiles a handler hit-count barrier for it. Reviewer Check 2 FAILs a response-fabricating `fault:` with no paired status oracle as an **orphan step**. (b) A `smoke`-tagged scenario standing on a fabricated dependency makes the nightly fast gate report "the feature works" when all it proved is that the app renders a response *this spec wrote*. Tag fault scenarios `regression`; reviewer Check 11 FAILs `smoke` + `fault:`. Neither rule applies to `clock:` — fake time still exercises the real stack.
+- **Never plan a `fault:` against the surface under test — stub the DEPENDENCY.** The point of the Interfaces lens is "the app behaves correctly when something it depends on misbehaves". A stub whose `url` matches the endpoint whose *own* response the oracle is about deletes the system under test and asserts your fixture. Narrow the glob to the dependency (`**/api/payments/**`, not `**/api/**`, never `**/*`); if you cannot name a glob narrower than the whole API, the case is not ready to author — take it back to the basis.
 - **Scope every equality/relational invariant to its precondition domain.** When the basis's `integrity_invariants[].holds_when` (or the intent) says an equality holds only under a precondition — single-unit, same-currency, one-tenant, a specific state — emit a matching `invariant_holds_when:` entry naming that domain and pin the scenario's `data:` **inside** it. An equality asserted over the WHOLE domain when it only holds on a slice is green on the pinned row but false as a stated invariant (the over-broad `require true` default — CLAUDE.md §"relational / exact-equality gap"); reviewer Check 2e WARNs on an unscoped or data-contradicted equality oracle.
 - One spec per file. Multi-scenario specs use a `scenarios:` list under the YAML block:
   ```yaml
