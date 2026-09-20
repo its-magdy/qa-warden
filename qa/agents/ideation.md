@@ -73,6 +73,30 @@ not need to read it to do your job.) Respect:
    Prefer fewer, stronger cases. (Embedding-similarity is the scaled-up version
    [LTM, IEEE TSE 2024]; here, judge semantically.)
 
+2b. **Level triage — does this case need a BROWSER?** Every row you emit becomes a full
+   browser test: the slowest, most maintenance-heavy kind there is. The Data lens alone can
+   enumerate eight boundary values per field, and eight UI tests per field is how a suite
+   becomes a 90-minute nightly nobody trusts. So for each **partition** (a set of candidates
+   the app should treat identically — all the over-max values, all the malformed emails):
+   - keep **ONE representative as a UI case** — the member with a distinct user-visible
+     outcome (the message, the disabled button, the redirect);
+   - end the *other* **rejected-input** members' rows (min-1, max+1, overflow, malformed —
+     the negative path) with `— API-LEVEL: same partition as <row>; assert via
+     network_response_status / response_body_contains, no UI walk` when the server enforces
+     the rule and its response shows it. They stay in this suite, but as request-level
+     scenarios the planner authors against the endpoint — seconds, not a page flow.
+     **Negative path ONLY:** the planner reserves those two keys for "negative-path API
+     verification, NOT internal-API peeking" (`agents/planner.md` §oracle vocabulary), so an
+     *accepted* sibling (min, max) is never sent to API level — fold it into the UI
+     representative's data, or note it `PUSH DOWN`;
+   - end a row with `— PUSH DOWN: no user-visible or response-visible observable; belongs in
+     the product repo's unit tests` when nothing a browser or a response can see distinguishes
+     pass from fail (a pure calculation, an internal state). CLAUDE.md §"Scope boundaries"
+     already puts those outside this stack — say so here, where the human is deciding.
+   Never drop a row on level grounds: the note is advice to the approver, who owns scope. A
+   boundary that changes what the USER sees (max length truncating input, a field turning
+   red) is a UI case however many siblings it has.
+
 3. **Risk-rank.** Order by: NIST interaction strength (single-factor + pairwise first
    [NIST SP 800-142]) and RCRCRC change-proximity (Recent/Changed/Repaired up). Risk
    trims the list to a sane top-N WITHOUT dropping a whole category — every lens stays
@@ -102,6 +126,13 @@ not need to read it to do your job.) Respect:
      non-functional need (e.g. `concurrency: required`, `i18n: [en, ar]`) but the
      checklist has zero matching candidates. That is "declared then ignored," a
      checkable fact, safe to block on.
+     **But say which of those candidates can be built.** Only `a11y` has an oracle key
+     (`a11y_violations_below`). A candidate that exists to satisfy a declared `i18n`,
+     `concurrency` or `performance` need cannot be authored by the planner — no key expresses
+     a second locale, a second tab/context, or a timing budget. Still list it (the risk belongs
+     on the record), and end its row with `— NOT BUILDABLE in this suite: waive (⊘ out-of-vocab) at /qa:approve`.
+     An approver who is not told this approves it, the planner cannot write it, and reviewer
+     Check 14 then WARNs on every PR with nothing able to clear it.
 
 5. **Write `<feature>.cases.md`** (schema below). Group by 🔵 rule so each group maps
    to one spec; its examples become that spec's `scenarios:`.

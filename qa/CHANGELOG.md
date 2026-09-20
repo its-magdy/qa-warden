@@ -20,6 +20,37 @@ Thirteen working sessions closing the 2026-09-06 audit (all four blocks). Four s
 changes a consumer cannot infer from a file diff, three deliberate decisions to change
 nothing, and a large body of correctness work.
 
+### Outside-in audit (2026-09-20) — one false claim, two unguarded paths, one missing step
+
+- **Fixed a false claim.** `CLAUDE.md` §"Escalation rules" said a flaky test is *auto-moved* to
+  `@quarantine` over a rolling 14 days. Nothing records run history or moves a tag — only the
+  `grepInvert` *exclusion* is enforced. Reworded: `/qa:run mode=repeat` measures, a human tags.
+  `/qa:report`'s flake line now says it is this-run-only, not a trend.
+- **`/qa:batch-fix` no longer inherits the lookalike guard from one file.** The healer's HEAL02
+  check ran on the representative failure only, then the locator patch went to N files whose
+  green proved only that *something* matched. The proposal now splits the N specs: those with a
+  downstream side-effect oracle are batch-eligible, the rest are listed for individual `/qa:heal`.
+- **Ideation gained a level-triage step (2b).** One UI case per partition; the other members are
+  noted `API-LEVEL` (rejected-input siblings only — request-level scenarios via
+  `network_response_status` / `response_body_contains`, which the planner reserves for the
+  negative path) or `PUSH DOWN` (no browser- or response-visible observable). Advice
+  to the approver — never drops a row.
+- **Declared-but-unbuildable non-functional needs are now labelled.** Only `a11y` has an oracle
+  key. `basis.md` says so at the point of declaration, and ideation ends `i18n` / `concurrency` /
+  `performance` rows with `NOT BUILDABLE … waive (⊘ out-of-vocab) at /qa:approve`, so they stop
+  becoming approved cases that reviewer Check 14 WARNs on forever.
+- **New optional `.github/workflows/qa-review.yml.example`.** The local gate (`/qa:review`'s
+  hash-pinned `.reviewed` marker + doctor Check 15) stays the default. The workflow is for teams
+  that need an unforgeable gate, and it now states the prerequisite the old in-skill snippet
+  omitted: the runner must install the plugin (`plugins:` + a **Git-URL** `plugin_marketplaces:`)
+  or the `reviewer` subagent does not exist there. Deliberately NOT in `resync-set.txt` — an
+  optional example must not raise a blocking substrate-drift ❌ on existing projects; a plain
+  `/qa:init` stamps it.
+- **Docs:** `qa/README.md` leads with the four-command fast lane and gains a section on how the
+  healer differs from Playwright's official one (whose instructions list "Fixing assertions and
+  expected values"). The catalog no longer claims `visual-regression` triggers during spec
+  authoring — no oracle key requests a screenshot, so only `/qa:review url=` reaches it.
+
 ### Added — the generator/verifier split
 
 `/qa:gen` is now a **two-call chain**: the `generator` compiles a spec to a `.spec.ts`, and a
@@ -189,8 +220,24 @@ observe the state it would be written for.
 
 ### Changed — doctor
 
-**27 → 43 checks** for anyone coming from 0.2.0. Still 43 — the additions below are
-sub-checks inside existing numbers.
+**27 → 36 checks** for anyone coming from 0.2.0. It reached 43, then seven moved out (next
+paragraph); the additions below are sub-checks inside existing numbers.
+
+**Seven checks left doctor for a new `bin/qa-selfcheck`** — 9b, 9bc, 9be, 9d, 9e, 9h, 9j. They read
+only the plugin's own source, so a consumer could never fix one, and under version skew (a
+project resynced by a teammate on a newer plugin) they printed a wall of ❌ that all meant
+"update your plugin": measured against the published 0.2.0, doctor's findings drop 33 → 15.
+Moved **verbatim** and proven equivalent — byte-identical doctor output on a healthy project, and
+every one of the 33 findings reproduced by doctor + selfcheck together. Ids are retired, not
+reused. The six checks that also read the project (9bb, 9bd, 9g, 9i, 9k, 20) stayed. The
+equivalence test itself found a hole: Check 9h never noticed a hook script that exists but is
+**unregistered** in `hooks.json`; it now does.
+
+**New `bin/qa-hooktest`** — the two `PreToolUse` hooks are the only code here that can block a
+write, and they had no tests. 20 real payloads now pin what each denies and allows, including
+the two documented gaps (a call split across lines; `toBeTruthy()` on a literal) asserted as
+`allow`, so closing one is a visible change. Mutation-checked: breaking one regex turns exactly
+one case red.
 
 Check 9f gained an **arm 3** for the one permission-delivery failure the scaffold fix
 cannot close: the merge needs `jq`, and without it qa-scaffold parks the rules in

@@ -20,10 +20,10 @@ a few turns of headroom, not the bare minimum. If `maxTurns` is pinned at or
 below the prose number, the harness hard-stop preempts the agent's own
 fail-safe: a healer stopped by `maxTurns` before it reaches its "file a bug
 and revert" step ships a half-applied patch and no bug — worse than either
-number alone. `doctor` Check 9bc enforces this ordering by reading both
+number alone. `bin/qa-selfcheck` Check 9bc enforces this ordering by reading both
 numbers directly out of each agent file, so **the numbers in each file's own
 `## Budget / escalation` section (and its `maxTurns:` frontmatter line) are
-the source of truth Check 9bc parses — never move those numbers here.**
+the source of truth `bin/qa-selfcheck` Check 9bc parses — never move those numbers here.**
 
 Per-agent specifics — why each agent's gap is what it is — stay in that
 agent's own file, since they depend on what that agent's fallback actually

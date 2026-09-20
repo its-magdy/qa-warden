@@ -57,9 +57,12 @@ then PASS summary. It fixes nothing; on a FAIL, kick the spec back to the
 `generator` (or planner) named in the finding. It reruns no product tests beyond
 the twins and hits no network.
 
-**CI wiring (recommended).** The reviewer's competence is not the gap — its
-*triggering* is. Run it on every PR that touches the QA suite. A minimal GitHub
-Actions step:
+**CI wiring (optional — the local gate is the `.reviewed` marker below + doctor Check 15).** The reviewer's competence is not the gap — its
+*triggering* is. Run it on every PR that touches the QA suite. `/qa:init` stamps this
+workflow as `.github/workflows/qa-review.yml.example` — rename it to enable. **The runner
+must install the plugin** (`plugins:` + `plugin_marketplaces:`, the latter a Git URL): the
+`reviewer` subagent ships inside the plugin, so on a bare runner the prompt below names a
+subagent that does not exist. The shape:
 
 ```yaml
 # .github/workflows/qa-review.yml
@@ -77,6 +80,8 @@ jobs:
         with: { fetch-depth: 0 }        # full history so origin/main...HEAD resolves
       - uses: anthropics/claude-code-action@v1
         with:
+          plugin_marketplaces: "https://github.com/<your-org>/<marketplace-repo>.git"
+          plugins: "qa@qa-toolkit"
           prompt: "Use the reviewer subagent to review the PR diff and its imported page objects. Fail the job on any reviewer FAIL, and also fail the job if the reviewer's report contains no explicit verdict line (a report cut off before a verdict is written is not a PASS)."
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```

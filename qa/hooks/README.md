@@ -100,7 +100,7 @@ Every one of these is a deliberate constraint, not an accident of implementation
 `assertion-contract.sh` keys on the payload's `agent_type`, which the hook schema marks
 optional. When it is absent — the main thread, or a harness that stops sending it — the
 hook does not fire and the contract is prose again. It is **defence in depth for two known
-agents, never the backstop.** `/qa:doctor` Check 9h guards the wiring; nothing can guard
+agents, never the backstop.** `bin/qa-selfcheck` Check 9h guards the wiring; nothing can guard
 the field's presence from inside a hook.
 
 ## Testing a change here

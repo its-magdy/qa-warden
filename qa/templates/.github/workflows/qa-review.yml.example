@@ -1,0 +1,51 @@
+# qa-review — the reviewer gate on every PR that touches the QA suite.
+#
+# OPTIONAL. The everyday gate is local: /qa:review writes a hash-pinned .reviewed marker and
+# /qa:doctor Check 15 flags any test reviewed before its last change. Use this workflow only
+# when you need a gate nobody can skip. Rename to qa-review.yml to enable.
+#
+# This is the companion to qa-nightly.yml.example:
+# the nightly REPLAYS the suite ($0 LLM); this one REVIEWS new/changed tests (one LLM call
+# per PR). The reviewer is the gate that blocks green-but-wrong tests, and its competence is
+# not the gap — its TRIGGERING is. A gate nobody runs blocks nothing.
+#
+# After enabling, mark the `qa-review` job a REQUIRED STATUS CHECK in branch protection.
+# That is the only attestation an agent cannot forge: a PR touching tests/ or specs/ then
+# cannot merge without the reviewer having run. (skills/review/SKILL.md §"CI wiring".)
+#
+# ── PREREQUISITE: the runner must be able to INSTALL the qa plugin ─────────────────────────
+# The `reviewer` subagent ships INSIDE the plugin. A bare runner has no plugin, so without
+# the two inputs below the prompt asks for a subagent that does not exist and the review is
+# done by an un-instructed model — which reads like a review and gates nothing.
+# `plugin_marketplaces` takes a GIT URL, so the marketplace (the repo holding
+# .claude-plugin/marketplace.json) must be pushed somewhere the runner can clone.
+# A marketplace that exists only as a local directory CANNOT be used from CI.
+name: qa-review
+on:
+  pull_request:
+    paths: ['tests/**', 'specs/**', 'page-objects/**', 'fixtures/**']
+jobs:
+  qa-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }        # full history so origin/<base>...HEAD resolves
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # REPLACE with the Git URL of YOUR copy of the marketplace repo (see PREREQUISITE).
+          plugin_marketplaces: |
+            https://github.com/<your-org>/<qa-toolkit-marketplace-repo>.git
+          plugins: |
+            qa@qa-toolkit
+          prompt: >-
+            Use the reviewer subagent to review the PR diff and its imported page objects.
+            If no subagent named reviewer is available, fail the job and say the qa plugin
+            did not load — do NOT review the diff yourself.
+            Fail the job on any reviewer FAIL, and also fail the job if the reviewer's report
+            contains no explicit verdict line (a report cut off before a verdict is written
+            is not a PASS).

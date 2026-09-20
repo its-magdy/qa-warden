@@ -8,7 +8,20 @@ AI-maintained page-object layer, so a flow change is a one-file fix.
 **New here?** Start with the **[first-test tutorial](reference/tutorial-first-test.md)** (author one
 test end to end), and keep the **[glossary](reference/glossary.md)** open for any unfamiliar term.
 
-## The authoring workflow
+## Your first test — four commands
+
+```
+/qa:explore                  learn the app
+/qa:new-spec <area/feature>  write the spec (plain language + a YAML oracle you can read)
+/qa:gen      specs/<f>.md    compile it to a Playwright test and run it green
+/qa:review                   check the test can actually fail
+```
+
+That is the **fast lane**, after a one-time `/qa:init`. It skips no FAIL-level gate. Everything
+below is the same path with the optional **rigor lane** added — reach for it on
+P1/money/compliance features, not on day one.
+
+## The full authoring workflow
 
 ```
 /qa:init                     once per project — stamp the runtime substrate, then edit .env
@@ -35,6 +48,21 @@ explore to new-spec and skips no FAIL-level gate.
 
 `/qa:report` aggregates a run into a PR/Slack-ready summary. The full command catalog and a
 "where am I / what's next" read of your project are always available from **`/qa:help`**.
+
+## How this differs from Playwright's own test agents
+
+Playwright ships planner / generator / healer agents (`npx playwright init-agents`). They are
+good at producing tests. The difference is what happens when a test goes red: the official
+healer's instructions list **"Fixing assertions and expected values"** among its repairs
+(`playwright/lib/agents/playwright-test-healer.agent.md`, checked against 1.63.0). A healer
+allowed to edit the expected value can turn a real regression green.
+
+This plugin's healer patches selectors and waits and **never the assertion** — a `PreToolUse`
+hook denies the edit, and changed product copy is routed back to the planner as a question
+("intentional, or a bug?") instead of being absorbed. Around that sit the other pieces the
+official agents don't have: a closed oracle vocabulary a non-coder can review, a human approval
+gate before any code exists, a verifier that did not write the test proving each assertion can
+go red, and a reviewer that blocks the PR when one can't.
 
 ## The cost model
 

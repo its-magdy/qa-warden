@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# qa-hooktest — regression tests for the two PreToolUse hooks. Run from the toolkit repo:
+#
+#     qa/bin/qa-hooktest
+#
+# NOT shipped to consumers. The hooks are the only deterministic code in this plugin that can
+# BLOCK a write, and until this file they had no tests at all — each case below was first run
+# by hand during the 2026-09-20 audit and is pinned here so the next edit to a regex cannot
+# quietly turn a gate off (or turn it on for code that should pass).
+#
+# Every case is a real hook payload piped to the real script. `deny` means the hook printed a
+# permissionDecision of "deny"; `allow` means it printed nothing. A hook never signals through
+# its exit code (it fails OPEN, exit 0, by design), so the exit code is not what is asserted.
+#
+# KNOWN GAPS are asserted too, as `allow`, on purpose: hooks/README.md calls this layer a
+# SUBSET gate with the reviewer as backstop, so these are documented limits, not bugs. Pinning
+# them means that if someone closes one, this file says so instead of silently drifting.
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+HK="$here/hooks"
+command -v jq >/dev/null || { echo "qa-hooktest: jq is required" >&2; exit 2; }
+
+# A minimal QA project root, so the hooks' "is this path inside a QA project" test passes.
+P=$(mktemp -d "${TMPDIR:-/tmp}/qa-hooktest-XXXXXX") || exit 2
+trap 'rm -rf "$P"' EXIT
+# hook_qa_root() keys on exactly two files: playwright.config.ts + scripts/prod-guard.ts.
+mkdir -p "$P/tests/auth" "$P/page-objects" "$P/specs" "$P/src" "$P/scripts"
+cp "$here/templates/playwright.config.ts" "$P/" || exit 2
+cp "$here/templates/scripts/prod-guard.ts" "$P/scripts/" || exit 2
+# macOS: mktemp returns /var/..., the hooks resolve it to /private/var/... — use the real path.
+P=$(cd "$P" && pwd -P)
+
+pass=0; bad=0
+# run <hook> <expect: deny|allow> <label> <payload-json>
+run() {
+  local out got
+  out=$(printf '%s' "$4" | CLAUDE_PROJECT_DIR="$P" CLAUDE_PLUGIN_ROOT="$here" bash "$HK/$1" 2>/dev/null)
+  if printf '%s' "$out" | grep -q '"permissionDecision":"deny"'; then got=deny; else got=allow; fi
+  if [ "$got" = "$2" ]; then pass=$((pass+1)); printf '  ok    %-5s %s\n' "$2" "$3"
+  else bad=$((bad+1)); printf '  FAIL  expected %s, got %s — %s\n' "$2" "$got" "$3"; fi
+}
+write() { jq -nc --arg p "$P/$1" --arg c "$2" --arg d "$P" \
+  '{hook_event_name:"PreToolUse",tool_name:"Write",cwd:$d,tool_input:{file_path:$p,content:$c}}'; }
+edit()  { jq -nc --arg a "$1" --arg p "$P/$2" --arg o "$3" --arg n "$4" --arg d "$P" \
+  '{hook_event_name:"PreToolUse",tool_name:"Edit",agent_type:$a,cwd:$d,tool_input:{file_path:$p,old_string:$o,new_string:$n}}'; }
+
+echo "spec-lint.sh — the four lexical reviewer FAILs"
+run spec-lint.sh deny  "Check 1: expect on a literal"        "$(write tests/a.spec.ts "test('x', async()=>{ expect(true).toBe(true); });")"
+run spec-lint.sh deny  "Check 1: expect(1).toBe(1)"          "$(write tests/a.spec.ts "expect(1).toBe(1);")"
+run spec-lint.sh deny  "Check 5: page.waitForTimeout"        "$(write tests/a.spec.ts "await page.waitForTimeout(500);")"
+run spec-lint.sh deny  "Check 5: networkidle"                "$(write tests/a.spec.ts "await page.waitForLoadState('networkidle');")"
+run spec-lint.sh deny  "Check 9: raw CSS locator"            "$(write tests/a.spec.ts "await page.locator('.btn-primary > span').click();")"
+run spec-lint.sh deny  "Check 9: raw CSS in a page object"   "$(write page-objects/login.page.ts "this.btn = page.locator('#submit');")"
+run spec-lint.sh deny  "Check 11: test.only"                 "$(write tests/a.spec.ts "test.only('x', async()=>{});")"
+run spec-lint.sh deny  "Check 11: routeFromHAR"              "$(write tests/a.spec.ts "await page.routeFromHAR('a.har');")"
+run spec-lint.sh allow "clean role locator + web-first expect" "$(write tests/a.spec.ts "await expect(page.getByRole('button',{name:'Save'})).toBeVisible();")"
+run spec-lint.sh allow "expect timeout option is not a sleep" "$(write tests/a.spec.ts "await expect(page.getByRole('alert')).toBeVisible({ timeout: 10000 });")"
+run spec-lint.sh allow "out of scope: product source"        "$(write src/app.ts "await page.waitForTimeout(500);")"
+echo "spec-lint.sh — KNOWN GAPS (the reviewer is the backstop; see hooks/README.md)"
+run spec-lint.sh allow "gap: call split across lines"        "$(write tests/a.spec.ts "await page
+  .waitForTimeout(500);")"
+run spec-lint.sh allow "gap: toBeTruthy on a literal"        "$(write tests/a.spec.ts "expect('ok').toBeTruthy();")"
+
+echo "assertion-contract.sh — healer/verifier may not rewrite an assertion"
+OLD="await expect(page.getByRole('alert')).toHaveText('Invalid credentials');"
+run assertion-contract.sh deny  "healer retypes the expected string" "$(edit healer tests/auth/login.spec.ts "$OLD" "await expect(page.getByRole('alert')).toHaveText('Incorrect email or password');")"
+run assertion-contract.sh deny  "verifier swaps the matcher"         "$(edit verifier tests/auth/login.spec.ts "$OLD" "await expect(page.getByRole('alert')).toContainText('Invalid credentials');")"
+run assertion-contract.sh deny  "healer deletes the assertion"       "$(edit healer tests/auth/login.spec.ts "$OLD" "// removed")"
+run assertion-contract.sh allow "healer re-points the LOCATOR only"  "$(edit healer tests/auth/login.spec.ts "$OLD" "await expect(page.getByTestId('login-error')).toHaveText('Invalid credentials');")"
+run assertion-contract.sh allow "generator is out of scope"          "$(edit generator tests/auth/login.spec.ts "$OLD" "await expect(page.getByRole('alert')).toHaveText('Something else');")"
+run assertion-contract.sh allow "no agent_type (main session/human)" "$(edit "" tests/auth/login.spec.ts "$OLD" "await expect(page.getByRole('alert')).toHaveText('Something else');")"
+
+echo "escape hatch"
+out=$(printf '%s' "$(write tests/a.spec.ts "await page.waitForTimeout(500);")" | QA_HOOKS_OFF=1 CLAUDE_PROJECT_DIR="$P" bash "$HK/spec-lint.sh" 2>/dev/null)
+if [ -z "$out" ]; then pass=$((pass+1)); echo "  ok    allow QA_HOOKS_OFF=1 disables the layer"; else bad=$((bad+1)); echo "  FAIL  QA_HOOKS_OFF=1 did not disable spec-lint"; fi
+
+echo "---"
+if [ "$bad" -ne 0 ]; then echo "qa-hooktest: ❌ $bad of $((pass+bad)) cases FAILED"; exit 1; fi
+echo "qa-hooktest: ✅ all $pass cases passed"

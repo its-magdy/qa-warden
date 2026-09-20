@@ -89,7 +89,21 @@ Workflow:
 3. Propose the pattern (before/after snippet) to the user IN CHAT and wait
    for explicit confirmation before editing N files — batch fixes are
    high-blast-radius.
-4. Once confirmed, apply the patch across every matching spec (never touch
+   **When the pattern re-points a LOCATOR, split the N specs first.** The healer ran its
+   lookalike guard (`agents/healer.md` §HEAL02) on the ONE representative only, and step 5's
+   green proves the new locator *matched something*, not the *right* thing — so the guard
+   has to be re-established per file, not inherited. For each matching spec, read what is
+   asserted downstream of the patched step:
+   - a **side-effect oracle** on a different surface (`url_matches`,
+     `network_response_status`/`response_body_contains`, `storage_state`, a
+     `count_equals`/`text_visible` on the post-action view) → green will be self-confirming;
+     **batch-eligible**.
+   - only a presence/state check on or beside the patched element → green would be
+     unconfirmed; **exclude it from the batch** and list it for an individual
+     `/qa:heal <test-id>`, where HEAL02 actually runs.
+   Show both lists in the proposal. A wait-only pattern (no locator change) cannot land on a
+   lookalike — skip the split.
+4. Once confirmed, apply the patch across every **batch-eligible** spec (never touch
    assertions or the oracle contract — CLAUDE.md §Assertion style).
 5. Re-run the full batch. **Re-derive the filter from `$ARGUMENTS` in THIS block — do NOT reuse `$ARG` from step 1 (F-S03):** the Bash tool starts a fresh shell per call (see §Environment in CLAUDE.md), so `$ARG` set in the step-1 block is EMPTY here, and `npx playwright test ""` silently runs the WHOLE suite — the exact max-blast-radius this command warns against. Re-bind first, then run:
    ```bash
@@ -105,7 +119,9 @@ Workflow:
    failures elsewhere. An inline `--reporter` replaces the config array, so `last-run.json`
    (the run-of-record) is left intact. You care only about exit code / red-green here.
 6. Report: how many went green, how many still red, bugs filed for any that
-   don't respond to the pattern (those are likely independent product bugs).
+   don't respond to the pattern (those are likely independent product bugs), **and the
+   specs step 3 excluded**, each with its ready-to-paste `/qa:heal <test-id>` — an excluded
+   spec is still red, and one left off the report reads as fixed.
 
 **Hard turn budget: 5** for the representative triage, then pure mechanical
 application.

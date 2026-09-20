@@ -104,7 +104,7 @@ repository state a hook never sees, 2c/2d/2e are explicitly judgment, and Check 
 regex is documented *in reviewer.md itself* as false-FAILing valid specs when run
 deterministically. **The reviewer is still the backstop, by discipline.** What changed is that
 two of the contracts it backstops are now also enforced at write time. `hooks/README.md` records
-the per-check reasoning and the fail-open guarantees; `/qa:doctor` Check 9h guards the wiring.
+the per-check reasoning and the fail-open guarantees; `bin/qa-selfcheck` Check 9h guards the wiring.
 
 ### The generator does not grade itself
 
@@ -345,7 +345,7 @@ delete them to make the toolkit sound more complete than it is.
   two are not interchangeable and `maxTurns` must never be set *at* the prose number: pinned at
   the budget it would replace "file a bug and revert" with a half-applied patch and no bug, which
   is the exact silent-failure class this toolkit exists to prevent. Each agent therefore pins a
-  ceiling strictly ABOVE its prose budget — an ordering **doctor Check 9bc now enforces**
+  ceiling strictly ABOVE its prose budget — an ordering **`bin/qa-selfcheck` Check 9bc now enforces**
   (nothing else compared the two: they live in different halves of different files, so a bump to
   either silently inverted the invariant with every check green) (planner 10→16, generator 16→22, verifier 18→24, ideation 20→28, exploration 30→40; reviewer 15→45, the widest gap, because its
   whole-tree fallback is not a wrap-up but a full alternate execution mode DESIGNED to exceed
@@ -360,7 +360,7 @@ delete them to make the toolkit sound more complete than it is.
   the fallback would leave a green, twin-less, unverified spec looking finished). The agent's own fail-safe fires first; the harness only
   catches a genuine runaway. Same shape as the model pins: a rule that lived only in prose now
   also has the harness mechanism behind it, without the mechanism displacing the rule.
-  **Caveat: the harness mechanism's reliability is unconfirmed.** `doctor` Check 9bc verifies the
+  **Caveat: the harness mechanism's reliability is unconfirmed.** `bin/qa-selfcheck` Check 9bc verifies the
   *ordering* of the two numbers, not that `maxTurns` itself fires — anthropics/claude-code#41143
   reports an agent pinned at `maxTurns: 10` running 70+ turns unimpeded, filed and closed
   not-planned. If that holds on the CLI version this toolkit's users run, `maxTurns` is
@@ -532,7 +532,7 @@ Every fact below has exactly one authoritative home. Do not copy them here — p
 
 | Fact | Authoritative home |
 |---|---|
-| Oracle vocabulary (the 16 keys) + per-key argument shapes | `templates/CLAUDE.md` (stamped SoT). The **authoritative mirror list** is CLAUDE.md §"Test case format contract" — keys are ENUMERATED (an actual editable list) in `agents/planner.md`, `agents/generator.md`, reviewer Check 4, `scripts/oracle-keys.txt`, and `/qa:coverage`'s `KEYS_RE` grep — **those** are the sites to change in the same commit when adding/removing a key. `/qa:new-spec` and `/qa:review url=<url>` **defer** to CLAUDE.md and hold **no key list** (defer-only — nothing to edit there; F-03). The arg-shape table lives in CLAUDE.md + `planner.md`/`generator.md` (reviewer defers to CLAUDE.md for the arg-shape *contract*, though Check 4 does state shapes inline as counter-examples — so treat reviewer as a fifth, unguarded mirror). **The CLAUDE.md <-> planner.md pair is now guarded by doctor Check 9bb**, which compares shape EXPRESSIONS only (trailing prose deliberately differs and is not compared). generator.md's Oracle->expect mapping and DOCUMENTATION.md's numbered table are NOT comparable with that extractor — generator states shapes as INSTANTIATED examples (`{ locator: ..., n: 3 }`), DOCUMENTATION.md as a numbered table with shortened notes — so **doctor Check 9be** guards those two on the one thing that survives every format: the set of ARGUMENT NAMES, which is precisely what a mis-compile gets wrong (`{ count }` for `{ locator, n }` → the generator reads `.n` and drops the assertion). Normalising to arg names is also what keeps it quiet: `{ cookies?, localStorage? }` and `{ cookies?: [...], localStorage?: { key: value } }` compare equal. generator legitimately pins only 13 of 16 (attribute_equals / element_state / network_response_status are grouped as "straightforward one-line expect mappings"), so absence there is silent and only a pinned shape is compared. **reviewer Check 4 remains hand-kept** — it states shapes inline as prose counter-examples, deliberately quoting WRONG shapes (`count_equals: { count: 1 }`) beside right ones, so an arg-name extractor cannot tell a counter-example from a claim without reading the sentence. Change all ENUMERATING copies in one commit. |
+| Oracle vocabulary (the 16 keys) + per-key argument shapes | `templates/CLAUDE.md` (stamped SoT). The **authoritative mirror list** is CLAUDE.md §"Test case format contract" — keys are ENUMERATED (an actual editable list) in `agents/planner.md`, `agents/generator.md`, reviewer Check 4, `scripts/oracle-keys.txt`, and `/qa:coverage`'s `KEYS_RE` grep — **those** are the sites to change in the same commit when adding/removing a key. `/qa:new-spec` and `/qa:review url=<url>` **defer** to CLAUDE.md and hold **no key list** (defer-only — nothing to edit there; F-03). The arg-shape table lives in CLAUDE.md + `planner.md`/`generator.md` (reviewer defers to CLAUDE.md for the arg-shape *contract*, though Check 4 does state shapes inline as counter-examples — so treat reviewer as a fifth, unguarded mirror). **The CLAUDE.md <-> planner.md pair is now guarded by doctor Check 9bb**, which compares shape EXPRESSIONS only (trailing prose deliberately differs and is not compared). generator.md's Oracle->expect mapping and DOCUMENTATION.md's numbered table are NOT comparable with that extractor — generator states shapes as INSTANTIATED examples (`{ locator: ..., n: 3 }`), DOCUMENTATION.md as a numbered table with shortened notes — so **`bin/qa-selfcheck` Check 9be** guards those two on the one thing that survives every format: the set of ARGUMENT NAMES, which is precisely what a mis-compile gets wrong (`{ count }` for `{ locator, n }` → the generator reads `.n` and drops the assertion). Normalising to arg names is also what keeps it quiet: `{ cookies?, localStorage? }` and `{ cookies?: [...], localStorage?: { key: value } }` compare equal. generator legitimately pins only 13 of 16 (attribute_equals / element_state / network_response_status are grouped as "straightforward one-line expect mappings"), so absence there is silent and only a pinned shape is compared. **reviewer Check 4 remains hand-kept** — it states shapes inline as prose counter-examples, deliberately quoting WRONG shapes (`count_equals: { count: 1 }`) beside right ones, so an arg-name extractor cannot tell a counter-example from a claim without reading the sentence. Change all ENUMERATING copies in one commit. |
 | Reviewer checks (the full check suite) | `agents/reviewer.md` |
 | Command catalog + workflow order | skill frontmatter under `skills/**`; `skills/help/SKILL.md` (or run `/qa:help`) |
 | Skill invocation policy (who may invoke each `/qa:*`) | The `disable-model-invocation:` / `context:` frontmatter of each `skills/*/SKILL.md`, plus §"Why the invocation policy is what it is" below for the reasoning. Every skill is one of three shapes — see that section before adding a new one. |
@@ -545,7 +545,7 @@ Every fact below has exactly one authoritative home. Do not copy them here — p
 ### Why the invocation policy is what it is
 
 Custom commands were merged into skills upstream, so `commands/x.md` and `skills/x/SKILL.md`
-both produce `/qa:x`. This plugin uses `skills/` exclusively (doctor Check 9d fails if a
+both produce `/qa:x`. This plugin uses `skills/` exclusively (`bin/qa-selfcheck` Check 9d fails if a
 `commands/` directory reappears) — the command side supports neither `context: fork` nor
 `allowed-tools` nor bundled files. Three shapes, and a new `/qa:*` must pick one deliberately:
 

@@ -161,7 +161,7 @@ Picking the right key is only half the contract. Each key's **argument sub-keys 
      templates/CLAUDE.md and FAILs on divergence (Checks 2/9b verify key PRESENCE only).
      The trailing prose is deliberately NOT compared, so rewording a note here is free.
      generator.md's Oracle→expect mapping and DOCUMENTATION.md's numbered table are now guarded
-     by Check 9be, which compares ARGUMENT NAMES (not expressions) so it reads their different
+     by `bin/qa-selfcheck` Check 9be, which compares ARGUMENT NAMES (not expressions) so it reads their different
      formats; DOCUMENTATION.md absent is a WARN, being outside the plugin dir.
      STILL UNGUARDED, edit by hand in the same commit: reviewer.md Check 4's inline shapes —
      it quotes WRONG shapes as counter-examples beside right ones, so no extractor can tell a

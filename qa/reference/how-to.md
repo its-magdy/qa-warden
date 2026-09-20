@@ -44,6 +44,20 @@ plugin can't open a `../` path outside its own directory, so read it on the repo
 a relative link — C-1.) **Plugin-only reader (no repo checkout)?** Ask `/qa:help characterization`
 (or `/qa:help <topic>`) from inside your project for the in-plugin answer — F-012.
 
+## Make sure every test got reviewed
+
+**Locally — the default, nothing to set up.** Run `/qa:review` after `/qa:gen`. On a PASS it writes
+`reports/review/<area>/<feature>.reviewed`, pinned to the hashes of that spec and test. `/qa:doctor`
+(Check 15) then flags any test with no marker, or whose spec or code changed since — so a
+forgotten review shows up the next time anyone runs doctor.
+
+**In CI — optional hardening for teams.** A local marker is written by an agent, so it catches
+*forgotten* reviews, not forged ones. If you need a gate nobody can skip, the scaffold ships
+`.github/workflows/qa-review.yml.example`: rename it, add an `ANTHROPIC_API_KEY` secret, point
+`plugin_marketplaces` at a **Git URL** of the marketplace repo (the `reviewer` ships inside the
+plugin — a runner that cannot install it has no reviewer, and a local-directory marketplace
+cannot be used from CI), then make the job a required status check.
+
 ## Run the suite nightly in CI (~$0, no AI)
 
 The scaffold ships `.github/workflows/qa-nightly.yml.example`. Arming it is a **deliberate act**:

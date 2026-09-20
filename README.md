@@ -72,7 +72,22 @@ qa/                               ← the plugin
 ├── templates/ the runtime substrate stamped into each project by /qa:init
 │              (incl. page-objects/ reuse layer + fixtures/test.ts barrel)
 └── bin/qa-scaffold  deterministic substrate installer
+    bin/qa-selfcheck the plugin's own consistency checks — NOT shipped to consumers
+    bin/qa-hooktest  regression tests for the two hooks  — NOT shipped to consumers
 ```
+
+### Before you commit a plugin change
+
+```bash
+qa/bin/qa-selfcheck              # 7 checks over agents/ skills/ hooks/ reference/ — must end ✅
+qa/bin/qa-hooktest               # 20 real payloads through the two PreToolUse hooks — must end ✅
+claude plugin validate ./qa      # mandatory after ANY frontmatter edit
+```
+
+`qa-selfcheck` holds the checks that read only plugin source (oracle-key mirrors, `maxTurns`
+ordering, the `/qa:help` catalog, hook registration, `/qa:explore` invocation shapes). They used
+to run inside every consumer's `/qa:doctor`, where nobody could act on them. Everything that
+*compares a project with the plugin* is still in `templates/scripts/doctor.sh`.
 
 ### What the plugin carries vs. what `/qa:init` stamps
 

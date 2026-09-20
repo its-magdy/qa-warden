@@ -343,7 +343,7 @@ does the work; "—" means it runs inline in the main session.
 
 Every one of these is a **skill** at `qa/skills/<name>/SKILL.md` — upstream merged custom
 slash commands into skills, and this plugin uses the skill layout exclusively (a `commands/`
-directory reappearing is a `/qa:doctor` failure, Check 9d). You type them exactly as before;
+directory reappearing fails the toolkit's own `bin/qa-selfcheck`, Check 9d). You type them exactly as before;
 nothing about the `/qa:` names changed.
 
 What *is* new is that each skill declares **who may invoke it** — see
@@ -523,7 +523,7 @@ directly slash-callable.
 | **playwright-cli** | Token-predictable browser driving (`npx playwright-cli`) — the engine under the healer, generator, and suite runs. Adds the CLI-vs-MCP decision rules + session hygiene. | auto (healer, generator, runs) | no |
 | **test-data-seed** | Worker-scoped, API-seeded, teardown-by-tag fixtures that stay parallel-safe at 10+ workers (keyed on `workerInfo.parallelIndex`), plus a pluggable seed adapter. | auto (generator authoring) | no |
 | **axe-a11y** | Drop-in `@axe-core/playwright` WCAG scanning per UI **state** (not per page), plus an adversarial-pair pattern to prove the detector is live. | auto; `/qa:review url=` | no |
-| **visual-regression** | `toHaveScreenshot()` layout/CSS/typography oracle with mandatory stable-state waits (`document.fonts.ready`, `reducedMotion`, masking). | auto (spec authoring) | no |
+| **visual-regression** | `toHaveScreenshot()` layout/CSS/typography oracle with mandatory stable-state waits (`document.fonts.ready`, `reducedMotion`, masking). | `/qa:review url=`; otherwise on request in the main session. Not reachable from a spec — no oracle key requests a screenshot. | no |
 | **metamorphic-relations** | Generate 2–3 invariant-preserving "twin" specs (`@metamorphic`+`@regression`, never `@smoke`) that catch spec drift plain assertions miss. **Authored by the generator**; the reviewer only verifies they exist and agree. | generator; reviewer; `/qa:review url=`; human | **yes** |
 
 ---
@@ -768,6 +768,7 @@ copies every file), so new templates never strand.
 | **`fixtures/`** | `test.ts` (the `test`/`expect` barrel; the generator adds one fixture per promoted page object), plus `schemas/` + `factories/` `.ts.example` illustrations (real schemas/factories are generated **on demand, grounded in the real app**, on first `factory:` use). |
 | **`specs/_context/_templates/`** | `app.context.md` (hot-tier skeleton), `area.md` (specialist skeleton), `basis.md` (the Example-Map test-basis template), `cases.md` (the SFDIPOT candidate-case checklist template). |
 | **`.github/workflows/qa-nightly.yml.example`** | The **disarmed** nightly CI workflow — rename to `qa-nightly.yml` to arm it ([§16.1](#161-nightly-in-ci)). |
+| **`.github/workflows/qa-review.yml.example`** | **Optional** — the local gate is `/qa:review` + doctor Check 15. The **disarmed** PR workflow that runs the `reviewer` on every PR touching `tests/`/`specs/`/`page-objects/`/`fixtures/` — rename to `qa-review.yml`, point `plugin_marketplaces` at a Git URL of the marketplace (the runner must install the plugin or the `reviewer` subagent does not exist there), then make the job a **required status check**. |
 | **runtime dirs** | `artifacts/ bugs/ fixtures/ page-objects/ reports/ specs/_context/ steps/ tests/` |
 
 **Pinned dependencies** (`package.json`, exact at time of writing):

@@ -30,7 +30,7 @@ layer where a mistyped command can still be corrected for free:
 Why a STOP beats a best guess: hot mode's last step stamps `last_verified: <today>` on
 `app.context.md`, and reviewer Check 7 / doctor Check 5b read that date as "verified accurate as
 of". So a wrong-mode run does not merely do the wrong work — it marks context fresh that nobody
-verified, and reports the area the caller actually asked about as handled. (`/qa:doctor` Check 9j
+verified, and reports the area the caller actually asked about as handled. (`bin/qa-selfcheck` Check 9j
 keeps this repo's own printed invocations well-formed for the same reason.)
 
 **Safety rail (CLAUDE.md §Environment):** run `bash scripts/prod-guard.sh` first — STOP and ask the user to confirm in-chat if it exits non-zero.

@@ -7,7 +7,7 @@ first 5k after a compaction, silently truncating everything below. The behaviora
 context; THIS file is read on demand for catalog / workflow-order / "what does X do" questions.
 
 **Maintenance:** the `/qa:<name>` rows below must stay in sync with the directories under
-`skills/`. `/qa:doctor` Check 9e enforces exactly that — add a row when you add a skill.
+`skills/`. `bin/qa-selfcheck` Check 9e enforces exactly that — add a row when you add a skill.
 
 ## The workflow (happy path)
 
@@ -111,7 +111,7 @@ recommend a command rather than run it. The read-only ones (`help` `review`
 | **playwright-cli** | Deterministic, token-predictable browser driving (the engine under healer/generator/suite runs). | auto (healer, generator, suite runs) | no |
 | **test-data-seed** | Parallel-safe, API-seeded, teardown-by-tag fixtures (survives 10+ workers). | auto (generator authoring) | no |
 | **axe-a11y** | WCAG accessibility assertions per UI state. Catches ~30–40% by success-criterion (~57% by issue volume); rest needs a human. | auto; `/qa:review url=` | no |
-| **visual-regression** | `toHaveScreenshot()` layout/CSS oracle that text assertions miss. | auto (spec authoring) | no |
+| **visual-regression** | `toHaveScreenshot()` layout/CSS oracle that text assertions miss. | `/qa:review url=`; otherwise only when you ask for a screenshot check in the main session. **Not reachable from a spec** — no oracle key requests a screenshot, so planner/generator/verifier never invoke it. | no |
 | **metamorphic-relations** | Generate 2–3 invariant-preserving "twin" specs that catch spec drift plain assertions can't. **Authored by the verifier** post-green (it has Write, and did not write the parent); reviewer Check 6 only *verifies* they exist and agree. Twins are tagged `@metamorphic` + `@regression`, never `@smoke`. | verifier (post-green, authors); reviewer (verifies, Check 6); `/qa:review url=`; human | **yes** |
 
 ## Mental model (the load-bearing "why"s)

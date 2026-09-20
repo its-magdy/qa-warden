@@ -121,11 +121,18 @@ test_data:
   teardown: "<none | by-tag / reset endpoint / per-worker cleanup>"
 
 # the lenses LLMs silently drop — null = explicitly N/A (logged, not forgotten)
+# BUILDABLE HERE: a11y only (oracle key `a11y_violations_below`). The other three have NO oracle
+# key, so a case ideated from them cannot become a test in this suite: i18n is out of scope
+# (CLAUDE.md "Honest limit — single-locale oracles"), and nothing drives a second tab/context or
+# measures a timing budget. Declare them anyway if they matter — the declaration puts the risk on
+# the record and /qa:ideate will list the cases — but expect to WAIVE those rows at /qa:approve
+# (⊘ out-of-vocab: a real case the closed vocabulary cannot express) and cover them outside this
+# suite. Approving one instead creates a standing reviewer Check 14 WARN nothing here can clear.
 nonfunctional:
   a11y: <required|null>
-  i18n: [<locales>]            # or null; RTL locales create real edge cases
-  concurrency: "<scenario>"    # or null
-  performance: <expectation|null>
+  i18n: [<locales>]            # or null; RTL locales create real edge cases   (not buildable here)
+  concurrency: "<scenario>"    # or null                                        (not buildable here)
+  performance: <expectation|null>                                              # (not buildable here)
 
 risks: ["<known risk / past P1 / chronic area>"]   # → RCRCRC weighting
 priority: P2                   # P1|P2|P3 — feature criticality, default P2. P1/critical drives the smoke-lane rule (planner auto-tags the governed happy-path @smoke) and the P1 must_fail_when floor (see planner.md).

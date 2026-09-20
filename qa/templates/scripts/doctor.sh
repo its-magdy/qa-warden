@@ -55,7 +55,7 @@ KEYS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' scripts/oracle-keys.txt 2>/dev/n
 if [ -z "$KEYS" ]; then
   echo "❌ scripts/oracle-keys.txt missing or empty — the oracle vocabulary is UNVERIFIED (run /qa:init --resync)"; fail=$((fail+1))
 fi
-# missing_keys <file> — prints the keys ABSENT from <file>, one per line. Check 9b below runs the
+# missing_keys <file> — prints the keys ABSENT from <file>, one per line. `bin/qa-selfcheck` Check 9b (plugin-side) runs the
 # same scan over four plugin files; one helper instead of two copies of the loop, and one pass over
 # each file instead of 16 (the per-key `grep -q` form re-read every file end to end, 16× per file).
 # `grep -oFf` lists the keys the file DOES contain; `grep -vxFf` subtracts them from the full set.
@@ -69,7 +69,7 @@ while read -r k; do
   echo "❌ oracle key '$k' missing from CLAUDE.md"; fail=$((fail+1))
 done < <(missing_keys CLAUDE.md)
 # (Reviewer/planner/generator live in the plugin, not the project — the project's CLAUDE.md
-#  is the stamped SoT. Check 9b below greps these same 16 keys against the plugin's agents when
+#  is the stamped SoT. `bin/qa-selfcheck` Check 9b greps these same 16 keys against the plugin's agents when
 #  the templates dir resolves, so post-upgrade plugin-side drift is caught too, not just local edits.)
 
 # --- shared tree walks (Checks 3/13/14/15/15b/16/17/18) ----------------------------------
@@ -607,31 +607,14 @@ if [ -n "$TMPL" ] && [ -f "$TMPL/CLAUDE.md" ] && [ -f CLAUDE.md ]; then
   fi
 fi
 
-# 9b. Plugin-side vocab drift (F-09) — check 2 greps the 16 keys against the PROJECT's CLAUDE.md
-#     ONLY, but the planner/generator/reviewer that actually COMPILE specs live in the plugin, and
-#     that is exactly where drift lands after a plugin upgrade (a project CLAUDE.md can be in sync
-#     while the shipped agents diverged). When $TMPL resolved (check 9), also grep the 16 keys
-#     against the plugin's agents so a post-upgrade divergence is caught, not just a local edit.
-if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
-  # /qa:coverage's KEYS_RE alternation is the FOURTH enumerating mirror (CLAUDE.md §"Test case
-  # format contract" and reference/DESIGN.md both name it as a same-commit edit site) — it was
-  # the one mirror nothing policed, so a stale copy there silently UNDER-COUNTS assertions in
-  # coverage dims 1 and 2 with no signal anywhere.
-  for af in agents/planner.md agents/generator.md agents/reviewer.md skills/coverage/scripts/coverage.sh; do
-    apath="$TMPL/../$af"
-    # A MISSING mirror must never read as "no drift". This check exists for the post-upgrade
-    # case, and a plugin layout move (e.g. the commands/ -> skills/ migration) is exactly how a
-    # mirror path goes stale — a silent `continue` would report green for an UNCHECKED mirror.
-    if [ ! -f "$apath" ]; then
-      echo "⚠️  vocab-drift mirror '$af' not found at $apath — the plugin layout moved; oracle-key drift in that mirror is UNVERIFIED (run /qa:init --resync to refresh this script)"
-      warn=$((warn+1)); continue
-    fi
-    while read -r k; do
-      [ -n "$k" ] || continue
-      echo "❌ oracle key '$k' missing from plugin $af — post-upgrade vocab drift (reviewer would FAIL specs its own planner authors)"; fail=$((fail+1))
-    done < <(missing_keys "$apath")
-  done
-fi
+# 9b / 9bc / 9be / 9d / 9e / 9h / 9j — MOVED to the plugin's own `bin/qa-selfcheck`, NOT shipped here.
+#     Those seven read ONLY the plugin's source (agents/, skills/, hooks/, reference/) and nothing
+#     in this project, so there was never anything a consumer could fix when one fired: they are
+#     the toolkit's unit tests, and they belong where the toolkit is built. They also made a
+#     project whose substrate is NEWER than a teammate's installed plugin print a wall of ❌ that
+#     all meant "update your plugin". The checks that COMPARE this project with the plugin
+#     (9, 9bb, 9bd, 9c, 9f, 9g, 9i, 9k, 20) stay — that comparison can only be made from here.
+#     The ids are retired, never reused, so a citation of "Check 9bc" stays unambiguous.
 
 # 9bb. Oracle ARGUMENT-SHAPE drift. Checks 2 and 9b compare key PRESENCE only — `missing_keys`
 #      is set membership, no argument parsing anywhere — so a mirror can carry all 16 keys while
@@ -705,66 +688,6 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
       echo "❌ $(basename "$f"): invariant_holds_when: is not followed by a '- invariant:' list item — the block shape did not parse; equality-domain drift is UNCHECKED"; fail=$((fail+1))
     fi
   done
-fi
-
-# 9bc. Turn-budget ORDERING — the frontmatter `maxTurns` ceiling MUST stay strictly above the
-#      agent's own prose turn budget. The two are NOT interchangeable: the prose budget ends in a
-#      BEHAVIOR (healer files a bug and reverts the patch; reviewer emits PARTIAL REVIEW + FAIL;
-#      exploration/ideation write an incompleteness banner), whereas maxTurns is a harness
-#      hard-stop that returns PARTIAL output and runs NO fallback at all. Pinned AT or BELOW the
-#      prose number, the ceiling PREEMPTS the fail-safe — trading "file a bug and revert" for a
-#      half-applied patch and no bug, which is the silent-failure class this toolkit exists to
-#      prevent. Nothing else compares these two numbers: they live in different files' different
-#      halves (YAML frontmatter vs §"Budget / escalation" prose), so a bump to either silently
-#      inverts the ordering with every other check green. reference/DESIGN.md §"Turn budgets are
-#      a fail-safe" carries the why.
-#      NOTE both prose spellings are matched — `**Turn budget: N` and healer's `**Hard budget: N
-#      turns` — and the FIRST match wins (reviewer's §Inputs prose says "the 15-turn budget" in
-#      passing, which must not be mistaken for the declaration).
-#      CAVEAT — this check verifies the ORDERING of two numbers; it does NOT verify that
-#      `maxTurns` itself actually fires. anthropics/claude-code#41143 reports maxTurns going
-#      unenforced (an agent pinned at 10 ran 70+ turns unimpeded), open and closed-not-planned
-#      as of this writing. If that holds on the CLI version this toolkit's users run, the harness
-#      ceiling is best-effort, NOT a guaranteed backstop — the agent's own prose-budget
-#      self-policing is the load-bearing fail-safe in practice, not maxTurns. Re-verify empirically
-#      (drive an agent past its stated budget and confirm partial-output/stop) before treating a
-#      passing 9bc as proof the runaway case is actually caught.
-if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
-  agents_dir="$TMPL/../agents"
-  if [ ! -d "$agents_dir" ]; then
-    echo "⚠️  plugin agents/ not found at $agents_dir — turn-budget ordering is UNVERIFIED (run /qa:init --resync)"; warn=$((warn+1))
-  else
-    tb_seen=0
-    for af in "$agents_dir"/*.md; do
-      [ -f "$af" ] || continue
-      aname=$(basename "$af" .md)
-      # Frontmatter ceiling: first `maxTurns:` at column 0 (comment lines start with #).
-      ceil=$(sed -nE 's/^maxTurns:[[:space:]]*([0-9]+).*/\1/p' "$af" | head -1)
-      # Prose budget: first **Turn budget: N or **Hard budget: N.
-      prose=$(sed -nE 's/.*\*\*(Turn|Hard) budget:[[:space:]]*([0-9]+).*/\2/p' "$af" | head -1)
-      if [ -z "$prose" ]; then
-        echo "❌ $aname: no prose turn budget found (expected '**Turn budget: N' or '**Hard budget: N turns') — the ordering invariant is UNCHECKED for this agent, not satisfied"; fail=$((fail+1)); continue
-      fi
-      if [ -z "$ceil" ]; then
-        echo "❌ $aname: prose budget is $prose but NO maxTurns ceiling is pinned — a runaway is unbounded"; fail=$((fail+1)); continue
-      fi
-      tb_seen=$((tb_seen+1))
-      if [ "$ceil" -le "$prose" ]; then
-        echo "❌ $aname: maxTurns=$ceil is NOT above the prose budget of $prose — the harness hard-stop PREEMPTS the agent's fallback (no bug filed, no verdict emitted, PARTIAL output)"; fail=$((fail+1))
-      elif [ "$((ceil - prose))" -lt 3 ]; then
-        echo "⚠️  $aname: maxTurns=$ceil leaves only $((ceil - prose)) turn(s) above the prose budget of $prose — the fallback (write/return/revert) may not fit before the hard-stop"; warn=$((warn+1))
-      fi
-    done
-    # Cardinality self-check: this checker is only as good as the set it walked. A layout move
-    # that leaves agents/ present but empty (or renames the files) would otherwise report green
-    # having compared nothing — the oracle-keys.txt doctrine applied to a directory walk.
-    n_agents=$(find "$agents_dir" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
-    if [ "$n_agents" -eq 0 ]; then
-      echo "❌ plugin agents/ contains no .md files — turn-budget ordering is UNCHECKED"; fail=$((fail+1))
-    elif [ "$tb_seen" -ne "$n_agents" ]; then
-      echo "⚠️  turn-budget ordering verified for $tb_seen of $n_agents agent file(s) — the rest were reported above"; warn=$((warn+1))
-    fi
-  fi
 fi
 
 # 9bd. Prod-guard RAIL coverage. Eight skills carry a prod-guard rail in prose, and on the
@@ -876,101 +799,6 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   fi
 fi
 
-# 9be. Oracle arg-shape drift in the REMAINING mirrors. Check 9bb compares the two markdown-table
-#      mirrors (templates/CLAUDE.md <-> agents/planner.md) by BYTE-comparing the shape expression.
-#      That works only because those two tables share a format. The other mirrors do not:
-#        - agents/generator.md states shapes as INSTANTIATED examples (`{ locator: ..., n: 3 }`)
-#        - DOCUMENTATION.md uses a numbered table with deliberately SHORTENED notes
-#      so a byte-compare is impossible there and 9bb's extractor cannot read them at all.
-#      What IS comparable across every format is the set of ARGUMENT NAMES — and that is exactly
-#      the failure mode: `{ count }` where the canonical shape is `{ locator, n }` makes the
-#      generator (which reads `.n`) silently DROP the assertion. So this check normalises each
-#      shape to a sorted arg-name list (`locator,n`) and compares those. A scalar shape
-#      ("<string>", <bool>) normalises to `-`.
-#      QUIET BY CONSTRUCTION: `{ cookies?, localStorage? }` and
-#      `{ cookies?: [...], localStorage?: { key: value } }` both normalise to `cookies,localStorage`,
-#      so the two files can keep their different note lengths without ever firing this.
-#      generator.md pins shapes for only 13 of 16 keys — attribute_equals / element_state /
-#      network_response_status are grouped at "straightforward one-line expect mappings" with no
-#      shape claim — so ABSENCE there is legitimate and silent; only a PINNED shape is compared.
-#      DOCUMENTATION.md lives OUTSIDE the plugin dir and is unreachable from a scaffolded project,
-#      so its absence is a WARN, never a FAIL.
-if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
-  # arg_names normaliser, shared by every mirror below. Reads "key<TAB>shape" and prints
-  # "key<TAB>sorted,arg,names". Brackets/braces/quoted alternations are masked first so a
-  # nested [min, max] or 'confirm'|'alert' cannot be mistaken for an argument separator.
-  norm_prog='function arg_names(s,   t,i,n,parts,out,arr,k,p,res,v,j) {
-    gsub(/^[ \t]+|[ \t]+$/, "", s)
-    if (s !~ /^\{/) return "-"
-    t = s; sub(/^\{/, "", t); sub(/\}[ \t]*$/, "", t)
-    while (match(t, /\[[^]]*\]/)) t = substr(t,1,RSTART-1) "X" substr(t,RSTART+RLENGTH)
-    while (match(t, /\{[^{}]*\}/)) t = substr(t,1,RSTART-1) "X" substr(t,RSTART+RLENGTH)
-    while (match(t, /'"'"'[^'"'"']*'"'"'/)) t = substr(t,1,RSTART-1) "X" substr(t,RSTART+RLENGTH)
-    n = split(t, parts, ",")
-    for (i=1;i<=n;i++) { p=parts[i]; sub(/:.*$/,"",p); gsub(/[ \t?}]/,"",p); gsub(/\|.*$/,"",p); if(p!="") out[p]=1 }
-    k=0; for (p in out) arr[++k]=p
-    for (i=2;i<=k;i++){ v=arr[i]; j=i-1; while(j>0 && arr[j]>v){arr[j+1]=arr[j];j--} arr[j+1]=v }
-    res=""; for (i=1;i<=k;i++) res = res (i>1?",":"") arr[i]
-    return res==""?"-":res
-  }
-  BEGIN{FS="\t"} { print $1 "\t" arg_names($2) }'
-  sot_md="$TMPL/CLAUDE.md"
-  if [ ! -f "$sot_md" ]; then
-    echo "⚠️  $sot_md not found — remaining-mirror arg-shape drift is UNVERIFIED (run /qa:init --resync)"; warn=$((warn+1))
-  else
-    sot_norm=$(sed -nE 's/^\| `([a-z0-9_]+)` \| `([^`]*)`.*/\1\t\2/p' "$sot_md" | awk "$norm_prog" | sort)
-    if [ -z "$sot_norm" ]; then
-      echo "❌ the arg-shape SoT table in templates/CLAUDE.md did not parse — remaining-mirror drift is UNCHECKED"; fail=$((fail+1))
-    else
-      # mirror <label> <file> <sed-extractor> <mode: full|partial> [min-rows]
-      # min-rows is a cardinality FLOOR for a `partial` mirror — a `full` mirror already gets
-      # per-key cardinality below; a `partial` one only compares whichever keys it happens to
-      # pin, so if its own bullet format silently breaks for JUST ONE key (rather than all),
-      # that key drops out of $mnorm and absence there reads as legitimate, unchecked partial
-      # coverage — the same class of bug 9bb's charclass miss was (13/16 checked, reporting
-      # green). min-rows makes a below-floor row count a FAIL instead of silent.
-      check_mirror() {
-        ml="$1"; mf="$2"; mx="$3"; mmode="$4"; mmin="${5:-0}"
-        if [ ! -f "$mf" ]; then
-          echo "⚠️  arg-shape mirror '$ml' not found at $mf — its drift is UNVERIFIED"; warn=$((warn+1)); return
-        fi
-        mnorm=$(sed -nE "$mx" "$mf" | awk "$norm_prog" | sort -u)
-        if [ -z "$mnorm" ]; then
-          echo "❌ arg-shape mirror '$ml' produced no rows — its format changed and drift is UNCHECKED, not absent"; fail=$((fail+1)); return
-        fi
-        mmatched=0
-        while IFS="$(printf '\t')" read -r k shape; do
-          [ -n "$k" ] || continue
-          # Only compare keys that are in the closed vocabulary — the extractors also match
-          # non-oracle bullets (e.g. `must_fail_when`), which are not shape claims.
-          printf '%s\n' "$KEYS" | grep -qx "$k" || continue
-          mmatched=$((mmatched+1))
-          sot_shape=$(printf '%s\n' "$sot_norm" | awk -F'\t' -v k="$k" '$1==k{print $2; exit}')
-          if [ -z "$sot_shape" ]; then
-            echo "❌ arg-shape mirror '$ml' pins key '$k' which is ABSENT from the templates/CLAUDE.md SoT table"; fail=$((fail+1))
-          elif [ "$shape" != "$sot_shape" ]; then
-            echo "❌ arg-shape drift for '$k' in $ml: SoT args are [$sot_shape] but this mirror pins [$shape] — a wrong-named arg drops the assertion silently"; fail=$((fail+1))
-          fi
-        done < <(printf '%s\n' "$mnorm")
-        # A `full` mirror claims to pin every key; a `partial` one legitimately pins a subset.
-        if [ "$mmode" = "full" ]; then
-          while IFS="$(printf '\t')" read -r k _; do
-            [ -n "$k" ] || continue
-            printf '%s\n' "$mnorm" | awk -F'\t' -v k="$k" '$1==k{f=1} END{exit !f}' || {
-              echo "❌ arg-shape mirror '$ml' is MISSING key '$k' — it documents the vocabulary as complete"; fail=$((fail+1)); }
-          done < <(printf '%s\n' "$sot_norm")
-        elif [ "$mmin" -gt 0 ] && [ "$mmatched" -lt "$mmin" ]; then
-          echo "❌ arg-shape mirror '$ml' pins only $mmatched oracle keys, below its expected floor of $mmin — a key may have silently dropped out of its bullet format rather than being a deliberate omission"; fail=$((fail+1))
-        fi
-      }
-      check_mirror "agents/generator.md" "$TMPL/../agents/generator.md" \
-        's/^- `([a-z0-9_]+): ([^`]*)`.*/\1\t\2/p' partial 13
-      check_mirror "DOCUMENTATION.md" "$TMPL/../../DOCUMENTATION.md" \
-        's/^\| *[0-9]+ *\| `([a-z0-9_]+)` \| `([^`]*)`.*/\1\t\2/p' full
-    fi
-  fi
-fi
-
 # 9c. RETIRED permission rules still present in .claude/settings.json — the settings-side
 #     complement to Check 9. settings.json is EXCLUDED from Check 9's byte-compare and from
 #     qa-scaffold's --resync (shared ownership: users add their own rules), AND the scaffold's
@@ -1006,99 +834,6 @@ Bash(sed *e *)
 Bash(sed *e;*)
 Bash(printenv)
 RETIRED
-fi
-
-# 9d. Plugin layout regression — a `commands/` directory has reappeared in the plugin.
-#     Custom commands were MERGED INTO SKILLS upstream (code.claude.com/docs/en/skills): a
-#     `commands/x.md` and a `skills/x/SKILL.md` both produce `/qa:x`, so the two layouts coexist
-#     silently and nothing upstream complains. This toolkit migrated wholesale to `skills/` so it
-#     can use `context: fork` (keeps a heavy read-only pass out of the caller's context),
-#     `allowed-tools` (exact-match Bash pre-approval via ${CLAUDE_SKILL_DIR}), and bundled
-#     `scripts/`+`reference/` — none of which exist on the command side. The failure mode this
-#     check exists for is a SPLIT surface: someone adds the next `/qa:*` in the old shape, both
-#     layouts live on, and the fork/allowed-tools guarantees quietly stop being universal.
-#     Same-name collisions are worse still (two definitions of one command name, resolution
-#     order unstated here). Requires $TMPL (the plugin-side checks) to have resolved.
-if [ -n "$TMPL" ] && [ -d "$TMPL/../commands" ]; then
-  ncmd=$(find "$TMPL/../commands" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
-  if [ "${ncmd:-0}" -eq 0 ]; then
-    # An EMPTY commands/ defines no command, so it cannot split the surface — warn, don't red a
-    # user's CI over a stray directory they did not create and cannot fix (this is plugin-authoring
-    # state, not project state).
-    echo "⚠️  plugin has an empty commands/ directory — harmless today, but it is where the old layout
-   creeps back in. Delete it; every /qa:* lives at skills/<name>/SKILL.md."
-    warn=$((warn+1))
-  else
-  echo "❌ plugin has a commands/ directory again (${ncmd} .md) — every /qa:* must live at skills/<name>/SKILL.md. Move each file to skills/<name>/SKILL.md and delete commands/ (a command and a skill of the same name both define /qa:<name>, so a split surface is invisible until behavior diverges)."
-  fail=$((fail+1))
-  for c in "$TMPL/../commands"/*.md; do
-    [ -f "$c" ] || continue
-    cn=$(basename "$c" .md)
-    [ -f "$TMPL/../skills/$cn/SKILL.md" ] && { echo "   ↳ NAME COLLISION: commands/$cn.md AND skills/$cn/SKILL.md both define /qa:$cn"; }
-  done
-  fi
-fi
-
-# 9e. /qa:help catalog vs the actual skill set. The help skill's catalog lives in
-#     reference/knowledge-map.md (split out because SKILL.md exceeded the ~5k-token ceiling past
-#     which only the first 5k is re-attached after a compaction). A hand-kept catalog in a
-#     SEPARATE file is exactly the drift shape this toolkit single-sources away — but generating
-#     it from frontmatter was rejected (the rows carry a "Delegates to" column, workflow order,
-#     and per-command detail that `description:` does not hold). So police the row SET instead of
-#     generating it: every user-invocable skill must have a catalog row, and every row must name a
-#     real skill. That catches the only failure that matters — a skill added or retired without a
-#     catalog row, leaving /qa:help to answer from a stale map or invent a command that never existed.
-if [ -n "$TMPL" ] && [ -f "$TMPL/../reference/knowledge-map.md" ]; then
-  # Two catalog row shapes, both legitimate: the slash-command table uses `| \`/qa:<name>\` |`
-  # — sometimes WITH an argument (`| \`/qa:run mode=smoke\` |`), so the name match must NOT
-  # anchor on a closing backtick or every argumented command reads as an uncatalogued skill.
-  # The capability-skill table uses `| **<name>** |`. The two shapes are NOT interchangeable:
-  # the bare shape is what a `user-invocable: false` capability skill gets (it has no command to
-  # print), and the slash shape is what a real command needs. See the `missing` arm below.
-  kmslashrows=$(grep -oE '^\| `/qa:[a-z0-9-]+' "$TMPL/../reference/knowledge-map.md" 2>/dev/null | sed 's/.*\/qa://; s/`//' | sort -u)
-  # A skill is user-invocable unless it says otherwise; only those need a catalog row.
-  kmskills=""
-  for d in "$TMPL"/../skills/*/; do
-    sn=$(basename "$d")
-    grep -qE '^user-invocable:[[:space:]]*(false|no|off|0)[[:space:]]*$' "$d/SKILL.md" 2>/dev/null && continue
-    kmskills="$kmskills$sn
-"
-  done
-  kmskills=$(printf '%s' "$kmskills" | sort -u)
-  # A USER-INVOCABLE skill needs the SLASH row specifically, not just any row. Accepting either
-  # shape here (the original behaviour) let a real command hide behind a bare `| **name** |` row in
-  # the capability-skills table and read as catalogued — which is exactly how
-  # `metamorphic-relations` sat uncatalogued as a command while this check stayed green. The
-  # either-shape leniency exists for CAPABILITY skills (user-invocable: false), and those are
-  # already excluded from $kmskills above, so it buys nothing here. What /qa:help owes a user is
-  # the invocation; a row that never shows `/qa:<name>` cannot supply it.
-  missing=$(comm -23 <(printf '%s\n' "$kmskills") <(printf '%s\n' "$kmslashrows") | grep . || true)
-  # The PHANTOM arm must use only the SLASH-form rows and compare against ALL skill dirs (not just
-  # the user-invocable ones): the bare `| **name** |` shape is shared with the AGENTS table, and a
-  # non-invocable capability skill legitimately has a row while being absent from $kmskills — both
-  # would false-FAIL as "phantom" under the union set.
-  kmslash=$(grep -oE '^\| `/qa:[a-z0-9-]+' "$TMPL/../reference/knowledge-map.md" 2>/dev/null | sed 's/.*\/qa://; s/`//' | sort -u)
-  allskills=$(for d in "$TMPL"/../skills/*/; do basename "$d"; done | sort -u)
-  phantom=$(comm -13 <(printf '%s\n' "$allskills") <(printf '%s\n' "$kmslash") | grep . || true)
-  # KNOWN GAP (both arms): skills and agents share this one namespace. A SKILL whose name equals
-  # an AGENT's is treated as catalogued by the agents-table row (the `missing` arm unions both row
-  # shapes), and symmetrically a retired capability skill named after an agent keeps a live-looking
-  # row here. Neither is reachable with today's names; documented so a future rename is not assumed
-  # to be free.
-  # Bare-form phantom arm. The slash arm above is blind to CAPABILITY skills (user-invocable:
-  # false): they have no `/qa:` row, so retiring one leaves its `| **name** |` row behind with
-  # doctor staying green over a catalog entry that points at nothing. Diff the bare rows too —
-  # but subtract the agent names first, since the AGENTS table shares this exact row shape and
-  # would otherwise false-FAIL as phantom (the reason the slash arm was narrowed in the first
-  # place). Skills and agents share a namespace here only by convention; a name in neither set
-  # is a genuinely dangling row.
-  kmbare=$(grep -oE '^\| \*\*[a-z0-9-]+\*\*' "$TMPL/../reference/knowledge-map.md" 2>/dev/null | sed 's/^| \*\*//; s/\*\*$//' | sort -u)
-  kmagents=$(for a in "$TMPL"/../agents/*.md; do [ -f "$a" ] && basename "$a" .md; done | sort -u)
-  kmknown=$(printf '%s\n%s\n' "$allskills" "$kmagents" | sort -u | grep . || true)
-  barephantom=$(comm -13 <(printf '%s\n' "$kmknown") <(printf '%s\n' "$kmbare") | grep . || true)
-  [ -n "$missing" ] && { echo "⚠️  /qa:help catalog is missing a row for: $(echo "$missing" | tr '\n' ' ')— reference/knowledge-map.md must list every user-invocable skill, or /qa:help answers from a stale map"; warn=$((warn+1)); }
-  [ -n "$barephantom" ] && { echo "⚠️  /qa:help catalog lists a capability skill that does not exist: $(echo "$barephantom" | tr '\n' ' ')— reference/knowledge-map.md names a skill/agent with no directory or agent file (retired without removing its row)"; warn=$((warn+1)); }
-  [ -n "$phantom" ] && { echo "⚠️  /qa:help catalog lists a command with no skill: $(echo "$phantom" | tr '\n' ' ')— reference/knowledge-map.md names a /qa:* that does not exist (retired without removing its row)"; warn=$((warn+1)); }
 fi
 
 # 9f. Healer MCP tool-grant ↔ settings.json permission mirror. `agents/healer.md`'s `tools:`
@@ -1232,64 +967,6 @@ if [ -n "$TMPL" ] && [ -d "$TMPL/.." ]; then
   fi
 fi
 
-# 9h. The hooks/ enforcement layer — provisioning, scope ownership, and the stranded-deny case.
-#     This layer is the ONLY part of the toolkit that can block a write in real time, and all
-#     three of its failure modes are silent from inside a session:
-#     Arm 1 (PROVISIONING — the session-7 lesson). A hook whose `command` does not resolve, or is
-#       not executable, does not fail loudly: Claude Code records a hook error in the debug log and
-#       the write PROCEEDS. So the gate reads as "shipped" in hooks.json while enforcing nothing —
-#       the audit's own prose-vs-enforcement gap, one directory deeper. Checked by resolving every
-#       command path, not by reading hooks.json's shape.
-#     Arm 2 (SCOPE OWNERSHIP, the 9g arm-3 shape). assertion-contract.sh fires only for the agents
-#       named in its `case` — today healer and verifier, the two whose files forbid touching an
-#       assertion. Rename or retire one of those agents and the hook stays syntactically fine while
-#       scoping to nobody: the gate detaches from the gated thing. Compares the scope list against
-#       the agents/ directory, never against wording, so a reword stays green.
-#     Arm 3 (STRANDED DENY, the 9c shape). spec-lint.sh denies on reviewer Checks 1/5/9/11. If the
-#       reviewer ever retires or renumbers one, the hook keeps denying a construct nothing else
-#       objects to and there is NO path to a green write except QA_HOOKS_OFF=1 — a retracted rule
-#       that strands, exactly what 9c catches for settings.json's additive merge. Keyed on the
-#       check NUMBER (a symbol), not the check's prose.
-if [ -n "$TMPL" ] && [ -d "$TMPL/../hooks" ]; then
-  HK="$TMPL/../hooks"
-  if [ ! -f "$HK/hooks.json" ]; then
-    echo "❌ hooks/hooks.json is MISSING — the real-time enforcement layer is not registered; the reviewer is the only gate again (see hooks/README.md)"; fail=$((fail+1))
-  elif command -v jq >/dev/null && ! jq -e . "$HK/hooks.json" >/dev/null 2>&1; then
-    echo "❌ hooks/hooks.json is not valid JSON — Claude Code skips the whole file, so BOTH hooks silently never run"; fail=$((fail+1))
-  elif command -v jq >/dev/null; then
-    # Arm 1: every registered command must resolve to an executable file.
-    while read -r cmd; do
-      [ -n "$cmd" ] || continue
-      # ${CLAUDE_PLUGIN_ROOT} is substituted by the harness; resolve it here the same way.
-      hp=${cmd//\$\{CLAUDE_PLUGIN_ROOT\}/$TMPL/..}
-      if [ ! -f "$hp" ]; then
-        echo "❌ hooks.json registers '$cmd' but no such file — a dangling hook command does NOT block; the harness logs an error and the write proceeds, so the gate reads as shipped while enforcing nothing"; fail=$((fail+1))
-      elif [ ! -x "$hp" ]; then
-        echo "❌ hook script $cmd is not executable — hooks.json uses the exec form (args: []), which spawns it directly; a non-executable hook fails to launch and the write proceeds"; fail=$((fail+1))
-      fi
-    done < <(jq -r '.hooks.PreToolUse[]?.hooks[]?.command // empty' "$HK/hooks.json" 2>/dev/null)
-  fi
-  # Arm 2: the assertion hook's agent scope must still name live agents.
-  if [ -f "$HK/assertion-contract.sh" ]; then
-    scope=$(grep -oE 'case "\$agent" in [a-z|]+\)' "$HK/assertion-contract.sh" | head -1 | sed -e 's/.* in //' -e 's/)$//')
-    if [ -z "$scope" ]; then
-      echo "⚠️  cannot read the agent scope out of hooks/assertion-contract.sh — Check 9h arm 2 is blind; re-anchor it if the script was restructured"; warn=$((warn+1))
-    else
-      for ag in ${scope//|/ }; do
-        [ -f "$TMPL/../agents/$ag.md" ] \
-          || { echo "❌ hooks/assertion-contract.sh scopes to agent '$ag' but agents/$ag.md does not exist — the assertion-contract gate fires for nobody, and the prohibition it enforces is prose again"; fail=$((fail+1)); }
-      done
-    fi
-  fi
-  # Arm 3: every reviewer check the lint hook denies on must still be a numbered reviewer check.
-  if [ -f "$HK/spec-lint.sh" ] && [ -f "$TMPL/../agents/reviewer.md" ]; then
-    for n in $(grep -oE 'report "Check [0-9]+' "$HK/spec-lint.sh" | grep -oE '[0-9]+$' | sort -un); do
-      grep -qE "^${n}\. \*\*" "$TMPL/../agents/reviewer.md" \
-        || { echo "❌ hooks/spec-lint.sh denies on reviewer Check $n, which agents/reviewer.md no longer declares — the hook now blocks a construct nothing else objects to, with no path to a green write except QA_HOOKS_OFF=1"; fail=$((fail+1)); }
-    done
-  fi
-fi
-
 # 9i. The SITUATION-STEP chain (`fault:` / `clock:`) — the two step forms that make the SFDIPOT
 #     Interfaces/Operations and Time lenses generatable. Unlike an oracle key, these are not in
 #     scripts/oracle-keys.txt and are policed by nothing else: the whole contract is prose spread
@@ -1365,72 +1042,6 @@ EOF
       printf '%s\n' "$KEYS" | grep -qx 'network_response_status' \
         || { echo "❌ templates/CLAUDE.md makes \`network_response_status\` the fired-proof for a response-fabricating \`fault:\` step, but that key is no longer in scripts/oracle-keys.txt — every fault: spec is now unauthorable while four files still demand the pairing (the 9c stranded-rule shape)"; fail=$((fail+1)); }
     fi
-  fi
-fi
-
-# 9j. /qa:explore INVOCATION SHAPE. `exploration` runs two modes off one arg string, and
-#     agents/exploration.md §"Mode selection" now STOPs on an under-specified one instead of
-#     silently defaulting to hot. That guard only helps if the commands this toolkit itself tells
-#     people to run are well-formed — and five of them were not: a bare `area=checkout` with no
-#     mode= (reference/test-case-ideation.md), three `mode=area` remediation hints carrying no
-#     site=/area= (doctor/coverage), and a second invocation later on a knowledge-map line whose
-#     FIRST one was fine. Both shapes fail SILENTLY and in the same direction — the caller wanted
-#     one area refreshed, and instead either a hot-tier run stamps `last_verified: today` onto
-#     app.context.md for a verification nobody requested (reviewer Check 7 and Check 5b above then
-#     read the area as handled while nothing was explored), or the agent STOPs and the reader
-#     pays a round-trip for a command this repo printed wrong.
-#     Keys on SYMBOLS — the literal `site=` / `area=` argument names — never on wording, so the
-#     prose around an invocation stays free to change. Three arms:
-#       Arm 1 — every `/qa:explore mode=area …` invocation carries BOTH keys. A `…`/`...` is the
-#               explicit opt-out for deliberate prose, so a doc may stay short, it just has to
-#               SAY it is eliding rather than look like a runnable command that isn't.
-#       Arm 2 — no `/qa:explore` leads with a bare `site=`/`area=` (the mode dropped in
-#               transcription) — the shape that used to silently run hot.
-#       Arm 3 — the agent's own §"Mode selection" still carries a STOP arm. Presence of the
-#               toolkit's STOP token in that section, not the sentence around it.
-#     Two properties this check needs and neither is free. (a) ADJACENCY is the anchor: only a
-#     `mode=area` IMMEDIATELY following `/qa:explore` is an invocation, so a capability table
-#     whose first cell is `/qa:explore` and whose second says `mode=area` (knowledge-map.md's
-#     command table) stays prose — matching it would have made this the check that gets disabled,
-#     the property 9bb and 9bd are each built around. (b) PER-INVOCATION, not per-line: the arg
-#     capture is bounded to argument-shaped tokens rather than "rest of line", because a greedy
-#     capture swallows a second invocation further along the same line — which is exactly where
-#     the fifth offender was hiding, and is 9bd's cross-site false-green class at line granularity.
-if [ -n "$TMPL" ] && [ -d "$TMPL/.." ]; then
-  PLUG=$(cd "$TMPL/.." 2>/dev/null && pwd)
-  # Bounded to argument-shaped tokens (`k=v`, `<placeholder>`, an ellipsis) so `grep -o` yields
-  # one line PER INVOCATION rather than one per source line.
-  EXPL_RE='/qa:explore`?[[:space:]]+`?mode=area([[:space:]]+(…|\.\.\.|[a-z]+=[^[:space:]`",;)]+|<[a-z]+>))*'
-  expl_scan() { grep -rnoE "$1" "$PLUG" --include='*.md' --include='*.sh' --include='*.json' 2>/dev/null
-                grep -rnoE "$1" "$PLUG/bin" 2>/dev/null; }
-  # Arm 1.
-  while IFS= read -r hit; do
-    [ -n "$hit" ] || continue
-    inv=${hit#*:}; inv=${inv#*:}
-    case "$inv" in *…*|*...*) continue ;; esac
-    case "$inv" in
-      *site=*area=*|*area=*site=*) continue ;;
-    esac
-    echo "❌ ${hit%%:*}:$(printf '%s' "${hit#*:}" | cut -d: -f1): \`$inv\` is an under-specified /qa:explore invocation — a mode=area run needs BOTH site= and area=, and exploration STOPs rather than guessing the missing one (agents/exploration.md §\"Mode selection\" arm 3). Add both keys, or a trailing … if this is deliberately prose"
-    fail=$((fail+1))
-  done <<EOF
-$(expl_scan "$EXPL_RE" | sed "s|^$PLUG/||")
-EOF
-  # Arm 2.
-  while IFS= read -r hit; do
-    [ -n "$hit" ] || continue
-    inv=${hit#*:}; inv=${inv#*:}
-    echo "❌ ${hit%%:*}:$(printf '%s' "${hit#*:}" | cut -d: -f1): \`$inv\` — a /qa:explore invocation leading with \`site=\`/\`area=\` and no \`mode=area\`. Before the §\"Mode selection\" arm-2 guard this silently ran HOT MODE: it stamped last_verified:today on app.context.md and left the requested area unexplored, with both freshness gates reading it as done. Write \`/qa:explore mode=area site=<id> area=<name>\`"
-    fail=$((fail+1))
-  done <<EOF
-$(expl_scan '/qa:explore`?[[:space:]]+`?(site|area)=[^[:space:]`",;)]*' | sed "s|^$PLUG/||")
-EOF
-  # Arm 3.
-  expl_a="$PLUG/agents/exploration.md"
-  if [ ! -f "$expl_a" ]; then
-    echo "❌ agents/exploration.md is MISSING — /qa:explore has no agent to dispatch to"; fail=$((fail+1))
-  elif ! awk '/^## Mode selection/{f=1;next} /^## /{f=0} f' "$expl_a" | grep -q 'STOP'; then
-    echo "❌ agents/exploration.md §\"Mode selection\" no longer carries a STOP arm — an under-specified invocation falls back to a silent \`mode=hot\` default, which bumps app.context.md's last_verified: for a verification nobody ran while the requested area goes unexplored (both freshness gates then read it as done)"; fail=$((fail+1))
   fi
 fi
 

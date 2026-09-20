@@ -74,13 +74,10 @@ does not fix anything — each finding names its repair:
   both mirrors — a bare scalar FAILs. That key is in the YAML schema block, not the table, so
   the shape extractor cannot see it; it shipped scalar in CLAUDE.md and list in planner.md,
   and the reviewer reads shapes from the stamped CLAUDE.md.
-- **Check 9bc (turn-budget ordering):** an agent's `maxTurns` ceiling is at or below its own
-  prose turn budget. Raise the ceiling, don't lower the prose number: `maxTurns` hard-stops and
-  returns PARTIAL output, running NO fallback, so pinned at the budget it preempts the behavior
-  the budget exists to trigger (file a bug and revert; emit `PARTIAL REVIEW` + FAIL). A
-  `no prose turn budget found` FAIL means the declaration was reworded and the invariant is
-  UNCHECKED, not satisfied. For the healer, remember `HEALER_TURN_BUDGET` raises the prose
-  budget at runtime and cannot raise the ceiling with it.
+- **Checks 9b / 9bc / 9be / 9d / 9e / 9h / 9j are no longer part of doctor.** They read only the
+  plugin's own source, so nothing in a project could fix one; they now run from the toolkit repo as
+  `bin/qa-selfcheck` (same ids, same messages). If a user reports one of those ids, the fault is in
+  the plugin build, not their project — the remedy is updating the plugin, not editing anything here.
 - **Check 9bd (prod-guard rail coverage):** a skill listed in `scripts/prod-guard-rails.txt`
   either lost its `bash scripts/prod-guard.sh` invocation or stopped acting on the exit code.
   **Restore the rail; never delete one to make this pass** — on the `gen`/`new-spec`/`intake`/
@@ -88,30 +85,11 @@ does not fix anything — each finding names its repair:
   `prod-guard.ts` globalSetup fires only under `npx playwright test`. Only invocation + the STOP
   clause are compared, so rewording a rail body never fires this. A WARN naming a skill missing
   from the manifest means a new rail shipped unpoliced — add the line.
-- **Check 9be (arg-shape drift, remaining mirrors):** an argument NAME diverged between
-  `templates/CLAUDE.md` and `agents/generator.md` or `DOCUMENTATION.md` — reconcile to CLAUDE.md
-  (the stamped SoT). Only arg-name SETS are compared, so wording, note length, and instantiated
-  example values never fire this. A `produced no rows` FAIL means that mirror's format moved and
-  its shapes are UNCHECKED, not in sync. `DOCUMENTATION.md` absent is a WARN — it lives outside
-  the plugin dir and is unreachable from a scaffolded project. reviewer Check 4 is deliberately
-  NOT compared: it quotes wrong shapes as counter-examples beside right ones.
 - **Check 9c (retired permission rule still in settings.json):** `.claude/settings.json` is
   excluded from Check 9's byte-compare and from `--resync` (shared ownership — users add their own
   rules), and the scaffold's jq merge is an additive UNION that can only ADD. So a rule the toolkit
   **retracts** is stranded in every already-scaffolded project forever with nothing to notice it.
   Delete the named rule by hand; `/qa:init --resync` will not do it for you.
-- **Check 9d (plugin layout regression):** a `commands/` directory reappeared. `commands/x.md` and
-  `skills/x/SKILL.md` BOTH produce `/qa:x` and coexist silently — nothing upstream complains. This
-  toolkit is skills-only so it can rely on `context: fork`, `allowed-tools` and bundled
-  `scripts/`+`reference/`, none of which exist on the command side. Port the command into a skill;
-  a split surface quietly ends those guarantees.
-- **Check 9e (`/qa:help` catalog vs the real skill set):** a user-invocable skill has no
-  **slash-form** row in `reference/knowledge-map.md`, or a row names something that no longer
-  exists. Add/remove the row. Note the two row shapes are not interchangeable: a capability skill
-  (`user-invocable: false`) is catalogued by a bare `| **name** |` row, but a real command needs
-  the `| `/qa:name`` |` form — that is the invocation `/qa:help` owes the user, and accepting the
-  bare shape for commands is how `metamorphic-relations` stayed uncatalogued while this check
-  read green.
 - **Check 9f (healer MCP grant ↔ settings.json mirror):** the 17 `mcp__playwright__*` entries
   are hand-typed twice — as `agents/healer.md`'s `tools:` list and as `templates/settings.json`'s
   `permissions.allow[]` — and were the last hand-mirrored pair in the substrate with no check.
@@ -152,20 +130,6 @@ does not fix anything — each finding names its repair:
   looking covered. Fix by restoring the two-call chain in `skills/gen/SKILL.md` and leaving the
   manifest grant with the verifier — never by re-adding it to the generator to make the check
   pass.
-- **Check 9h (the `hooks/` enforcement layer):** the only part of the toolkit that can block a
-  write in real time, and all three of its failure modes are invisible from inside a session.
-  **Arm 1, provisioning:** a hook whose `command` does not resolve, or is not executable, does
-  **not** block — Claude Code logs a hook error and the write proceeds, so the gate reads as
-  shipped while enforcing nothing. **FAIL** on a missing/unparseable `hooks.json` or a dangling
-  or non-executable command. **Arm 2, scope ownership** (the 9g arm-3 shape):
-  `assertion-contract.sh` fires only for the agents named in its `case` — today `healer` and
-  `verifier`, the two whose files forbid touching an assertion — so retiring or renaming one of
-  them leaves a syntactically-fine hook scoped to nobody. **Arm 3, stranded deny** (the 9c
-  shape): `spec-lint.sh` denies on reviewer Checks 1/5/9/11, and if the reviewer ever retires or
-  renumbers one, the hook keeps blocking a construct nothing else objects to, with no path to a
-  green write except `QA_HOOKS_OFF=1`. Arms 2 and 3 key on symbols — an agent filename, a check
-  number — never on wording, so a reword stays green and a re-parenting does not. Fix by
-  restoring the wiring, never by deleting the hook to make the check pass.
 - **Check 9, CLAUDE.md vocabulary containment:** the delivery half of the upgrade path.
   `CLAUDE.md` is shared-ownership, so it is excluded from `--resync` *and* from Check 9's
   byte-compare — yet it is where every new authoring feature is documented, and the in-project
@@ -200,19 +164,6 @@ does not fix anything — each finding names its repair:
   for a response-fabricating `fault:` is a paired `network_response_status` oracle — chosen so the
   feature needs no 17th key, which makes the rule depend on a key it does not own. Retire that key
   and every `fault:` spec becomes unauthorable while four files still demand the pairing.
-- **Check 9j (/qa:explore invocation shape):** `exploration` dispatches two modes off one
-  argument string, and its §"Mode selection" guard STOPs on an under-specified invocation rather
-  than falling through to a silent `mode=hot`. The guard's value depends on the commands *this
-  repo* prints being well-formed, and five were not when the check was written. **Arms 1 and 2
-  key on the argument SYMBOLS** (`site=`, `area=`), never on wording, and treat a trailing
-  `…` as the explicit opt-out for prose — so a doc may elide, it just may not look like a
-  runnable command that isn't one. **Arm 3 keys on the STOP token** inside the agent's own
-  §"Mode selection", because that guard is ordinary defensive prose and so an ordinary trim
-  candidate. Both failure shapes are silent and identical in effect: a `mode=area` missing a key
-  costs a round-trip, and a dropped `mode=` runs HOT — stamping `last_verified: today` on
-  `app.context.md` for a verification nobody requested, after which Check 7 and Check 5b both
-  read the area the caller asked about as freshly handled while nothing was explored. Fix the
-  invocation (or add the `…`); never widen the agent's default to make the check pass.
 - **Check 9k (unmanifested-walk ownership):** "which compiled tests carry no route manifest" is
   one rule with two consumers that must never disagree — `/qa:impact` prints it as
   `### BLIND SPOTS` (a zero-match there is only honest if the caller is told which specs were
