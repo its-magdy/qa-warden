@@ -126,6 +126,21 @@ does not fix anything — each finding names its repair:
   every time), not a hand edit. Scoped to the `mcp__` entries on purpose: those are capability
   grants with one right answer, whereas a user may legitimately delete a policy rule, and a
   whole-allow-list check would nag them forever.
+- **Check 9g (`/qa:gen`'s compiler → verifier chain + the manifest gate):** `generator` and
+  `verifier` are two agents on purpose — until the split, the agent that wrote an `expect(...)`
+  also decided at steps 8b/8c whether that `expect` catches an injected defect, and its cheapest
+  path was to claim it does. No subagent can spawn another, so the chain exists **only** as
+  prose in `skills/gen/SKILL.md`, which is an active trim candidate; a trim that drops the
+  second call leaves `/qa:gen` green with every spec compiled but ungraded. **FAIL** if
+  `agents/verifier.md` is gone, or if that prose stops naming either agent (presence, not
+  wording — same doctrine as 9bd). The third arm is the load-bearing one: the route manifest is
+  the *ship* signal (`/qa:impact` counts a spec as live coverage only once its manifest exists)
+  and it is gated on verification passing, so **exactly one agent may declare
+  `Write(artifacts/route-manifests/**)`, and it must be the verifier.** If the generator ever
+  reclaims that write, the gate detaches from the thing it gates and a never-verified spec ships
+  looking covered. Fix by restoring the two-call chain in `skills/gen/SKILL.md` and leaving the
+  manifest grant with the verifier — never by re-adding it to the generator to make the check
+  pass.
 - **Check 2 / 9b (vocab drift):** re-sync the 16-key mirror with CLAUDE.md (and, for
   9b, upgrade/re-stamp the plugin agents) in the same commit as any vocab change.
 - **Check 3 (vacuous smoke):** tag at least the P1 happy path `@smoke`, then
@@ -208,7 +223,7 @@ does not fix anything — each finding names its repair:
 
 Only when `$ARGUMENTS` contains `--verify-invariants`: read
 `${CLAUDE_SKILL_DIR}/reference/verify-invariants.md` and follow it. That file is THE single
-source of the injection mechanism (the generator's Process step 8b runs the same one); do not
+source of the injection mechanism (the verifier's Process step 8b runs the same one); do not
 re-derive it here. In the default read-only pass, skip this section entirely — it is the only
 mode that runs tests, and it still writes nothing.
 

@@ -107,7 +107,7 @@ CLAUDE.md). No free-form "should look right". **Include `must_fail_when` and `ou
 the evidence. `must_fail_when` is **advisory in the sense that the author isn't forced
 to *declare* one — but once declared it IS enforced**: reviewer **Check 2b** FAILs any
 spec whose `must_fail_when:`/`fail_if:` invariant isn't reified as an oracle (or
-explicitly waived), and the generator's post-green **step 8b** fault-injects each one to
+explicitly waived), and the verifier's post-green **step 8b** fault-injects each one to
 prove the oracle actually goes red (`/qa:doctor --verify-invariants` re-runs this). So a
 declared invariant that you drop from the oracle is a merge blocker, not a silent pass.
 Only `output_schema` lacks a reviewer presence-check. (See CLAUDE.md §"Oracle defense".)

@@ -364,17 +364,19 @@ What *is* new is that each skill declares **who may invoke it** — see
 
 ## 8. Agent reference
 
-The six subagents are the "brain." Each has a narrow role, a fixed tool set, and a
+The seven subagents are the "brain." Each has a narrow role, a fixed tool set, and a
 strict writable-path boundary. **None can spawn another** — handoffs route through the
-orchestrator. No agent pins a model in frontmatter (model tiers below are the
-operator-set guidance from `CLAUDE.md`'s "Subagent roster").
+orchestrator (which is why `/qa:gen` is two separate calls: `generator`, then `verifier`).
+**Every agent pins an explicit `model:` in its frontmatter** — the tiers below are enforced,
+not operator guidance; `CLAUDE.md`'s "Subagent roster" mirrors them.
 
 | Agent | Suggested model | Role | Triggered by | Writes to |
 |---|---|---|---|---|
 | **exploration** | `model: sonnet` (pinned) + CLI | Build the context layer — hot tier (`app.context.md`) or one area file. Captures **domain vocabulary, never selectors**. | `/qa:explore`; healer sentinel | `specs/_context/**` |
 | **ideation** | `model: opus` (pinned) | Enumerate candidate test cases via SFDIPOT lenses → a checklist. **The human is the gate.** | `/qa:ideate` | `specs/**` (`.cases.md`) |
-| **planner** | `model: sonnet` (pinned) + CLI | Translate a story/bug into one spec + YAML oracle. **Owns the assertion contract.** | `/qa:new-spec` | `specs/**` |
-| **generator** | `model: sonnet` (pinned) + CLI | Compile spec → deterministic `.spec.ts`, verify green; author metamorphic twins; negative-control-verify each `must_fail_when`. Runs **serially in the main working tree**. | `/qa:gen` | `tests/**`, `page-objects/**`, `fixtures/**`, `bugs/**`, `artifacts/route-manifests/**` |
+| **planner** | `model: opus` (pinned — it authors the oracle, and nothing downstream compares an oracle to reality) + CLI | Translate a story/bug into one spec + YAML oracle. **Owns the assertion contract.** | `/qa:new-spec` | `specs/**` |
+| **generator** | `model: sonnet` (pinned) + CLI | Compile spec → deterministic `.spec.ts`, run it once to green, hand off. **Does not grade its own output.** Runs **serially in the main working tree**. | `/qa:gen` (1st of 2) | `tests/**`, `page-objects/**`, `fixtures/**`, `bugs/**` |
+| **verifier** | `model: opus` (pinned — a wrong CATCHES verdict produces no red test, only a `// verified:` comment Check 2b trusts) | Grade the generator's green, as an agent that did **not** write it: author the metamorphic twins, fault-inject each declared `must_fail_when` to prove the `expect` goes RED (CATCHES vs BLIND), rename scenarios that overclaim, keep the confirmation `.webm`, and emit the route manifest only once all of that is clear. **May not edit any `expect(...)`.** | `/qa:gen` (2nd of 2) | `tests/**` (twins + annotations), `bugs/**`, `artifacts/route-manifests/**` |
 | **reviewer** | `model: opus` (pinned — Checks 2b/2c/2d/2e/14 are LLM judgment and this is the sole assertion-contract gate) | **Read-only PR gatekeeper.** Blocks green-but-empty / -under-asserted / -wrong tests via its full check suite. The **only** enforcement of the assertion contract (no hooks ship). | `/qa:review` (both modes) | *nothing (read-only)* |
 | **healer** | `model: sonnet` (pinned) + MCP | Triage a failure into one of **10 buckets**; patch selectors/waits or file a bug. **Never touches assertions.** Logs every triage to `artifacts/heal-log.jsonl`. | `/qa:heal`, `/qa:batch-fix`, CI failure | `tests/**`, `page-objects/**`, `bugs/**`, `artifacts/heal-log.jsonl`, `artifacts/.healer-needs-*` |
 

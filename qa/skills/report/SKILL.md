@@ -175,7 +175,7 @@ truncation zone while this section still told you to render from it.
     | sort | uniq -c
   ```
   **Found-by attribution.** The authored shape is a bolded label with an em-dash and NO colon —
-  `- **Found-by** (OPTIONAL) — healer (nightly triage) | generator (authoring) | manual`
+  `- **Found-by** (OPTIONAL) — healer (nightly triage) | generator (authoring) | verifier (authoring) | manual`
   (CLAUDE.md §"Bug-report schema"). Grepping `Found-by:` matches nothing and silently reports every
   bug as `unrecorded` — the same fail-silent parse class this skill calls out for `## Status`.
   Match the real form:

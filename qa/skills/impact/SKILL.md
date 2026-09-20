@@ -75,7 +75,7 @@ Group `### MATCHES` by area as a Markdown table:
 Then a one-line summary: `N specs across M areas reference <argument>.`
 
 **When N=0, never stop at a bare "0 matches"** — a silent 0 reads to the user as "not
-impacted", which is impact's cardinal sin. Always add that the manifest is generator-emitted,
+impacted", which is impact's cardinal sin. Always add that the manifest is verifier-emitted,
 so newly-added specs that haven't been compiled yet won't appear. And when the key is
 `field=`, print this **instead of** the generic uncompiled note, so it can't misdirect:
 

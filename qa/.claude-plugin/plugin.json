@@ -3,7 +3,7 @@
   "name": "qa",
   "version": "0.0.1",
   "displayName": "AI QA Automation",
-  "description": "AI-authored, Playwright-replayed E2E QA suite. Exploration/planner/ideation/generator/reviewer/healer subagents + oracle-defense skills + an AI-maintained page-object reuse layer (change a shared flow in one place; heal it once). AI authors specs, Playwright replays nightly at $0 LLM cost, AI triages only on failure. Run /qa:init in a fresh project to stamp the runtime substrate.",
+  "description": "AI-authored, Playwright-replayed E2E QA suite. Exploration/planner/ideation/generator/verifier/reviewer/healer subagents + oracle-defense skills + an AI-maintained page-object reuse layer (change a shared flow in one place; heal it once). AI authors specs, Playwright replays nightly at $0 LLM cost, AI triages only on failure. Run /qa:init in a fresh project to stamp the runtime substrate.",
   "author": {
     "name": "QA Toolkit"
   },

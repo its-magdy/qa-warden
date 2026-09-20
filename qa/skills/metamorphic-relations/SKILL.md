@@ -13,7 +13,7 @@ A metamorphic-relation oracle layer (the *why* is in `reference/DESIGN.md` §"Wh
 Published work on metamorphic testing reports that MRs surface a **meaningful, double-digit share of defects that assertion-based tests miss** — the value is catching *specification drift* an example-based oracle can't see, not a single headline number. (Cite a specific paper only if you verify the id/venue first; don't pin a precise percentage to an unverified reference.)
 
 ## When to use
-- After a new `.spec.ts` first goes green — the **generator** (Process step 8a) authors 2-3 twins directly, following these patterns, and writes `tests/<area>/<feature>.metamorphic.spec.ts`. The read-only **reviewer** (Check 6) then verifies the file exists and its twins agree with the parent. (Twin *generation* lives with the generator because the reviewer has no Write tool — a reviewer told to "generate twins" is a contradiction the toolkit used to ship.)
+- After a new `.spec.ts` first goes green — the **verifier** (Process step 8a) authors 2-3 twins directly, following these patterns, and writes `tests/<area>/<feature>.metamorphic.spec.ts`. The read-only **reviewer** (Check 6) then verifies the file exists and its twins agree with the parent. (Twin *generation* lives with the generator because the reviewer has no Write tool — a reviewer told to "generate twins" is a contradiction the toolkit used to ship.)
 - When a human is hand-hardening a critical flow ("I don't fully trust this oracle — what invariants should hold?").
 - As part of `/qa:review url=<url>` for compliance-critical specs.
 

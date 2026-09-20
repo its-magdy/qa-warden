@@ -55,13 +55,13 @@ oracle:                            # CLOSED VOCABULARY — see below
   # like ".order-total"; the generator emits it verbatim and reviewer Check 9 fails CSS.
   value_between: { locator: "getByTestId('order-total')", range: [39.00, 40.50] }
   no_order_created: false
-must_fail_when:                    # OPTIONAL to declare — but enforced once declared (reviewer Check 2b + generator step 8b)
+must_fail_when:                    # OPTIONAL to declare — but enforced once declared (reviewer Check 2b + verifier step 8b)
   - "confirmation text removed"
   - "order total mutated outside range"
   # LIFT prose broken-state statements from the basis/narrative INTO this list. If the
   # story says "a search that returned the full catalog would be a broken filter" or "a
   # coupon that didn't carry to the order total is a bug", that is a `must_fail_when:` —
-  # not just narrative. Reifying it here is what triggers the generator's step-8b
+  # not just narrative. Reifying it here is what triggers the verifier's step-8b
   # negative-control injection AND makes reviewer Check 2b/2c enforce a DISCRIMINATING
   # oracle (e.g. count_equals{n:1}, not a text_visible that's true on the unfiltered page).
   # An intent the narrative describes but that is never lifted here gets zero enforcement.
@@ -84,11 +84,11 @@ output_schema:               # optional — documentation-only: no agent mechani
     screenshot_path: string
 mr:                          # OPTIONAL — omit for the default. Self-declared metamorphic
                              # relations for this spec. Its PRESENCE is an opt-OUT signal:
-                             # the generator skips auto-authoring twins (Process step 8a) and
+                             # the verifier skips auto-authoring twins (Process step 8a) and
                              # the reviewer skips Check 6's "twins must exist" requirement,
                              # trusting these hand-declared relations instead. Only add it when
                              # you are deliberately hand-writing the invariants; leave it out and
-                             # the generator writes 2-3 twins post-green (the normal path).
+                             # the verifier writes 2-3 twins post-green (the normal path).
   - "<invariant description, e.g. 'reordering cart items does not change the total'>"
 ```
 > **`mr:` is the ONLY escape hatch the generator and reviewer branch on.** It is defined

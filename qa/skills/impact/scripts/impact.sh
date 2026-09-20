@@ -119,7 +119,7 @@ echo "### MATCHES"
 # ---------------------------------------------------------------------------
 # BLIND SPOTS — the PARTIAL-manifest gap. The zero-manifests guard above only catches the
 # all-or-nothing case. The dangerous case is a *partial* gap: some specs are compiled and on
-# disk but their manifest is missing or was withheld (e.g. the generator withheld a manifest
+# disk but their manifest is missing or was withheld (e.g. the verifier withheld a manifest
 # for a spec left RED by a product bug). Such a spec is silently absent from the impact graph
 # — for a "don't miss an affected test" tool, a false "not impacted" is the cardinal failure.
 # ---------------------------------------------------------------------------

@@ -102,10 +102,17 @@ it comes from `QA_USER_PASSWORD` in your `.env`.)
 ```
 /qa:gen specs/auth/login.md
 ```
-The generator turns the spec into a real [test](glossary.md) at `tests/auth/login.spec.ts`, runs
-it once, and leaves it **green**. It also saves a short **`.webm` video** of the run — open it and
-watch the AI drive your real sign-in flow. *That video is your proof it tested the real thing* —
-you never read the `.spec.ts`.
+`/qa:gen` runs **two** AIs in a row. First the *generator* turns the spec into a real
+[test](glossary.md) at `tests/auth/login.spec.ts`, runs it once, and leaves it **green**. Then a
+second AI — the *verifier*, which did not write the test — checks that the green means something:
+it deliberately breaks the app's behaviour behind the scenes and confirms your test actually turns
+**red**. An assertion that stays green even when the thing it checks is broken is the one failure
+this whole toolkit exists to catch, and the AI that wrote the assertion is the last one you'd ask
+to grade it.
+
+The verifier also saves a short **`.webm` video** of the run — open it and watch the AI drive your
+real sign-in flow. *That video is your proof it tested the real thing* — you never read the
+`.spec.ts`.
 
 ## Step 5 — let the gatekeeper check it
 

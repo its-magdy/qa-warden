@@ -1,8 +1,8 @@
 # `--verify-invariants` — executable `must_fail_when` (targeted fault injection)
 
 THE single source of the injection mechanism. Two consumers read this file and must not
-diverge: the `/qa:doctor --verify-invariants` mode, and the **generator** subagent, whose
-Process step 8b runs this exact injection inline on every new spec that declares a
+diverge: the `/qa:doctor --verify-invariants` mode, and the **verifier** subagent, whose
+The **verifier**'s Process step 8b runs this exact injection inline on every new spec that declares a
 `must_fail_when:`/`fail_if:`. Do not invent a divergent mechanism in either place.
 
 `must_fail_when:` is optional to *declare* (CLAUDE.md §"Test case format contract")
@@ -40,7 +40,7 @@ For each `must_fail_when`/`fail_if` in the spec: derive the smallest injection
 (one of the two arms above) that simulates exactly that defect, run the governed
 scenario under the injection, and report **CATCHES ✅** (test went red — invariant
 is executable) or **BLIND ❌** (test stayed green — the oracle looks right but
-doesn't actually fail on the defect; kick back to the generator/planner). This is
+doesn't actually fail on the defect; kick back to the planner — or to the generator if the oracle key is right and only the compiled `expect` is mis-wired). This is
 opt-in and slower, so it is not part of the default read-only pass — run it on
 security/negative-path specs where a silent-under-assertion is most costly.
 
@@ -61,4 +61,4 @@ run-of-record clobber-guard (why: CLAUDE.md §Reporting pipeline). These runs ar
 injected red as the suite's run-of-record. The default read-only pass writes
 nothing; this opt-in mode must not either.
 
-**Relationship to the generator.** The **generator already runs this exact injection inline** at authoring (its Process step 8b, on every new spec that declares a `must_fail_when`/`fail_if`), and blocks a BLIND oracle before the spec ever ships — this file's mode is the **on-demand / CI re-check** of the same mechanism (re-verify after an app change, batch-verify a directory, or gate compliance specs). Both share the one mechanism defined in this file; keep them in sync.
+**Relationship to the verifier.** The **verifier already runs this exact injection inline** at authoring (its Process step 8b, on every new spec that declares a `must_fail_when`/`fail_if`), and blocks a BLIND oracle before the spec ever ships — this file's mode is the **on-demand / CI re-check** of the same mechanism (re-verify after an app change, batch-verify a directory, or gate compliance specs). Both share the one mechanism defined in this file; keep them in sync.

@@ -4,10 +4,24 @@ argument-hint: "<spec-path or area/feature> [site=<id>] [keep-video]"
 disable-model-invocation: true
 ---
 
-Delegate to the `generator` subagent (uses `@playwright/cli`) to compile
-`$ARGUMENTS` into a matching `.spec.ts` under `tests/` using the same
-kebab-case basename. The generator runs SERIALLY in the main working tree
-against the real `node_modules`/`.env` — it needs no initial commit.
+Compile `$ARGUMENTS` into a matching `.spec.ts` under `tests/` using the same
+kebab-case basename. This is a **two-agent** command and you are the orchestrator:
+
+1. **`generator`** (uses `@playwright/cli`) compiles the spec and runs it once to green.
+   It runs SERIALLY in the main working tree against the real `node_modules`/`.env` —
+   it needs no initial commit.
+2. **`verifier`** then grades that green: metamorphic twins, per-invariant fault
+   injection, honest scenario naming, the confirmation video, and finally the route
+   manifest.
+
+**Invoke them as two separate subagent calls, and never collapse them into one.**
+No subagent can spawn another, so the handoff routes through you. The separation is
+the point: until this split the same agent that wrote an `expect(...)` also decided
+whether that `expect` catches the injected defect, its cheapest path was to claim it
+does, and the resulting `// verified:` comment is durable evidence reviewer Check 2b
+trusts. Pass the generator's handoff (run log, step-5 route sweep, any
+`<feature>.oracle.ts`) into the verifier verbatim, but do **not** add your own opinion
+about whether an oracle looks sound — the verifier's verdict has to come from a run.
 
 **No argument given?** If `$ARGUMENTS` is empty, do **NOT** proceed — print the block below
 verbatim and stop, so the user has a concrete command to copy:
@@ -55,21 +69,37 @@ Requirements the generator must honour:
 in the main working tree so each pass can reuse and extend the page objects
 the earlier ones created.
 
-**The spec must be confirmed green before declaring done — and the generator's
-own run satisfies this.** The generator runs the compiled test as its Process
-step 7 (and re-runs twins/mutating specs in 8a/8b), so do **NOT** re-run it
-yourself after the agent returns green — that doubles the verification
-wall-clock for zero signal. Only verify the generator's report says green and
-the route manifest exists. If you ever DO need a manual run (e.g. the generator
+**The spec must be confirmed green before declaring done — and the two agents'
+own runs satisfy this.** The generator runs the compiled test as its Process
+step 7; the verifier runs it again under fault injection (8b) and once more for
+the video (8d). So do **NOT** re-run it yourself after either agent returns green
+— that adds wall-clock for zero signal. Only verify that the generator reported
+green, the verifier reported every declared invariant CATCHES, and the route
+manifest exists. If you ever DO need a manual run (e.g. the generator
 returned without a run log), use
 `npx playwright test tests/<area>/<feature>.spec.ts --retries=0 --reporter=line`
 — the **compiled test path**, not `$SPEC`, and `--reporter=line` is load-bearing
 (same clobber-guard as `/qa:heal` / `/qa:batch-fix`; why: CLAUDE.md §Reporting
-pipeline). If the generator reports red, do not hand it off as "done". The
-generator does NOT self-commit — it leaves the green test for the caller to
-commit after review.
+pipeline). If the generator reports red, do **not** invoke the verifier and do not
+hand it off as "done" — the verifier refuses an unverified spec, so that round trip
+is pure waste; route to the healer or back to the planner instead. Neither agent
+self-commits — they leave the green, verified test for the caller to commit.
 
-On green, `/qa:gen` also emits (a) metamorphic twins at
+**Routing the verifier's three blocking outcomes** (it cannot spawn anyone either,
+so each comes back to you):
+- **BLIND oracle** — the compiled oracle stayed green under injection and the oracle
+  as *declared* cannot catch the defect. The verifier has already filed
+  `bugs/<date>-…-blind-<slug>.md` and `test.fixme`'d the scenario. Hand the spec back
+  to the **planner** to strengthen the oracle; re-run `/qa:gen` after.
+- **Mis-compiled oracle** — the oracle key is right but the compiled `expect` reads
+  the wrong locator/value, quoted as `<file>:<line>`. Re-invoke the **generator** on
+  that spec, then the **verifier** again. The verifier is forbidden from editing
+  assertions itself; that prohibition is what makes its verdict worth trusting, so do
+  not ask it to "just fix it".
+- **Twin disagreement / no manifest** — the spec did not ship. Do not commit it and
+  do not paper over the missing manifest by writing one yourself.
+
+On green *and verified*, `/qa:gen` also emits (a) metamorphic twins at
 `tests/<area>/<feature>.metamorphic.spec.ts` (new specs only) and (b) a **route
 manifest** at `artifacts/route-manifests/<area>/<feature>.json` — the data source
 `/qa:impact` intersects for requirement-change-cascade analysis. So a spec is not
@@ -79,7 +109,7 @@ so generate specs (which writes their manifests) before running impact analysis.
 
 **Confirmation video (new specs).** Green means the assertions passed — not that
 the test drives the flow the QA *intended* (it could click a wrong-but-equivalent
-path). So for a **brand-new** spec the generator's final step (8d) re-runs the
+path). So for a **brand-new** spec the verifier's final step (8d) re-runs the
 parent spec once with `QA_KEEP_VIDEO=1`, which keeps the `.webm` even on a pass
 (`playwright.config.ts` is `retain-on-failure` by default). **Surface that video
 path in your handoff** — e.g. `📹 review: artifacts/test-results/<id>/video.webm`
@@ -93,8 +123,10 @@ promise is untouched.
 **Force a video on a re-run: `keep-video`.** 8d fires only on a spec's *first*
 green. To get a fresh confirmation video for an **existing** spec (e.g. after an
 edit), pass the `keep-video` token — `/qa:gen checkout/coupon keep-video`. Detect it
-in `$ARGUMENTS` (`case "$ARGUMENTS" in *keep-video*) …`) and, after the generator
-returns green, run the compiled test yourself with the flag:
+in `$ARGUMENTS` (`case "$ARGUMENTS" in *keep-video*) …`) and pass it through to the
+verifier, which honours it as the explicit request 8d's re-run carve-out names. If
+you need the video after the fact (the verifier already returned), run the compiled
+test yourself with the flag:
 `QA_KEEP_VIDEO=1 npx playwright test tests/checkout/coupon.spec.ts --retries=0 --reporter=line`,
 then report the `.webm` path. The spec path still resolves cleanly: the resolver
 takes the FIRST bare token as the path (`checkout/coupon`) and ignores any token

@@ -30,8 +30,9 @@ deleted, harness verified green afterwards. Git history is the archive: there is
    - Same for schemas/factories via `jq -r '.factories[]?'` over the REMAINING
      route manifests.
    - **The generator's shared oracle-constants module** `tests/<area>/<feature>.oracle.ts`
-     (or `.shared.ts`) — the generator emits it and imports it into BOTH the parent
-     `.spec.ts` and the twin (generator §8a). Consumer-check it like a POM:
+     (or `.shared.ts`) — the generator emits it and imports it into the parent
+     `.spec.ts` (generator §6); the verifier's twins import the same module (verifier
+     §8a). Consumer-check it like a POM:
      `$RG "<feature>\.oracle|<feature>\.shared" tests/ page-objects/` EXCLUDING the
      files being retired. Non-empty ⇒ KEEP (another spec imports the constants; list
      consumers). Empty ⇒ DELETE — otherwise it orphans as a dead module `tsc` won't

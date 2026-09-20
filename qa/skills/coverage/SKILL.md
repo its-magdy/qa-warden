@@ -94,7 +94,7 @@ shape below. Do not paraphrase, recompute, or estimate any number it emitted.
    *declared-needed in the basis* is the strongest gap — surface it first (the ideation critic
    FAILs this per-feature; here it's the suite-level roll-up). Report per-lens: which features
    leave it empty.
-4. **Flow footprint** — the route/area counts. (Manifests are generator-emitted, so a spec
+4. **Flow footprint** — the route/area counts. (Manifests are verifier-emitted, so a spec
    not yet compiled contributes nothing — note that, same caveat as `/qa:impact`.)
 5. **Case coverage (approved cases → scenarios)** — per feature, `<basis>_cases≈N (of T ideated)` vs
    `spec_scenarios≈M`, where the count is the **☑-approved** subset (not every ideated row — deferred/

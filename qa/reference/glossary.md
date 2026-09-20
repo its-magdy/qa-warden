@@ -57,13 +57,14 @@ asserts**. Think "a teammate that fixes the plumbing, not the contract."
 "the field labelled Email"). Playwright's word for a selector. When the UI shifts, the healer
 repairs the locator; it never touches what the test *asserts*.
 
-**metamorphic twin** (twin) — an extra test the generator writes that changes the input in
+**metamorphic twin** (twin) — an extra test the verifier writes that changes the input in
 a way that *shouldn't* change the outcome (reorder a cart, add-then-remove) to catch a spec
 that's silently wrong. The reviewer verifies twins exist and agree with the parent.
 
 **must_fail_when** — a list, in the spec, of the specific defects the test **must** catch.
-The generator injects each defect at authoring time and refuses to ship an oracle that
-doesn't go red on it — so a declared invariant can't silently evaporate.
+The **verifier** — a different agent from the one that wrote the assertion — injects each
+defect at authoring time and refuses to ship an oracle that doesn't go red on it, so a
+declared invariant can't silently evaporate.
 
 **oracle** — the spec's definition of "correct": the assertions, written in the closed
 vocabulary. The oracle is *what* the test checks; the steps are *how* it gets there. The
@@ -72,7 +73,7 @@ wrong, and checking the right value).
 
 **page object (POM)** — a reusable file (`page-objects/<area>/<page>.page.ts`) holding a
 shared UI flow (login, checkout) so a change to that flow is a one-file fix, not an
-N-test grind. The generator writes them; the healer maintains them.
+N-test grind. The verifier writes them; the healer maintains them.
 
 **Playwright** — the open-source browser-automation framework the compiled tests run on and
 replay nightly. You never write it — the AI does; it's named in these docs only because that's
@@ -87,7 +88,8 @@ before `/qa:new-spec`, pinning *what correct means* before anything is generated
 for P1 / money / compliance features. Contrast **fast lane**.
 
 **route manifest** — a per-spec record of the routes/fields/factories a test touches
-(`artifacts/route-manifests/`), emitted by the generator. It powers `/qa:impact` (which specs a
+(`artifacts/route-manifests/`), emitted by the verifier once a spec passes verification — so a
+spec with no manifest is one that did not ship. It powers `/qa:impact` (which specs a
 change would affect).
 
 **run-of-record** — the one authoritative test run whose results (`artifacts/last-run.json`)

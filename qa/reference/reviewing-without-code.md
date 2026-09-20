@@ -41,7 +41,7 @@ You never open the `.spec.ts`. You review three things:
 | Surface | What it is | What you check |
 |---|---|---|
 | **The oracle** | the `oracle:` block in the Markdown [spec](glossary.md) | does it assert what you said it should prove? is the *value* right — "403", not just "a response came back"? |
-| **The confirmation video** | a `.webm` screen recording the generator saves when it creates a test | did it drive the *real* flow you care about? |
+| **The confirmation video** | a `.webm` screen recording the verifier saves when a test is first created | did it drive the *real* flow you care about? |
 | **The [trace](glossary.md)** (on failure) | a step-by-step replay at [trace.playwright.dev](https://trace.playwright.dev) — no install | *why* it failed — a real bug, or the test looking in the wrong place? |
 
 If the oracle reads right, the video shows the real flow, it's green, **and you've checked it

@@ -1032,6 +1032,45 @@ if [ -n "$TMPL" ] && [ -f "$TMPL/settings.json" ] && [ -f "$TMPL/../agents/heale
   fi
 fi
 
+# 9g. The /qa:gen compiler -> verifier chain, and the manifest gate that rides on it. The
+#     generator and the verifier are TWO agents by design: until the split, the same agent that
+#     wrote an expect() also decided at steps 8b/8c whether that expect catches an injected
+#     defect, its cheapest path was to claim CATCHES, and the resulting `// verified:` comment is
+#     durable evidence reviewer Check 2b trusts. Nothing enforces that separation at runtime —
+#     no subagent can spawn another, so the chain exists ONLY as prose in skills/gen/SKILL.md,
+#     which is an active trim candidate. A trim that drops the second call leaves /qa:gen green
+#     and every spec unverified. Same unchecked-prose-contract shape as 9bd.
+#     Arm 3 is the one that actually matters. The route manifest is the SHIP signal (/qa:impact
+#     reads a spec as live coverage only once its manifest exists), and it is gated on
+#     verification passing, so it must be written by the agent that RAN the verification. If the
+#     generator ever reclaims the manifest write, the gate detaches from the gated thing and a
+#     never-verified spec ships looking covered — the exact hole the split closes. Compares
+#     GRANT OWNERSHIP, never wording, so a reword stays green and a re-parenting does not.
+if [ -n "$TMPL" ] && [ -d "$TMPL/.." ]; then
+  gen_a="$TMPL/../agents/generator.md"; ver_a="$TMPL/../agents/verifier.md"; gen_s="$TMPL/../skills/gen/SKILL.md"
+  if [ ! -f "$ver_a" ]; then
+    echo "❌ agents/verifier.md is MISSING — /qa:gen's second half (metamorphic twins, step-8b fault injection, the route manifest) has no agent to run it, and the generator would be grading its own expect() again"; fail=$((fail+1))
+  elif [ -f "$gen_s" ]; then
+    # Arm 1+2: the orchestration prose must still name BOTH agents. Presence, not wording.
+    grep -q 'generator' "$gen_s" || { echo "❌ skills/gen/SKILL.md no longer names the \`generator\` subagent — nothing compiles the spec"; fail=$((fail+1)); }
+    grep -q 'verifier'  "$gen_s" || { echo "❌ skills/gen/SKILL.md no longer names the \`verifier\` subagent — no subagent can spawn another, so this prose IS the chain; without it every spec ships compiled-but-ungraded (no twins, no step-8b injection, no manifest)"; fail=$((fail+1)); }
+  fi
+  # Arm 3: exactly ONE agent may claim the route-manifest write, and it must be the verifier.
+  if [ -f "$ver_a" ]; then
+    mf_owners=""
+    for af in "$TMPL"/../agents/*.md; do
+      [ -f "$af" ] || continue
+      grep -q 'Write(artifacts/route-manifests' "$af" && mf_owners="$mf_owners $(basename "$af" .md)"
+    done
+    mf_owners=$(printf '%s' "$mf_owners" | sed 's/^ //')
+    case " $mf_owners " in
+      " verifier ") : ;;
+      "  "|" ") echo "❌ no agent declares Write(artifacts/route-manifests/**) — /qa:impact exits NO MANIFESTS FOUND for every spec"; fail=$((fail+1)) ;;
+      *) echo "❌ route-manifest write is claimed by: $mf_owners — it must be the VERIFIER alone. The manifest is the ship signal and is gated on verification passing; an agent that writes it without running the verification detaches the gate from the gated thing, and a never-verified spec reads to /qa:impact as live coverage"; fail=$((fail+1)) ;;
+    esac
+  fi
+fi
+
 # 10. Site-id ↔ config-project routing (F-51: a site declared in app.context.md with no matching
 #     playwright.config project — specs target a phantom site and silently run zero tests; renumbered
 #     from the old "F-15" tag, which collided with the last-run-staleness F15 in check 1 above — the
