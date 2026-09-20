@@ -11,9 +11,10 @@ the diff-review path and does not apply.
 ## Diff-review mode
 
 Delegate to the **`reviewer`** subagent — the read-only gatekeeper that is the
-**only** enforcement of the assertion contract (this toolkit ships **no
-PreToolUse hooks**; correctness rides on the reviewer running, and this skill
-is what runs it). Without a shipped trigger the single most important quality
+**backstop** for the assertion contract (the `PreToolUse` hooks in `hooks/` catch
+only the lexical FAILs and the healer/verifier assertion prohibition; every check
+needing the paired spec, the `bugs/` tree or a judgment call rides on the reviewer
+running, and this skill is what runs it). Without a shipped trigger the single most important quality
 gate is the easiest one to forget — invoke it on **every PR that touches
 `tests/**`, `specs/**`, or `page-objects/**`**, and wire it into CI (below).
 

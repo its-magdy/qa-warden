@@ -83,11 +83,28 @@ behind each — the operational lists themselves live in CLAUDE.md and `agents/r
   emit — it must be backed by populated evidence fields (order id, observed total, …).
   (Convention — not mechanically validated; see CLAUDE.md §"Oracle defense".)
 
-There are **no PreToolUse hooks** in this toolkit. There is no real-time guard that blocks
-a weakened assertion the instant it is written. That is a deliberate decision, not an
-oversight: the **reviewer is the backstop, by discipline**. It is load-bearing precisely
-because nothing else enforces the assertion contract at PR time. Every agent that writes
-must hold the line itself and rely on the reviewer to catch what slips.
+The toolkit ships a **narrow** `PreToolUse` hook layer (`hooks/`, 2026-09-20). It is not the
+reviewer in a script, and it was deliberately withheld for most of this toolkit's life: a hook
+that blocks wrongly breaks every session, and a plugin hook fires in every repository its owner
+opens, not just in a QA project. A false deny is not a warning an agent can reason past; it is
+a wall. So a check earns a hook only when it is **decidable from the proposed text alone** —
+no paired spec, no `bugs/` tree, no Playwright run, no judgment call.
+
+Two things clear that bar. `spec-lint.sh` denies the four lexical reviewer FAILs (Check 1's
+assertion-on-a-literal, Check 5's `waitForTimeout`/`networkidle`, Check 9's raw CSS/XPath,
+Check 11's `.only`), which only moves an existing FAIL earlier. `assertion-contract.sh` is the
+one that matters: it denies the **healer** and the **verifier** any edit that removes or
+rewrites an assertion that existed before it. Those two prohibitions — `healer.md`'s
+"assertion contract is sacred" and `verifier.md`'s Hard rule 1, the rule the whole
+generator→verifier split rests on — were prose-only until then, and a prose-only rule is one
+trim pass from vanishing.
+
+Everything else stays where it was, and most of the reviewer cannot move: Checks 2/2b/6/14 need
+repository state a hook never sees, 2c/2d/2e are explicitly judgment, and Check 11's credential
+regex is documented *in reviewer.md itself* as false-FAILing valid specs when run
+deterministically. **The reviewer is still the backstop, by discipline.** What changed is that
+two of the contracts it backstops are now also enforced at write time. `hooks/README.md` records
+the per-check reasoning and the fail-open guarantees; `/qa:doctor` Check 9h guards the wiring.
 
 ### The generator does not grade itself
 
@@ -397,7 +414,9 @@ delete them to make the toolkit sound more complete than it is.
   QA-scoped `Write`/`Edit` allowlist (agents can only write `tests/`,`specs/`,`bugs/`,… ), per-prompt
   approval on anything unmatched, and the macOS OS-level Bash sandbox. Treat the deny-list as raising the
   bar on the *cooperative-agent / accidental-footgun* case, and do NOT rely on it as a prompt-injection
-  boundary — a robust guard would need a `PreToolUse` hook, which this toolkit deliberately does not ship.
+  boundary — a robust guard would need a `PreToolUse` hook over the Bash tool. The `hooks/` layer this
+  toolkit does ship is **not** that: it matches `Edit|Write` only, and scopes itself to `tests/**` and
+  `page-objects/**` inside a scaffolded QA project. It hardens the assertion contract, not the shell.
 - **Green-but-incomplete: an approved case that never became a test.** Distinct from the wrong-spec
   gap below — here the human approved the *right* case, but it was silently dropped between the
   `.cases.md` checklist and the spec's `scenarios:` (the reviewer's Check 1/2 catch green-but-empty

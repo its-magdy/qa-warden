@@ -101,9 +101,9 @@ sink; `dotenv({quiet:true})` keeps it valid JSON):
   *everything* is red, run `/qa:doctor` and check `.env`/VPN first.
 
 Do not retry past the default Playwright retry count. Do not add
-`--retries=99` or similar cover-up flags. This is a **policy, not a hook** —
-the toolkit ships no PreToolUse guard (CLAUDE.md §Oracle defense); the
-reviewer is the backstop.
+`--retries=99` or similar cover-up flags. This is a **policy, not a hook** — the
+`hooks/` layer matches `Edit|Write`, never `Bash`, so nothing stops a cover-up
+flag on the command line (CLAUDE.md §Oracle defense); the reviewer is the backstop.
 
 ## mode=repeat (formerly `/qa:flake-check`)
 

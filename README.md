@@ -64,9 +64,11 @@ or **`/qa:help <area/feature>`** to scope it to one feature.
 .claude-plugin/marketplace.json   ← the catalog (lists the qa plugin)
 qa/                               ← the plugin
 ├── .claude-plugin/plugin.json    ← manifest (pinned `version` → bump it to ship)
-├── agents/    planner, generator, healer, reviewer, exploration, ideation
+├── agents/    planner, generator, verifier, healer, reviewer, exploration, ideation
 ├── skills/    23 SKILL.md — the 19 /qa:* commands (/qa:init /qa:gen /qa:heal …)
 │              + 4 capability helpers (playwright-cli, axe-a11y, …)
+├── hooks/     2 PreToolUse gates — the lexical reviewer FAILs, and the
+│              healer/verifier assertion prohibition (see hooks/README.md)
 ├── reference/ DESIGN.md (design rationale) + test-case-ideation.md + sentinel-actions.md
 ├── templates/ the runtime substrate stamped into each project by /qa:init
 │              (incl. page-objects/ reuse layer + fixtures/test.ts barrel)

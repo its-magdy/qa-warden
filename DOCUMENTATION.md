@@ -129,8 +129,9 @@ QA-Toolkit/                          ← the MARKETPLACE (a git repo)
 ├── .claude-plugin/marketplace.json  ← the catalog — lists the "qa" plugin
 └── qa/                              ← the PLUGIN
     ├── .claude-plugin/plugin.json   ← the plugin manifest
-    ├── agents/                      ← the "brain" (6 subagents)
+    ├── agents/                      ← the "brain" (7 subagents)
     ├── skills/                      ← 23 SKILL.md: 19 /qa:* commands + 4 helpers
+    ├── hooks/                       ← 2 PreToolUse gates (the only real-time enforcement)
     ├── reference/                   ← DESIGN.md + research notes
     ├── templates/                   ← the "body" stamped into each project
     └── bin/qa-scaffold              ← the deterministic substrate installer
@@ -572,10 +573,14 @@ Every defense below answers *that* problem:
 - **Structured output schema** — `passed=true` must be backed by populated evidence
   fields (order id, observed total), so it isn't a word the agent can just emit.
   (Convention — not mechanically validated; see CLAUDE.md §"Oracle defense".)
-- **The reviewer is the backstop, by discipline.** There are **no PreToolUse hooks** —
-  no real-time guard blocks a weakened assertion the instant it's written. That is a
-  deliberate decision: the reviewer at PR time is load-bearing precisely because
-  nothing else enforces the contract. **Keep it on a capable model.**
+- **The reviewer is still the backstop, by discipline** — but two of the contracts it
+  backstops are now also enforced at write time. The `hooks/` layer (2026-09-20) denies
+  the four *lexical* reviewer FAILs (assert-on-a-literal, `waitForTimeout`/`networkidle`,
+  raw CSS/XPath, `.only`) and — the one that matters — denies the **healer** and the
+  **verifier** any edit that removes or rewrites an existing assertion. A check earns a
+  hook only if it is decidable from the proposed text alone; everything needing repository
+  state or judgment stays with the reviewer, which is most of it. **Keep it on a capable
+  model.** See `qa/hooks/README.md`.
 
 ---
 
@@ -822,11 +827,16 @@ QA-Toolkit/
 └── qa/                             # THE PLUGIN
     ├── README.md                   # plugin-level intro + authoring workflow
     ├── .claude-plugin/plugin.json  # manifest (name, description, keywords, version — bump to ship)
-    ├── agents/                     # planner · generator · healer · reviewer · exploration · ideation
+    ├── agents/                     # planner · generator · verifier · healer · reviewer · exploration · ideation
     ├── skills/                     # 23 SKILL.md — one dir each.
     │                               #   19 /qa:* commands (init · gen · heal · review · …)
     │                               #   + 4 helpers: playwright-cli · test-data-seed ·
     │                               #     axe-a11y · visual-regression
+    ├── hooks/
+    │   ├── hooks.json              # registers both PreToolUse gates on Edit|Write
+    │   ├── assertion-contract.sh   # denies the healer/verifier any assertion rewrite
+    │   ├── spec-lint.sh            # denies reviewer Checks 1/5/9/11 at write time
+    │   └── README.md               # why the subset is what it is, + the fail-open rules
     ├── reference/
     │   ├── DESIGN.md               # the design rationale (the "why")
     │   ├── sentinel-actions.md     # sentinel → action contract (heal · batch-fix · doctor Check 4)

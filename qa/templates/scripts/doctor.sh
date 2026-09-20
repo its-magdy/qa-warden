@@ -1071,6 +1071,64 @@ if [ -n "$TMPL" ] && [ -d "$TMPL/.." ]; then
   fi
 fi
 
+# 9h. The hooks/ enforcement layer — provisioning, scope ownership, and the stranded-deny case.
+#     This layer is the ONLY part of the toolkit that can block a write in real time, and all
+#     three of its failure modes are silent from inside a session:
+#     Arm 1 (PROVISIONING — the session-7 lesson). A hook whose `command` does not resolve, or is
+#       not executable, does not fail loudly: Claude Code records a hook error in the debug log and
+#       the write PROCEEDS. So the gate reads as "shipped" in hooks.json while enforcing nothing —
+#       the audit's own prose-vs-enforcement gap, one directory deeper. Checked by resolving every
+#       command path, not by reading hooks.json's shape.
+#     Arm 2 (SCOPE OWNERSHIP, the 9g arm-3 shape). assertion-contract.sh fires only for the agents
+#       named in its `case` — today healer and verifier, the two whose files forbid touching an
+#       assertion. Rename or retire one of those agents and the hook stays syntactically fine while
+#       scoping to nobody: the gate detaches from the gated thing. Compares the scope list against
+#       the agents/ directory, never against wording, so a reword stays green.
+#     Arm 3 (STRANDED DENY, the 9c shape). spec-lint.sh denies on reviewer Checks 1/5/9/11. If the
+#       reviewer ever retires or renumbers one, the hook keeps denying a construct nothing else
+#       objects to and there is NO path to a green write except QA_HOOKS_OFF=1 — a retracted rule
+#       that strands, exactly what 9c catches for settings.json's additive merge. Keyed on the
+#       check NUMBER (a symbol), not the check's prose.
+if [ -n "$TMPL" ] && [ -d "$TMPL/../hooks" ]; then
+  HK="$TMPL/../hooks"
+  if [ ! -f "$HK/hooks.json" ]; then
+    echo "❌ hooks/hooks.json is MISSING — the real-time enforcement layer is not registered; the reviewer is the only gate again (see hooks/README.md)"; fail=$((fail+1))
+  elif command -v jq >/dev/null && ! jq -e . "$HK/hooks.json" >/dev/null 2>&1; then
+    echo "❌ hooks/hooks.json is not valid JSON — Claude Code skips the whole file, so BOTH hooks silently never run"; fail=$((fail+1))
+  elif command -v jq >/dev/null; then
+    # Arm 1: every registered command must resolve to an executable file.
+    while read -r cmd; do
+      [ -n "$cmd" ] || continue
+      # ${CLAUDE_PLUGIN_ROOT} is substituted by the harness; resolve it here the same way.
+      hp=${cmd//\$\{CLAUDE_PLUGIN_ROOT\}/$TMPL/..}
+      if [ ! -f "$hp" ]; then
+        echo "❌ hooks.json registers '$cmd' but no such file — a dangling hook command does NOT block; the harness logs an error and the write proceeds, so the gate reads as shipped while enforcing nothing"; fail=$((fail+1))
+      elif [ ! -x "$hp" ]; then
+        echo "❌ hook script $cmd is not executable — hooks.json uses the exec form (args: []), which spawns it directly; a non-executable hook fails to launch and the write proceeds"; fail=$((fail+1))
+      fi
+    done < <(jq -r '.hooks.PreToolUse[]?.hooks[]?.command // empty' "$HK/hooks.json" 2>/dev/null)
+  fi
+  # Arm 2: the assertion hook's agent scope must still name live agents.
+  if [ -f "$HK/assertion-contract.sh" ]; then
+    scope=$(grep -oE 'case "\$agent" in [a-z|]+\)' "$HK/assertion-contract.sh" | head -1 | sed -e 's/.* in //' -e 's/)$//')
+    if [ -z "$scope" ]; then
+      echo "⚠️  cannot read the agent scope out of hooks/assertion-contract.sh — Check 9h arm 2 is blind; re-anchor it if the script was restructured"; warn=$((warn+1))
+    else
+      for ag in ${scope//|/ }; do
+        [ -f "$TMPL/../agents/$ag.md" ] \
+          || { echo "❌ hooks/assertion-contract.sh scopes to agent '$ag' but agents/$ag.md does not exist — the assertion-contract gate fires for nobody, and the prohibition it enforces is prose again"; fail=$((fail+1)); }
+      done
+    fi
+  fi
+  # Arm 3: every reviewer check the lint hook denies on must still be a numbered reviewer check.
+  if [ -f "$HK/spec-lint.sh" ] && [ -f "$TMPL/../agents/reviewer.md" ]; then
+    for n in $(grep -oE 'report "Check [0-9]+' "$HK/spec-lint.sh" | grep -oE '[0-9]+$' | sort -un); do
+      grep -qE "^${n}\. \*\*" "$TMPL/../agents/reviewer.md" \
+        || { echo "❌ hooks/spec-lint.sh denies on reviewer Check $n, which agents/reviewer.md no longer declares — the hook now blocks a construct nothing else objects to, with no path to a green write except QA_HOOKS_OFF=1"; fail=$((fail+1)); }
+    done
+  fi
+fi
+
 # 10. Site-id ↔ config-project routing (F-51: a site declared in app.context.md with no matching
 #     playwright.config project — specs target a phantom site and silently run zero tests; renumbered
 #     from the old "F-15" tag, which collided with the last-run-staleness F15 in check 1 above — the

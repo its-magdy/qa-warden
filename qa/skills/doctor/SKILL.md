@@ -7,9 +7,9 @@ background: false
 
 `/qa:doctor` runs the deterministic self-checks (checks 0–21) the rest of the toolkit describes
 in **prose** ("confirm the run resolved tests", "verify freshness", "the 16-key vocab must
-match byte-for-byte", "every `@smoke` test must carry the tag"). The plugin ships
-**no PreToolUse hooks** (CLAUDE.md §Oracle defense) — correctness rides on an agent
-remembering those sentences. `doctor` collapses them into one scripted pass so a
+match byte-for-byte", "every `@smoke` test must carry the tag"). The plugin's `PreToolUse`
+hooks cover only what is decidable from a single write (CLAUDE.md §Oracle defense); for
+everything else, correctness rides on an agent remembering those sentences. `doctor` collapses them into one scripted pass so a
 human (or CI) can *run* the guard instead of *remembering* it. It is **read-only**:
 it reruns no tests by default, heals nothing, hits no network, writes nothing.
 
@@ -141,6 +141,20 @@ does not fix anything — each finding names its repair:
   looking covered. Fix by restoring the two-call chain in `skills/gen/SKILL.md` and leaving the
   manifest grant with the verifier — never by re-adding it to the generator to make the check
   pass.
+- **Check 9h (the `hooks/` enforcement layer):** the only part of the toolkit that can block a
+  write in real time, and all three of its failure modes are invisible from inside a session.
+  **Arm 1, provisioning:** a hook whose `command` does not resolve, or is not executable, does
+  **not** block — Claude Code logs a hook error and the write proceeds, so the gate reads as
+  shipped while enforcing nothing. **FAIL** on a missing/unparseable `hooks.json` or a dangling
+  or non-executable command. **Arm 2, scope ownership** (the 9g arm-3 shape):
+  `assertion-contract.sh` fires only for the agents named in its `case` — today `healer` and
+  `verifier`, the two whose files forbid touching an assertion — so retiring or renaming one of
+  them leaves a syntactically-fine hook scoped to nobody. **Arm 3, stranded deny** (the 9c
+  shape): `spec-lint.sh` denies on reviewer Checks 1/5/9/11, and if the reviewer ever retires or
+  renumbers one, the hook keeps blocking a construct nothing else objects to, with no path to a
+  green write except `QA_HOOKS_OFF=1`. Arms 2 and 3 key on symbols — an agent filename, a check
+  number — never on wording, so a reword stays green and a re-parenting does not. Fix by
+  restoring the wiring, never by deleting the hook to make the check pass.
 - **Check 2 / 9b (vocab drift):** re-sync the 16-key mirror with CLAUDE.md (and, for
   9b, upgrade/re-stamp the plugin agents) in the same commit as any vocab change.
 - **Check 3 (vacuous smoke):** tag at least the P1 happy path `@smoke`, then

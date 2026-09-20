@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/assertion-contract.sh",
+            "args": [],
+            "timeout": 15,
+            "statusMessage": "QA: assertion contract"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/spec-lint.sh",
+            "args": [],
+            "timeout": 15,
+            "statusMessage": "QA: spec lint"
+          }
+        ]
+      }
+    ]
+  }
+}
