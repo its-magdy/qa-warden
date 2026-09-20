@@ -29,9 +29,19 @@ substrate) that a plugin cannot carry on its own.
    from the current templates, backing up each changed file to `<file>.qa-bak`
    first, then reinstalling deps if `package.json`/lockfile changed. It never
    touches user-authored files (`.env`, a customized `CLAUDE.md`,
-   `.claude/settings.json`, `.gitignore`, `fixtures/test.ts`, or anything under
+   `fixtures/test.ts`, or anything under
    `specs/`/`tests/`/`page-objects/`/`steps/`/`bugs/`). `/qa:doctor`'s
    substrate-drift check tells you when a project needs this.
+
+   **`--resync` is the whole upgrade — do not tell the user to follow it with a
+   plain `/qa:init`.** It was two calls until permissions travelled with the
+   files: the `.claude/settings.json` merge ran only on the plain stamp, so a
+   resync-only upgrade from 0.2.0 delivered 0 of 37 new rules and still exited 0.
+   Both paths now call the same merge. Two files are therefore touched that the
+   list above does not cover, both additively and neither overwritten:
+   `.claude/settings.json` (union of the permission arrays — it can add a rule
+   but never remove one) and `.gitignore` (one appended `*.qa-bak` pattern, so
+   the backups the resync itself writes are not offered up as new files).
 
 2. Read the script's stdout. It reports, per file, whether it was `created` or
    `exists (skipped)`, and whether `git init` / `npm install` / browser install

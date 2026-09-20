@@ -68,8 +68,8 @@ is not "accessible," and self-hosted visual diffs need a specialist for the long
 - **[`reference/reviewing-without-code.md`](reference/reviewing-without-code.md)** — for the non-coder who signs off: judge AI-written tests by their oracle + video, and the gates that stop for a human.
 - **[`reference/how-to.md`](reference/how-to.md)** — goal-titled recipes: import manual cases, fix a failing test, brownfield adoption, nightly CI, add rigor to a P1 flow.
 - **`/qa:help`** — everything else: what each command/agent/skill does, and what to run next.
-- **`DOCUMENTATION.md` (marketplace repo root)** — the full written reference for humans and
-  agents (visual companion: `DOCUMENTATION.html`). Lives beside the plugin in the repo it
+- **`DOCUMENTATION.md` (marketplace repo root)** — the single canonical written reference for
+  humans and agents. Lives beside the plugin in the repo it
   installs from — installed plugins can't reference files outside their own directory, so
   read it on the repo, not via a `../` path.
 - **`reference/DESIGN.md`** — the design rationale (the *why* behind the cost model, the

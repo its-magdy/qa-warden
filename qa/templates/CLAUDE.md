@@ -272,7 +272,7 @@ The toolkit's authoring chain is **`/qa:intake` → `/qa:ideate` → `/qa:new-sp
 - Accessibility tree, not screenshots. **Never** pass `--caps=vision` unless a visual-specific bug requires it.
 - `/clear` between unrelated test cases to drop stale page snapshots.
 - Nightly = `npx playwright test`, zero LLM. Healer runs only on failure.
-- **This file is the small, always-loaded core — keep it tight (~260 lines).** Recipes, step-by-step procedures, and examples live in Skills under `.claude/skills/`, loaded on demand. Do not add tutorials here.
+- **This file is the small, always-loaded core — keep it tight, budget ~15k tokens (`wc -c` / 4) and NOT a line count.** The budget was "~260 lines" through 0.2.0; 0.3.0 raised it because the file earned +13.5 KB of closed-vocabulary contract and enforced policy — and because lines are a broken meter for it: **54% of that growth (7.3 KB) arrived in three lines**, appended inside paragraphs that were already there. Only contract and policy the in-project agents cannot read from the plugin earn a place here. Recipes, step-by-step procedures, and examples live in Skills under `.claude/skills/`, loaded on demand. Do not add tutorials here.
 - Audit token use with `/context`; disable MCP servers whose tools you are not calling.
 
 ## Reporting pipeline

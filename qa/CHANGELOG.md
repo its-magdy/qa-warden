@@ -148,6 +148,15 @@ These are **verdicts, not omissions**. Each was worked as a full item and closed
 - Prod-guard `.ts` ↔ `.sh` parity audited differentially (55 cases, 54 identical verdicts; the
   one divergence is diagnostic-only and both layers still refuse).
 
+### Removed — `DOCUMENTATION.html`
+
+The hand-authored visual one-pager is deleted. It had no generator, sat a full release cycle out
+of date (no mention of the verifier split, `lock:`/`fault:`/`clock:` or Playwright 1.63.0), and
+two of the three pointers to it were already false — the repo README called it "a browser-viewable
+copy of the reference" when it was a different, smaller document, and `qa/README.md` shipped
+*inside the plugin* pointing at a repo-root file consumers never receive. `DOCUMENTATION.md` is
+now stated to be canonical.
+
 ### Changed — plugin layout
 
 All `/qa:*` entry points now live at `skills/<name>/SKILL.md`. The old `commands/` directory is
@@ -155,9 +164,42 @@ gone (0.2.0 shipped 21 commands + 6 skills; this build ships 23 skills and no `c
 `commands/x.md` and a `skills/x/SKILL.md` both define `/qa:x`, so the two layouts coexisting is
 invisible until behaviour diverges — doctor **Check 9d** now fails on a reappearance.
 
+### Changed — `/qa:init --resync` now delivers permissions and its own ignore rule
+
+Two upgrade-path holes, both measured on a scratch project stamped from the published 0.2.0
+build. Neither was visible from the command's own output: it exited **0** in both cases.
+
+- **Permissions travel with the substrate.** The `.claude/settings.json` merge ran only on the
+  plain stamp, so a resync-only upgrade delivered **0 of 37** new rules. It is now one
+  `stamp_permissions()` function called by both paths — single-sourced, because a copy of the
+  `jq` in a second place is just the same gap again. See *Upgrading from 0.2.0* below.
+- **`--resync` appends `*.qa-bak` to `.gitignore` before writing any backup.** That ignore rule
+  shipped after 0.2.0 and `.gitignore` is outside the resync set, so the command was generating
+  13 unignorable untracked files per upgrade.
+
+**No full permission subset check was added, and that is a decision.** Doctor **Check 9f** stays
+scoped to `mcp__` grants. A plain subset check was built and run against three scratch projects:
+it reported 37 missing on a resync-only upgrade (right), 0 on a current project (right), and 2
+on a current project whose owner had deliberately deleted two deny rules (wrong) — and gating
+the required set on the shipped template, the shape that closed the `CLAUDE.md` gap, does not
+separate those last two, because both rules are still shipped. The deciding fact is narrower:
+`scripts/doctor.sh` is itself a resynced file, so any check added to it reaches a project only
+through the same command that now performs the repair, and never before it. It could not
+observe the state it would be written for.
+
 ### Changed — doctor
 
-**27 → 43 checks** for anyone coming from 0.2.0.
+**27 → 43 checks** for anyone coming from 0.2.0. Still 43 — the additions below are
+sub-checks inside existing numbers.
+
+Check 9f gained an **arm 3** for the one permission-delivery failure the scaffold fix
+cannot close: the merge needs `jq`, and without it qa-scaffold parks the rules in
+`.claude/settings.qa-suggested.json` and moves on. That file's presence is proof the merge
+never ran — an intent-free signal, unlike a subset check — and doctor now names it, counts
+the rules that never landed, and says what they cost. A successful merge deletes the file,
+so the signal cannot go stale; if you hand-merged it and left it behind, doctor says so
+separately. The presence test sits outside the `jq` gate, since the state it detects *is*
+`jq` being absent.
 
 Check 9 also gained a **CLAUDE.md vocabulary containment** sub-check, which closes the widest
 hole in the upgrade path itself. `CLAUDE.md` is shared-ownership, so `--resync` skips it *and*
@@ -178,24 +220,30 @@ Verified end-to-end on a scratch project stamped from the published 0.2.0 build,
 
 ```sh
 # 1. Update the plugin, then restart Claude Code.
-# 2. Refresh the toolkit-owned substrate (20 of 30 files change; each is backed up to .qa-bak):
+# 2. Refresh the toolkit-owned substrate (20 of 30 files change; each is backed up to .qa-bak).
+#    This now delivers the permission rules too — one call, not two:
 /qa:init --resync
-# 3. Re-run the plain init — --resync does NOT merge permissions:
-/qa:init
-# 4. Chromium 1228 -> 1243 (Chrome 149 -> 153). --resync runs `npm install` but NOT this:
+# 3. Chromium 1228 -> 1243 (Chrome 149 -> 153). --resync runs `npm install` but NOT this:
 bash scripts/init.sh        # or: npx playwright install chromium
-# 5. Check what is left:
+# 4. Check what is left:
 /qa:doctor
 ```
 
-### Step 3 is not optional
+### The permission step is no longer separate
 
-`--resync` refreshes files; it does **not** run the `.claude/settings.json` permission merge.
-A 0.2.0 project that only resyncs is missing **37 permission rules** this build needs (measured).
-The plain `/qa:init` is idempotent and does the additive `jq` merge.
+Through 0.2.0, `--resync` refreshed files but did **not** run the `.claude/settings.json`
+permission merge, so a 0.2.0 project that only resynced was left missing **37 rules** — 2 MCP
+grants, 9 `Bash` allows and 26 `Write`/`Edit` denies — after a green, exit-0 upgrade. The
+verified recipe needed a second, plain `/qa:init` that nothing in the resync banner mentioned.
 
-Doctor will nudge you, but only partly: **Check 9f is scoped to `mcp__` entries**, so it reports 2 of
-those 37 and nothing covers the other 35 `Bash`/`Edit` rules. Run step 3 even if doctor is quiet.
+`--resync` now runs the same merge, from the same single-sourced function as the plain stamp.
+Measured on a scratch 0.2.0 project: 37 missing rules before, **0** after, and the resulting
+`settings.json` is **byte-identical to what the old two-call recipe produced** — including on a
+project whose owner had deleted rules by hand, because the merge was always an additive union
+that re-adds them. So this changes how many commands you type, not what you end up with.
+
+Re-running is a measured no-op: the merge is byte-stable, keeps your own rules, and preserves
+sibling keys (`permissions.ask`, `defaultMode`, `model`, `env`).
 
 ### Four permission rules must be deleted BY HAND
 
@@ -211,15 +259,15 @@ The settings merge is an additive union — it can add a rule but can never remo
 
 The replacements for the `sed` rules are `Bash(sed *e'*)` and `Bash(sed *e"*)`.
 
-### Three files `--resync` will never touch — merge them by hand
+### Three files `--resync` will not overwrite — merge them by hand
 
-These are shared-ownership by design (you edit them), so the resync skips them. Measured drift
-from the 0.2.0 templates:
+These are shared-ownership by design (you edit them), so the resync never copies over them.
+Measured drift from the 0.2.0 templates:
 
 | File | Drift | What you lose by skipping it |
 |---|---|---|
 | `CLAUDE.md` | **122 lines, +13.5 KB** | **All four structural features of this release.** After a clean, green `--resync` the project's `CLAUDE.md` contains **zero** mentions of `lock:`, `fault:`, `clock:` or `verifier`. The in-project agents read this file, not the plugin. **Doctor now names this gap** — see below. |
-| `.gitignore` | 9 lines | The `*.qa-bak` rule, among others — see below. |
+| `.gitignore` | 9 lines | Assorted ignore rules. The one that mattered, `*.qa-bak`, is now delivered by `--resync` itself — see below. |
 | `.env.example` | 8 lines | New optional seed/config vars. |
 
 Diff each against `<plugin>/templates/` and port what you want.
@@ -235,17 +283,26 @@ It **warns rather than fails**: the repair is a hand-merge, not a command, and a
 toolkit cannot perform for you should not red your CI. It matches on symbol *presence* anywhere
 in the file, so rewording and your own additions are free — only a deletion is reported.
 
-### `--resync` litters files your old `.gitignore` does not cover
+### `--resync` no longer litters files your old `.gitignore` cannot cover
 
 The `*.qa-bak` ignore rule shipped **after** 0.2.0, and `.gitignore` is one of the files
-`--resync` will not overwrite. On the scratch project the resync produced **13 untracked
-`.qa-bak` files, none of them ignored** — all of them commit-bait on the next `git add -A`.
+`--resync` will not overwrite — so the command generated its own commit-bait. Measured on the
+scratch project: **13 `.qa-bak` files written, 0 of them ignored**, all offered up by the next
+`git add -A`.
 
-Either add `*.qa-bak` to `.gitignore` before step 2, or review and delete the backups after.
+`--resync` now appends `*.qa-bak` to `.gitignore` before it writes any backup, so the same run
+that creates them covers them (13 untracked → **0**). It appends only that one pattern — litter
+this command itself creates, and a filename only this script produces, so there is no ignore
+*policy* being pushed onto your project. It checks `git check-ignore` first, so a rule you
+already have (including a global or `.git/info/exclude` one) is left alone, and re-running does
+not append twice.
+
+The done banner now also counts the backups and prints the sweep command.
 
 ### What a clean upgrade looks like
 
-On the scratch project, after steps 1–4, `/qa:doctor` exits **0** with only the four
+On the scratch project, after steps 1–3, `/qa:doctor` exits **0** with only the four
 hand-delete warnings above, the four `CLAUDE.md` vocabulary warnings until you merge that file,
 plus two environment notes (`ripgrep` not installed, no `artifacts/last-run.json` yet).
-`playwright lockstep: 3/3 … at 1.63.0 ✅`, and no substrate drift.
+`playwright lockstep: 3/3 … at 1.63.0 ✅`, no substrate drift, no missing permission rules and
+no unignored `.qa-bak` files.

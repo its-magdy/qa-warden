@@ -45,14 +45,119 @@ info()     { printf "[qa-scaffold]   %s\n" "$*"; }
 
 [ -d "$TEMPLATES" ] || { echo "[qa-scaffold] templates dir missing at $TEMPLATES" >&2; exit 1; }
 
+# --- permissions: merge into .claude/settings.json ---------------------------
+# Plugin settings.json can only carry agent/subagentStatusLine keys, so the
+# QA write-scope + safety permission rules must be stamped here.
+#
+# A FUNCTION, not inline code, because BOTH entry points must run it: the normal stamp
+# below and `--resync` above. Session 14 measured what the missing half cost — a green,
+# exit-0, resync-only upgrade from the published 0.2.0 left 37 shipped rules undelivered
+# (2 MCP grants, 9 Bash allows, 26 Write/Edit denies), silently, because the merge lived
+# only on the plain-init path. Single-sourced here so the two paths cannot drift (the
+# same reason scripts/spec-links.sh exists); duplicating the jq would just re-open the gap
+# in a second place.
+#
+# Safe to run on every resync because the merge is an additive UNION that is byte-stable:
+# measured — re-merging its own output is byte-identical, the project's own rules survive,
+# and sibling keys (`permissions.ask`, `defaultMode`, `model`, `env`) are preserved by jq's
+# recursive `*`. Nothing is ever removed, which is also why this one file gets NO `.qa-bak`
+# unlike every other file --resync touches: a backup exists to undo a destructive
+# overwrite, and an additive union has no destruction to undo.
+stamp_permissions() {
+  mkdir -p "$TARGET/.claude"
+  local SETTINGS="$TARGET/.claude/settings.json"
+  local TMPL_SETTINGS="$TEMPLATES/settings.json"
+  local SUGGESTED="$TARGET/.claude/settings.qa-suggested.json"
+  [ -f "$TMPL_SETTINGS" ] || return 0
+  local norm merged
+  if [ ! -f "$SETTINGS" ]; then
+    # F-003 byte-idempotency: normalize allow/deny to sorted-unique on the FIRST write
+    # too (via the SAME jq `unique` the re-run merge below uses), so a committed
+    # settings.json is byte-identical to what a later /qa:init self-merge produces —
+    # no spurious diff / no /qa:doctor drift the first time anyone re-runs init.
+    if command -v jq >/dev/null 2>&1; then
+      norm="$(jq '.permissions.allow = ((.permissions.allow // []) | unique)
+                  | .permissions.deny  = ((.permissions.deny  // []) | unique)' \
+                "$TMPL_SETTINGS" 2>/dev/null)"
+      if [ -n "$norm" ]; then
+        printf '%s\n' "$norm" > "$SETTINGS" && created ".claude/settings.json"
+      else
+        cp "$TMPL_SETTINGS" "$SETTINGS" && created ".claude/settings.json"
+      fi
+    else
+      cp "$TMPL_SETTINGS" "$SETTINGS" && created ".claude/settings.json"
+    fi
+    rm -f "$SUGGESTED"
+  elif command -v jq >/dev/null 2>&1; then
+    # union the allow/deny arrays; keep the project's other keys intact
+    merged="$(jq -s '
+      .[0] as $proj | .[1] as $tmpl |
+      $proj * {permissions: {
+        allow: (($proj.permissions.allow // []) + ($tmpl.permissions.allow // []) | unique),
+        deny:  (($proj.permissions.deny  // []) + ($tmpl.permissions.deny  // []) | unique)
+      }}' "$SETTINGS" "$TMPL_SETTINGS" 2>/dev/null)"
+    if [ -n "$merged" ]; then
+      if [ "$merged" = "$(cat "$SETTINGS")" ]; then
+        info "permissions already current in .claude/settings.json"
+      else
+        printf '%s\n' "$merged" > "$SETTINGS" && info "merged permissions into .claude/settings.json"
+      fi
+      # A succeeded merge RETIRES any suggestion file an earlier jq-less run left behind.
+      # Doctor Check 9f arm 3 reads that file's presence as proof the merge never ran, so
+      # a stale copy would make it nag about rules that are already in place.
+      rm -f "$SUGGESTED"
+    else
+      cp "$TMPL_SETTINGS" "$SUGGESTED"
+      info "could not auto-merge; wrote .claude/settings.qa-suggested.json for manual merge"
+    fi
+  else
+    cp "$TMPL_SETTINGS" "$SUGGESTED"
+    info "jq not found; wrote .claude/settings.qa-suggested.json for manual merge"
+  fi
+}
+
+# --- .qa-bak ignore rule -------------------------------------------------------
+# --resync backs every changed file up to <file>.qa-bak, and `*.qa-bak` is in the shipped
+# templates/gitignore — but `.gitignore` is itself OUTSIDE the resync set (users own it), so
+# a project scaffolded before that rule shipped can never receive it. Measured on a real
+# 0.2.0 -> HEAD upgrade: 13 backups written, 0 of them ignored, all 13 offered up by
+# `git status` as new files to commit. The command generated its own commit-bait.
+#
+# The narrow fix, and the boundary it respects: resync may add an ignore rule for litter IT
+# ITSELF creates, and nothing else. `*.qa-bak` is a filename pattern only this script ever
+# produces, so there is no ignore POLICY here for a user to disagree with — which is exactly
+# why the rest of templates/gitignore still is not pushed onto an existing project.
+# Called BEFORE the copy loop so the very run that writes the backups has them covered.
+ensure_qa_bak_ignored() {
+  local gi="$TARGET/.gitignore"
+  # Ask git first where it can answer: `check-ignore` honours any pattern form, a rule
+  # further up the tree, core.excludesFile and .git/info/exclude, so a project already
+  # covered by one of those is left alone. Fall back to a literal grep off-repo.
+  if command -v git >/dev/null 2>&1 && git -C "$TARGET" rev-parse --git-dir >/dev/null 2>&1; then
+    git -C "$TARGET" check-ignore -q "probe.qa-bak" 2>/dev/null && return 0
+  elif [ -f "$gi" ] && grep -q 'qa-bak' "$gi"; then
+    return 0
+  fi
+  {
+    # leading blank line only when appending to existing content
+    [ -s "$gi" ] && printf '\n'
+    printf '# `/qa:init --resync` backups — transient: review, then delete. Appended by\n'
+    printf '# qa-scaffold because .gitignore is outside the resync set, so this rule cannot\n'
+    printf '# otherwise reach a project scaffolded before it shipped.\n'
+    printf '*.qa-bak\n'
+  } >> "$gi" && info "added *.qa-bak to .gitignore (resync backups are transient, never source)"
+}
+
 # --- --resync: force-refresh toolkit-owned substrate into an EXISTING project ---
 # The propagation fix for F-015/F-016. The normal scaffold below is skip-if-exists, and the
 # project deny-list forbids agents from repairing these files in place — so a plugin fix to
 # package.json / playwright.config.ts / prod-guard.* / a pinned dep NEVER reaches an
 # already-initialized project (the "fixed the recipe, but the cake's already baked" gap).
 # --resync force-overwrites ONLY the files the toolkit SOLELY owns; it never touches
-# user-authored files (.env secrets, a customized CLAUDE.md, .claude/settings.json, .gitignore,
-# fixtures/test.ts, or anything under specs/tests/page-objects/steps/bugs). Each changed file
+# user-authored files (.env secrets, a customized CLAUDE.md, .gitignore, fixtures/test.ts, or
+# anything under specs/tests/page-objects/steps/bugs). `.claude/settings.json` is the one
+# documented exception it SHARES with the normal stamp (F-015): it is additively jq-merged,
+# never overwritten — see stamp_permissions() above for why that is non-destructive. Each changed file
 # is backed up to <file>.qa-bak first. Like the normal stamp it runs `cp` — NOT a Write/Edit
 # tool — so the project deny-list does not (and should not) block this human-invoked repair.
 if [ "$RESYNC" = "1" ]; then
@@ -70,6 +175,7 @@ if [ "$RESYNC" = "1" ]; then
   # refreshed" banner with exit 0, leaving the MUST-land prod-guard.ts at its old content —
   # and doctor's drift check then loops the user back to this very command (M-8).
   # Unlike the normal stamp this loop is NOT in a subshell, so a plain variable suffices.
+  ensure_qa_bak_ignored
   changed=0; RESYNC_ERRS=""
   for rel in $RESYNC_SET; do
     src="$TEMPLATES/$rel"; dst="$TARGET/$rel"
@@ -96,6 +202,12 @@ if [ "$RESYNC" = "1" ]; then
     fi
   done
   chmod +x "$TARGET"/scripts/*.sh 2>/dev/null || true
+  # Permissions travel with the substrate. Before this call a resync-only upgrade refreshed
+  # every toolkit-owned FILE and delivered none of the new permission RULES, so the verified
+  # upgrade recipe needed a second, plain `/qa:init` that nothing in this banner mentioned.
+  # It runs unconditionally — `changed=0` means the files already matched, which says nothing
+  # about whether the rules did — and is a measured no-op when they are already current.
+  stamp_permissions
   # Abort BEFORE the npm install and the done banner — a partially resynced substrate must not
   # green-stamp, exactly as the normal stamp refuses on copy failure.
   if [ -n "$RESYNC_ERRS" ]; then
@@ -115,7 +227,9 @@ if [ "$RESYNC" = "1" ]; then
   elif [ "$NO_INSTALL" != "1" ]; then
     info "npm not found — node_modules may now be STALE against the resynced package.json; install Node >=22 and run 'npm install' manually"
   fi
-  echo "[qa-scaffold] resync done — $changed file(s) refreshed. Review any .qa-bak backups, then delete them."
+  nbak=$(find "$TARGET" -name '*.qa-bak' -not -path '*/node_modules/*' 2>/dev/null | wc -l | tr -d ' ')
+  echo "[qa-scaffold] resync done — $changed file(s) refreshed."
+  [ "${nbak:-0}" -gt 0 ] && echo "[qa-scaffold] $nbak .qa-bak backup(s) present — review, then sweep: find . -name '*.qa-bak' -not -path './node_modules/*' -delete"
   exit 0
 fi
 
@@ -181,48 +295,9 @@ elif [ -f "$TARGET/.env" ]; then
 fi
 
 # --- permissions: merge into .claude/settings.json ---------------------------
-# Plugin settings.json can only carry agent/subagentStatusLine keys, so the
-# QA write-scope + safety permission rules must be stamped here.
-mkdir -p "$TARGET/.claude"
-SETTINGS="$TARGET/.claude/settings.json"
-TMPL_SETTINGS="$TEMPLATES/settings.json"
-if [ -f "$TMPL_SETTINGS" ]; then
-  if [ ! -f "$SETTINGS" ]; then
-    # F-003 byte-idempotency: normalize allow/deny to sorted-unique on the FIRST write
-    # too (via the SAME jq `unique` the re-run merge below uses), so a committed
-    # settings.json is byte-identical to what a later /qa:init self-merge produces —
-    # no spurious diff / no /qa:doctor drift the first time anyone re-runs init.
-    if command -v jq >/dev/null 2>&1; then
-      norm="$(jq '.permissions.allow = ((.permissions.allow // []) | unique)
-                  | .permissions.deny  = ((.permissions.deny  // []) | unique)' \
-                "$TMPL_SETTINGS" 2>/dev/null)"
-      if [ -n "$norm" ]; then
-        printf '%s\n' "$norm" > "$SETTINGS" && created ".claude/settings.json"
-      else
-        cp "$TMPL_SETTINGS" "$SETTINGS" && created ".claude/settings.json"
-      fi
-    else
-      cp "$TMPL_SETTINGS" "$SETTINGS" && created ".claude/settings.json"
-    fi
-  elif command -v jq >/dev/null 2>&1; then
-    # union the allow/deny arrays; keep the project's other keys intact
-    merged="$(jq -s '
-      .[0] as $proj | .[1] as $tmpl |
-      $proj * {permissions: {
-        allow: (($proj.permissions.allow // []) + ($tmpl.permissions.allow // []) | unique),
-        deny:  (($proj.permissions.deny  // []) + ($tmpl.permissions.deny  // []) | unique)
-      }}' "$SETTINGS" "$TMPL_SETTINGS" 2>/dev/null)"
-    if [ -n "$merged" ]; then
-      printf '%s\n' "$merged" > "$SETTINGS" && info "merged permissions into .claude/settings.json"
-    else
-      cp "$TMPL_SETTINGS" "$TARGET/.claude/settings.qa-suggested.json"
-      info "could not auto-merge; wrote .claude/settings.qa-suggested.json for manual merge"
-    fi
-  else
-    cp "$TMPL_SETTINGS" "$TARGET/.claude/settings.qa-suggested.json"
-    info "jq not found; wrote .claude/settings.qa-suggested.json for manual merge"
-  fi
-fi
+# Defined near the top (the --resync branch above exits before reaching this point, so the
+# function has to be in scope by then); this is the normal-stamp call site.
+stamp_permissions
 
 # --- git init (optional convenience; the serial generator does not require it) ---
 if [ ! -d "$TARGET/.git" ]; then

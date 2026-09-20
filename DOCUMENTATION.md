@@ -6,6 +6,11 @@
 > [`qa/reference/DESIGN.md`](qa/reference/DESIGN.md); for a live, project-aware
 > "what do I do next" answer run **`/qa:help`**.
 >
+> **This file is canonical.** There is no second, prettier copy to keep in step: the
+> hand-authored `DOCUMENTATION.html` one-pager was deleted in 0.3.0 after sitting a full
+> release cycle out of date (it never mentioned the verifier split, `lock:`/`fault:`/`clock:`
+> or Playwright 1.63.0) with no generator to replay it. Docs land here.
+>
 > **New here? Don't start with this file — it's the reference.** Do the
 > [**tutorial**](qa/reference/tutorial-first-test.md) (author one test end to end), keep the
 > [**glossary**](qa/reference/glossary.md) open, and for a specific goal use a how-to recipe
@@ -171,10 +176,15 @@ plugin. So a clean, green resync can leave you on the current runtime with a voc
 release behind. Doctor's **CLAUDE.md vocabulary containment** sub-check (Check 9) now names
 exactly which toolkit-owned symbols your copy is missing, and points at the shipped template
 to diff against — it **warns** rather than fails, because the repair is a hand-merge rather
-than a command. Two further shared-ownership notes: `--resync` does **not** merge
-permissions (the `.claude/settings.json` jq merge runs only on a plain `/qa:init`, so upgrade
-with `--resync` *then* plain `/qa:init`), and `.gitignore` is skipped too, so an older one
-will not cover the `.qa-bak` files the resync itself creates.
+than a command.
+
+The other two shared-ownership files used to cost you something as well, and no longer do —
+both were fixed by making the resync do slightly more, rather than by detecting the shortfall.
+`.claude/settings.json` is still never overwritten, but `--resync` now runs the same additive
+`jq` permission merge the plain stamp runs (it previously did not, leaving a resync-only
+upgrade short **37 rules** with an exit-0 banner). And `.gitignore` is still yours, but the
+resync appends the single `*.qa-bak` pattern before writing any backup, so the command stops
+generating untracked files its own output tells you to review.
 
 ### 4.3 How the pieces coordinate
 
@@ -842,8 +852,7 @@ stable row ids exist (`/qa:approve` mints them).
 ```
 QA-Toolkit/
 ├── README.md                       # how the plugin is packaged & installed (marketplace-level)
-├── DOCUMENTATION.md                # ← this file
-├── DOCUMENTATION.html              # visual one-pager companion (see README)
+├── DOCUMENTATION.md                # ← this file (the CANONICAL reference)
 ├── MERGE-NOTES.md                  # design lineage (Test-Browser oracle-defense + POM reuse merge)
 ├── .claude-plugin/
 │   └── marketplace.json            # the catalog (lists the qa plugin)

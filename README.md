@@ -52,7 +52,6 @@ Four kinds of doc, pick by what you need right now:
 
 From inside a project, **`/qa:help`** gives a live, project-aware "what do I do next" answer —
 or **`/qa:help <area/feature>`** to scope it to one feature.
-(`DOCUMENTATION.html` is a browser-viewable copy of the reference.)
 
 ---
 

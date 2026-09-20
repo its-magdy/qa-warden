@@ -140,6 +140,13 @@ detection and repair can't drift apart: `qa-scaffold --resync` force-refreshes
 exactly this set, and `doctor.sh` Check 9 byte-compares exactly this set against
 the shipped templates. Adding a template file is a one-line edit here.
 
+Two shared-ownership files are excluded from the *copy* but not from the *upgrade*, because
+skipping the file turned out not to mean skipping its content: `--resync` also runs the
+additive `.claude/settings.json` permission merge (it did not until a resync-only upgrade was
+measured delivering 0 of 37 new rules, exit 0) and appends the single `*.qa-bak` pattern to
+`.gitignore` (the rule that covers litter the resync itself writes, and which an older
+`.gitignore` could not otherwise receive). Neither file is ever overwritten.
+
 ## `runtime-dirs.txt` — the runtime-directory manifest
 
 Also not a script: the single list of directories the subagents write into

@@ -1123,6 +1123,21 @@ fi
 #     and not the whole allow[]: those are agent-capability grants with exactly one right
 #     answer, whereas a user legitimately deletes a POLICY rule they disagree with (that has
 #     happened) and a full-list subset check would nag them forever.
+#     That scoping was RE-EXAMINED after session 14 measured the blind spot (a resync-only
+#     upgrade delivered 0 of 37 new rules; this arm nudged on 2 of them). It STANDS, and the
+#     full-list check stays unbuilt, for a reason stronger than the nag — measured, not argued:
+#       - The nag is real and the obvious fix does not dodge it. A plain subset check run over
+#         three scratch projects reported 37 missing on a resync-only upgrade (right), 0 on a
+#         current project (right) and 2 on a current project whose owner had deleted two deny
+#         rules on purpose (wrong). Deriving the required set from the shipped template — the
+#         shape that closed the CLAUDE.md gap one check up -- does not separate those last two:
+#         both rules are still shipped, so the gate passes and the false nag survives.
+#       - The gap is now closed at the SOURCE instead: qa-scaffold's stamp_permissions() runs
+#         on `--resync` as well as on the plain stamp, so the rules travel with the files.
+#       - Which leaves a full-list check with no population to serve. `scripts/doctor.sh` is
+#         itself a line of resync-set.txt: a check added here reaches a project ONLY through
+#         the same command that now performs the repair, and arrives no earlier than it. It
+#         could never observe the state it was written for.
 if [ -n "$TMPL" ] && [ -f "$TMPL/settings.json" ] && [ -f "$TMPL/../agents/healer.md" ] && command -v jq >/dev/null 2>&1; then
   # `tools:` is a comma-separated frontmatter scalar; settings.json is a JSON array. Normalize
   # both to a sorted line set so the comparison is of SETS, not of formatting or order.
@@ -1145,6 +1160,36 @@ if [ -n "$TMPL" ] && [ -f "$TMPL/settings.json" ] && [ -f "$TMPL/../agents/heale
     unstamped=$(comm -23 <(printf '%s\n' "$s_mcp") <(printf '%s\n' "$p_mcp") | grep . || true)
     [ -n "$unstamped" ] && {
       echo "⚠️  .claude/settings.json is missing MCP grants the plugin now ships: $(printf '%s\n' "$unstamped" | tr '\n' ' ')— this project was scaffolded before they were added. Re-run /qa:init (the permission merge is additive and runs on every init, so this needs no hand edit)."; warn=$((warn+1)); }
+  fi
+fi
+
+# 9f arm 3 (same check, no new number). The one delivery failure the source fix CANNOT close:
+#     the merge needs `jq`, and without it qa-scaffold writes the shipped rules to
+#     `.claude/settings.qa-suggested.json` for a hand-merge and moves on. That file's presence
+#     is proof the merge did not run — an intent-free signal, which is exactly what the subset
+#     check lacks: it says the rules were never DELIVERED, not that they were declined. Paired
+#     with stamp_permissions() deleting the file on a successful merge, so the signal cannot go
+#     stale (M-8: detection and repair cover the same set).
+#     The presence test is deliberately OUTSIDE the jq gate above — the state it detects is
+#     "jq was missing", so a jq-gated detector for it could never fire. jq only refines the
+#     message from "unmerged" to "which rules".
+#     WARN, not FAIL, matching arm 2: an under-permissioned project prompts and stalls, it does
+#     not produce a wrong test result, and the repair is one command.
+if [ -f .claude/settings.qa-suggested.json ]; then
+  unmerged=""; counted=0
+  if command -v jq >/dev/null 2>&1 && [ -f .claude/settings.json ]; then
+    sug=$(jq -r '(.permissions.allow[]?|"allow "+.),(.permissions.deny[]?|"deny "+.)' .claude/settings.qa-suggested.json 2>/dev/null | sort -u)
+    cur=$(jq -r '(.permissions.allow[]?|"allow "+.),(.permissions.deny[]?|"deny "+.)' .claude/settings.json 2>/dev/null | sort -u)
+    if [ -n "$sug" ]; then
+      counted=1
+      unmerged=$(comm -23 <(printf '%s\n' "$sug") <(printf '%s\n' "$cur") | grep . || true)
+    fi
+  fi
+  if [ "$counted" = "1" ] && [ -z "$unmerged" ]; then
+    echo "⚠️  .claude/settings.qa-suggested.json is STALE — every rule in it is already present in .claude/settings.json. Delete it; while it sits there it reads as an outstanding manual merge."; warn=$((warn+1))
+  else
+    n_txt="its rules"; [ "$counted" = "1" ] && n_txt="$(printf '%s\n' "$unmerged" | wc -l | tr -d ' ') of its rules"
+    echo "⚠️  .claude/settings.qa-suggested.json exists — qa-scaffold could not merge permissions (jq missing, or an unparseable settings.json) and left them here instead, so $n_txt never reached .claude/settings.json. Agents will PROMPT on tool calls the toolkit means to pre-approve, and the Write/Edit denies guarding the substrate are absent. Install jq and re-run /qa:init (the merge is additive and deletes this file), or hand-merge the arrays and delete it."; warn=$((warn+1))
   fi
 fi
 

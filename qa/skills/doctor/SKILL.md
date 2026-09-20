@@ -125,7 +125,18 @@ does not fix anything — each finding names its repair:
   scaffolded earlier. Repair is a plain `/qa:init` (the permission merge is additive and runs
   every time), not a hand edit. Scoped to the `mcp__` entries on purpose: those are capability
   grants with one right answer, whereas a user may legitimately delete a policy rule, and a
-  whole-allow-list check would nag them forever.
+  whole-allow-list check would nag them forever. That scoping was re-examined and **stands** —
+  a subset check was built and measured as reporting 37 missing on a resync-only upgrade
+  (right), 0 on a current project (right) and 2 on a current project whose owner had deleted
+  two deny rules on purpose (wrong); and `scripts/doctor.sh` is itself a resynced file, so a
+  check added here can only reach a project through the same command that now repairs the gap.
+  **Arm 3 (WARN)** covers what the repair cannot: the merge needs `jq`, and without it the
+  scaffold parks the shipped rules in `.claude/settings.qa-suggested.json`. That file's presence
+  is proof the merge never ran — unlike a subset check it cannot confuse *undelivered* with
+  *declined* — so doctor names it, counts the rules still missing, and says what they cost. A
+  successful merge deletes the file, so the signal cannot go stale; a hand-merged leftover is
+  reported separately as stale. The presence test sits outside the `jq` gate, because the state
+  it detects is `jq` being absent.
 - **Check 9g (`/qa:gen`'s compiler → verifier chain + the manifest gate):** `generator` and
   `verifier` are two agents on purpose — until the split, the agent that wrote an `expect(...)`
   also decided at steps 8b/8c whether that `expect` catches an injected defect, and its cheapest

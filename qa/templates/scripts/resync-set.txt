@@ -14,8 +14,12 @@
 #                          sub-check still catches a DELETED stock var)
 #   CLAUDE.md            — users customize project policy
 #   settings.json        — users add their own permission rules (jq-merged, never copied;
-#                          doctor Check 9c covers the retired-rule case a union merge can't remove)
-#   gitignore            — user-editable once stamped
+#                          doctor Check 9c covers the retired-rule case a union merge can't remove).
+#                          NOT a gap: --resync runs that same merge via stamp_permissions(), so
+#                          the rules travel with the files even though the FILE is not copied.
+#   gitignore            — user-editable once stamped. --resync appends exactly one pattern to
+#                          it, `*.qa-bak`, covering litter the resync itself writes — see
+#                          ensure_qa_bak_ignored() for why that is the whole of the carve-out
 #   fixtures/test.ts     — users wire their own fixtures
 #   page-objects/README.md — user-authored notes land here
 #
