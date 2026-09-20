@@ -163,6 +163,19 @@ existing project, run **`/qa:init --resync`** (force-refreshes toolkit-owned fil
 backing each up to `<file>.qa-bak`, never touching `.env`/`CLAUDE.md`/your files).
 **`/qa:doctor`** flags when a project has drifted and needs it.
 
+**The shared-ownership files are the catch, and `CLAUDE.md` is the one that costs a
+feature.** `--resync` skips it on purpose — it is your project policy and you edit it —
+but it is also where every new *authoring* feature is documented (`fault:`, `clock:`,
+`lock:`, the `verifier` role), and the in-project agents read your copy rather than the
+plugin. So a clean, green resync can leave you on the current runtime with a vocabulary a
+release behind. Doctor's **CLAUDE.md vocabulary containment** sub-check (Check 9) now names
+exactly which toolkit-owned symbols your copy is missing, and points at the shipped template
+to diff against — it **warns** rather than fails, because the repair is a hand-merge rather
+than a command. Two further shared-ownership notes: `--resync` does **not** merge
+permissions (the `.claude/settings.json` jq merge runs only on a plain `/qa:init`, so upgrade
+with `--resync` *then* plain `/qa:init`), and `.gitignore` is skipped too, so an older one
+will not cover the `.qa-bak` files the resync itself creates.
+
 ### 4.3 How the pieces coordinate
 
 - **Commands** are the entry points. Some run logic inline in the main session;
@@ -740,7 +753,7 @@ copies every file), so new templates never strand.
 | **`playwright.config.ts`** | `globalSetup: prod-guard.ts`; run-of-record-gated `json → artifacts/last-run.json` reporter; `outputDir: ./artifacts/test-results`; `trace: retain-on-failure`; `video` retain-on-failure (or `on` when `QA_KEEP_VIDEO=1`); `reducedMotion:'reduce'`; `locale:'en-US'`; `grepInvert: /@quarantine/`; `setup → app → (conditional) admin` projects, **tag-routed** (`@site:*`) not path-routed. |
 | **`package.json`** | Pinned dev deps (see below) + `overrides` pinning `playwright`/`playwright-core` to one stable browser revision, and npm scripts (`test`, `test:smoke`, `test:regression`, `typecheck`, …). |
 | **`.mcp.json`** / **`.mcp.explore.json`** | Empty `{}` default vs the Playwright-MCP-registered explore/heal config (the two-config pattern of [§13](#13-cli-vs-mcp)). |
-| **`scripts/`** | `prod-guard.sh` (advisory), `prod-guard.ts` (enforced globalSetup), `resolve-spec-path.sh` (single `<arg>`→spec/test path mapper), `doctor.sh` (the `/qa:doctor` deterministic self-check, checks 0–21 + rollup), `check-last-run.sh` (canonical `last-run.json` freshness/zero-test gate, shared by doctor + `/qa:report`), `bug-status.sh` (canonical `bugs/*.md` Status parser **and** — via `--class` — the canonical resolved-vs-open classification, shared by doctor + `/qa:run mode=smoke`/`/qa:run mode=single`/`/qa:report`), `retire-delete.sh` (the sanctioned scoped-delete wrapper `/qa:retire` calls), `resync-set.txt` (the single manifest of toolkit-owned files, read by BOTH `qa-scaffold --resync` and doctor's substrate-drift check), `runtime-dirs.txt` (the single manifest of runtime directories, read by BOTH bootstrap entry points so `/qa:init` and `npm run init` stamp the same tree), `init.sh` (plugin-free bootstrap for a fresh clone), plus a `README.md` covering all of them. |
+| **`scripts/`** | `prod-guard.sh` (advisory), `prod-guard.ts` (enforced globalSetup), `resolve-spec-path.sh` (single `<arg>`→spec/test path mapper), `doctor.sh` (the `/qa:doctor` deterministic self-check, checks 0–21 + rollup), `check-last-run.sh` (canonical `last-run.json` freshness/zero-test gate, shared by doctor + `/qa:report`), `bug-status.sh` (canonical `bugs/*.md` Status parser **and** — via `--class` — the canonical resolved-vs-open classification, shared by doctor + `/qa:run mode=smoke`/`/qa:run mode=single`/`/qa:report`), `retire-delete.sh` (the sanctioned scoped-delete wrapper `/qa:retire` calls), `resync-set.txt` (the single manifest of toolkit-owned files, read by BOTH `qa-scaffold --resync` and doctor's substrate-drift check), `runtime-dirs.txt` (the single manifest of runtime directories, read by BOTH bootstrap entry points so `/qa:init` and `npm run init` stamp the same tree), `oracle-keys.txt` (the closed oracle vocabulary as data, read by doctor Checks 2/9b), `prod-guard-rails.txt` (the manifest of skills that must carry a prod-guard rail, read by Check 9bd), `claude-md-vocab.txt` (the manifest of toolkit-owned symbols that must survive in your `CLAUDE.md` — the delivery half of the upgrade path, since that file is shared-ownership and `--resync` cannot refresh it), `init.sh` (plugin-free bootstrap for a fresh clone), plus a `README.md` covering all of them. |
 | **`.env.example`** | `BASE_URL_APP=CHANGEME` fail-closed sentinel, blank creds, documented toggles (`QA_KEEP_VIDEO`, `QA_RUN_QUARANTINE`, `QA_RUN_OF_RECORD`, `QA_ALLOW_PROD`). |
 | **`fixtures/`** | `test.ts` (the `test`/`expect` barrel; the generator adds one fixture per promoted page object), plus `schemas/` + `factories/` `.ts.example` illustrations (real schemas/factories are generated **on demand, grounded in the real app**, on first `factory:` use). |
 | **`specs/_context/_templates/`** | `app.context.md` (hot-tier skeleton), `area.md` (specialist skeleton), `basis.md` (the Example-Map test-basis template), `cases.md` (the SFDIPOT candidate-case checklist template). |
