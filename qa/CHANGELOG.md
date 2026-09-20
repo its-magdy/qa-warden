@@ -51,6 +51,13 @@ nothing, and a large body of correctness work.
 - Glossary gains **substrate**, **waiver**, **situation step**; smaller citation fixes in
   `/qa:help`, `exploration.md`, `planner.md`, `knowledge-map.md`, `gitignore`.
 
+### Behavioural evals (2026-09-21) — maintainer-only, not shipped to projects
+
+- New `evals/` suite for `claude plugin eval`: five reviewer cases, each planting ONE known defect
+  (no `expect`, orphan oracle item, asserted value ≠ oracle value, `waitForTimeout`, plus a
+  correct control) in a real scaffolded project, graded by free regex over the reviewer's own
+  `Check N (…): PASS|FAIL` lines. One case verified end-to-end; see `evals/README.md`.
+
 ### Outside-in audit (2026-09-20) — one false claim, two unguarded paths, one missing step
 
 - **Fixed a false claim.** `CLAUDE.md` §"Escalation rules" said a flaky test is *auto-moved* to

@@ -74,6 +74,7 @@ qa/                               ← the plugin
 └── bin/qa-scaffold  deterministic substrate installer
     bin/qa-selfcheck the plugin's own consistency checks — NOT shipped to consumers
     bin/qa-hooktest  regression tests for the two hooks  — NOT shipped to consumers
+    evals/           behavioural evals (`claude plugin eval`) — planted-defect cases for the reviewer
 ```
 
 ### Before you commit a plugin change
@@ -82,6 +83,13 @@ qa/                               ← the plugin
 qa/bin/qa-selfcheck              # 7 checks over agents/ skills/ hooks/ reference/ — must end ✅
 qa/bin/qa-hooktest               # 20 real payloads through the two PreToolUse hooks — must end ✅
 claude plugin validate ./qa      # mandatory after ANY frontmatter edit
+```
+
+Editing `agents/reviewer.md`? Also run the behavioural suite — it costs real model calls
+(~$1.6 and ~6 min per case), so it is per-change, not per-commit. See `qa/evals/README.md`:
+
+```bash
+cd qa && claude plugin eval . --tag reviewer --runs 1 --ablation none --scaffold --trust-plugin --no-publish
 ```
 
 `qa-selfcheck` holds the checks that read only plugin source (oracle-key mirrors, `maxTurns`
