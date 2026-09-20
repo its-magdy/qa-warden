@@ -81,7 +81,9 @@ what runs under the hood.
 
 **reviewer** — the read-only gatekeeper subagent that blocks a merge when the assertion
 contract is violated (a step with no assertion, an assertion checking the wrong value, an
-out-of-vocab key…). No hooks ship, so the reviewer *is* the enforcement — run it on every PR.
+out-of-vocab key…). Two write-time `PreToolUse` hooks ship, but they are a floor covering only
+the checks decidable from the proposed text alone — the reviewer is still the enforcement for
+everything else. Run it on every PR.
 
 **rigor lane** — the fuller path that inserts `/qa:intake` → `/qa:ideate` → `/qa:approve`
 before `/qa:new-spec`, pinning *what correct means* before anything is generated. Use it

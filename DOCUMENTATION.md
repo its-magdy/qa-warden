@@ -378,7 +378,7 @@ not operator guidance; `CLAUDE.md`'s "Subagent roster" mirrors them.
 | **planner** | `model: opus` (pinned — it authors the oracle, and nothing downstream compares an oracle to reality) + CLI | Translate a story/bug into one spec + YAML oracle. **Owns the assertion contract.** | `/qa:new-spec` | `specs/**` |
 | **generator** | `model: sonnet` (pinned) + CLI | Compile spec → deterministic `.spec.ts`, run it once to green, hand off. **Does not grade its own output.** Runs **serially in the main working tree**. | `/qa:gen` (1st of 2) | `tests/**`, `page-objects/**`, `fixtures/**`, `bugs/**` |
 | **verifier** | `model: opus` (pinned — a wrong CATCHES verdict produces no red test, only a `// verified:` comment Check 2b trusts) | Grade the generator's green, as an agent that did **not** write it: author the metamorphic twins, fault-inject each declared `must_fail_when` to prove the `expect` goes RED (CATCHES vs BLIND), rename scenarios that overclaim, keep the confirmation `.webm`, and emit the route manifest only once all of that is clear. **May not edit any `expect(...)`.** | `/qa:gen` (2nd of 2) | `tests/**` (twins + annotations), `bugs/**`, `artifacts/route-manifests/**` |
-| **reviewer** | `model: opus` (pinned — Checks 2b/2c/2d/2e/14 are LLM judgment and this is the sole assertion-contract gate) | **Read-only PR gatekeeper.** Blocks green-but-empty / -under-asserted / -wrong tests via its full check suite. The **only** enforcement of the assertion contract (no hooks ship). | `/qa:review` (both modes) | *nothing (read-only)* |
+| **reviewer** | `model: opus` (pinned — Checks 2b/2c/2d/2e/14 are LLM judgment and this is the sole assertion-contract gate) | **Read-only PR gatekeeper.** Blocks green-but-empty / -under-asserted / -wrong tests via its full check suite. The sole *judgment* enforcement of the assertion contract; the two `PreToolUse` hooks are a floor, not a gate ([§11](#11-the-oracle-defenses)). | `/qa:review` (both modes) | *nothing (read-only)* |
 | **healer** | `model: sonnet` (pinned) + MCP | Triage a failure into one of **10 buckets**; patch selectors/waits or file a bug. **Never touches assertions.** Logs every triage to `artifacts/heal-log.jsonl`. | `/qa:heal`, `/qa:batch-fix`, CI failure | `tests/**`, `page-objects/**`, `bugs/**`, `artifacts/heal-log.jsonl`, `artifacts/.healer-needs-*` |
 
 ### 8.1 planner — owns the assertion contract
@@ -511,6 +511,14 @@ Every assertion in a spec must use one of **exactly 16 keys**. This is the prima
 structural defense: an assertion cannot be free-form prose ("should look right" is
 unfalsifiable), so every assertion means something a reviewer can mechanically check.
 An agent **cannot invent a new key** — the reviewer's Check 4 FAILs an off-vocab key.
+
+Two things a spec writes are **not** oracle keys and are not counted among the 16: the
+`steps:` **situation forms** `fault:` (stub one network dependency) and `clock:` (control
+fake time), which make the Interfaces/Operations and Time test-design lenses authorable.
+They set up the situation; the 16 keys above still do all the asserting. A response-faking
+`fault:` must be paired with a `network_response_status` oracle on the injected status —
+that pairing is its *fired-proof*, because a stub whose URL glob matches nothing is silent
+and would let every other assertion pass for the wrong reason.
 
 | # | Key | Argument shape |
 |---|---|---|
@@ -869,8 +877,18 @@ make the toolkit sound more complete than it is:
   diffs catch gross breakage; the perceptual / cross-viewport / cross-browser long tail
   needs visual-AI (Applitools / Chromatic / Percy / Argos).
 - **No relational / exact-equality oracle key** ([§10](#10-the-closed-oracle-vocabulary)).
-- **No hooks ship.** The reviewer is the only enforcement of the assertion contract, by
-  discipline. A fork wanting real-time enforcement must add its own hooks.
+- **Most of the reviewer cannot be a hook.** Two `PreToolUse` gates ship
+  ([§11](#11-the-oracle-defenses)), but a hook sees one tool call's input — no paired spec,
+  no `bugs/` tree, no diff, no test run — so only checks decidable from the proposed text
+  alone are enforced at write time. Three more were examined and deliberately left with the
+  reviewer (see `qa/hooks/README.md` §"What is NOT hooked"). The reviewer remains the
+  backstop, by discipline.
+- **No request-side oracle, and HAR replay is refused.** Specs can stub a dependency
+  (`fault:`) and control time (`clock:`), and the vocabulary asserts what the server
+  *answered* — but nothing expresses what the client *sent* ("the POST carried
+  `coupon=QA20`"). Separately, `routeFromHAR` replay is banned rather than missing: a suite
+  served from a recorded HAR asserts the frontend against a frozen backend and stays green
+  through every server-side regression.
 - **Single-vendor multi-agent review shares blind spots.** All-Claude agents converge
   on the same failure modes under adversarial pressure. For compliance-relevant specs a
   human *may* optionally re-run the reviewer through a non-Claude model (pilot-only).

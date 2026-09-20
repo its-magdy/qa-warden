@@ -272,8 +272,12 @@ delete them to make the toolkit sound more complete than it is.
   cannot self-host — pair with it (or Chromatic/Percy/Argos) for visually-critical UI.
 - **MCP can be cheaper and faster per test than CLI** — see the section above. The CLI
   default is a hygiene decision, and honesty requires saying so.
-- **No hooks ship.** The reviewer is the only enforcement of the assertion contract, by
-  discipline. If a fork wants real-time enforcement it must add its own hooks.
+- **Most of the reviewer cannot be a hook.** Two `PreToolUse` gates ship (see the `hooks/`
+  section above), but a hook sees one tool call's input — no paired spec, no `bugs/` tree,
+  no diff, no test run — so only checks decidable from the proposed text alone are enforced
+  at write time, and three more were examined and deliberately left with the reviewer. The
+  reviewer remains the backstop for everything needing repository state or judgment, which
+  is most of it.
 - **Non-vacuity of ordinary oracles is LLM-judgment, not mechanical.** The generator's
   step-8b negative-control injection proves an assertion *actually fails on the defect* —
   but it runs **only** for declared `must_fail_when:`/`fail_if:` invariants. A plain
