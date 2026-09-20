@@ -470,6 +470,43 @@ delete them to make the toolkit sound more complete than it is.
     downgrades to a non-blocking WARN — so softening the title wording ships the same dishonesty green.
     Broadening 2c to parse prose is deferred deliberately: it trades a concrete title-gaming path for added
     false-positive risk on a load-bearing gate.
+- **`/qa:init` silently RE-ADDS a permission rule you deliberately deleted.** The
+  `.claude/settings.json` merge in `bin/qa-scaffold` is an additive union — the project's
+  `permissions.allow`/`deny` arrays are unioned with the shipped template's on every stamp and every
+  `--resync`. It cannot distinguish "the user removed this rule on purpose" from "this project predates
+  the rule", because a deliberately-deleted rule is *still shipped*, so the deletion comes back. Doctor
+  does not warn about it either: Check 9f is deliberately scoped to `mcp__` entries so it does not nag
+  the user who removed a rule on purpose. The two decisions were made separately and their combination
+  is the real limit — **the user is neither warned nor obeyed.** Deleting a rule permanently requires a
+  settings file the toolkit does not write.
+  **If this is ever fixed it belongs in the MERGE, not in a check** — a detector cannot read intent, and
+  `scripts/doctor.sh` is itself a resynced file, so a check reaches a project only through the same
+  command that performs the repair. The mechanism that does work is a **delivery receipt**: record the
+  rule set each stamp actually delivered, and on the next merge treat `(delivered − present)` as a
+  tombstone the union must subtract. That discriminates exactly where a template gate cannot — a rule
+  absent-and-previously-delivered is a deletion, a rule absent-and-never-delivered is a gap — and unlike
+  a doctor check it ships with the **plugin** (`bin/qa-scaffold` is not in `resync-set.txt`), so it is
+  present on the first `/qa:init` after an upgrade rather than one repair behind.
+  Two properties any implementation has to accept, both established before writing one:
+  **(a) it is blind for exactly one upgrade** — every project today has no receipt, so the first run can
+  only record what it delivers and start honouring deletions from the run after; and **(b) `allow` and
+  `deny` are not symmetric.** Honouring an `allow` deletion costs a permission prompt. Honouring a `deny`
+  deletion permanently removes one of the 58 rails that make writable-path separation real (the
+  `Edit(scripts/prod-guard.sh)` / `Edit(playwright.config.ts)` class) — silently, for a decision made
+  once, and a `deny` cannot be restored by any other settings file because deny always wins. The
+  defensible split is to honour `allow` deletions and, for `deny`, keep re-adding but **say so** — a
+  receipt makes the report possible even where the obedience is not granted, which is the half of
+  "neither warned nor obeyed" that costs nothing to fix.
+- **Mobile is deliberately out of scope, and the successor is a sibling plugin, not a mode here.**
+  Playwright does mobile-**web** emulation only (viewport/touch) — no native iOS/Android — so the entire
+  template layer (`playwright.config.ts`, fixtures, `prod-guard.ts`, `doctor.sh`) is Playwright-shaped
+  and does not transfer. The 2026 substrate pick is **Maestro** (YAML flows, an official MCP server that
+  plugs into Claude Code the same way the exploration lane does); **Appium** stays the standard for
+  deep/hybrid/system-level coverage but is much heavier to author and heal — an escape hatch, not a
+  default. Note that Maestro's "self-healing" is marketing framing, not a documented API; `assertWithAI` /
+  `assertNoDefectsWithAI` are the documented features. What would transfer is the **brain**, not the body:
+  the closed oracle vocabulary, the intake→ideate→approve lane, the green-but-wrong reviewer checks,
+  fail-closed discipline, the prod-guard concept and writable-path separation.
 
 ---
 
