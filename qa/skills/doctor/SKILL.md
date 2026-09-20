@@ -184,13 +184,24 @@ does not fix anything — each finding names its repair:
   fine for optional-with-fallback vars).
 - **Check 7/7d (pins / idiom):** fix `package.json` / regenerate the offending
   `fixtures/schemas/` file in the pinned major's idiom.
-- **Check 8b (MCP paired-bump lockstep):** `.mcp.explore.json`'s `npx -y playwright@X.Y.Z mcp`
-  version must equal `overrides.playwright` in `package.json` — since 1.62 the MCP server ships
-  bundled with `playwright`, so these are one version, mirrored in two files. A **bare, unpinned**
-  `playwright` npx arg is itself a FAIL: with no `node_modules` (fresh clone, lockfile-less CI) npx
-  silently fetches the LATEST Playwright, recreating the runner/core skew the `overrides` block
-  exists to prevent — from the explore config, where `overrides` cannot reach it. Fix by bumping
-  both sites together, never by unpinning.
+- **Check 8b (Playwright FOUR-SITE paired-bump lockstep):** `package.json`'s `overrides_comment`
+  mandates four sites move together, and the check now enforces all of them. **Inside
+  `package.json`:** `@playwright/test` must equal `overrides.playwright` must equal
+  `overrides.playwright-core`, and `@playwright/test` must be **exact** (no `^`/`~`). Skew the
+  runner above the forced core and `overrides` drag core back down (T-01); pin `playwright`
+  without `playwright-core` and a nested **alpha** core survives, needing a browser revision
+  `playwright install` never fetches (F-002). A caret on the runner makes the equality arm a false
+  green, because a lockfile-less install floats it. **Across files:** `.mcp.explore.json`'s
+  `npx -y playwright@X.Y.Z mcp` version must equal `overrides.playwright` — since 1.62 the MCP
+  server ships bundled with `playwright`, so these are one version mirrored in two files. A
+  **bare, unpinned** `playwright` npx arg is itself a FAIL: with no `node_modules` (fresh clone,
+  lockfile-less CI) npx silently fetches the LATEST Playwright, recreating the same skew from the
+  explore config, where `overrides` cannot reach it. Fix by bumping **all four** sites in one
+  change, never by unpinning. Note Check 7 does **not** cover this: 7a screens only for
+  `alpha`/`beta`/`rc` strings and 7c screens only the lockfile's resolved core for alpha, so a
+  clean, stable, *skewed* set passes both (measured 2026-09-20 — a lone `@playwright/test` bump
+  printed `pins: … ✅` and nothing else). A missing site is reported, not failed — `package.json`
+  is in `resync-set.txt`, so Check 9 owns the deleted-block case.
 - **Check 8/9 (canonical scripts / substrate drift):** `/qa:init --resync` (backs up
   drifted files to `*.qa-bak`). A missing stock var in `.env.example` → restore it from
   the shipped template, or park it commented (`# VAR=`) — the stock list is derived from

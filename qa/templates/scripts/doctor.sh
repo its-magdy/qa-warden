@@ -353,12 +353,71 @@ if [ -f scripts/prod-guard.ts ]; then
   grep -qF '(^|\.)example(\.(com|org|net))?$' scripts/prod-guard.ts \
     || { echo "❌ scripts/prod-guard.ts: PLACEHOLDER_HOST_RE drifted — must stay in lockstep with prod-guard.sh's RFC-2606 case list"; fail=$((fail+1)); }
 fi
-# 8b. MCP server PAIRED-BUMP lockstep. As of Playwright 1.62 the MCP server ships BUNDLED with
+# 8b. Playwright FOUR-SITE PAIRED-BUMP lockstep. package.json's own `overrides_comment` mandates
+#     four sites move together — `@playwright/test`, `overrides.playwright`,
+#     `overrides.playwright-core`, and the version-pinned npx arg in `.mcp.explore.json`. FIVE arms
+#     in two blocks; the first block is package.json-internal, the second needs `.mcp.explore.json`.
+#
+#     (c)(d)(e) — the three pairs INSIDE package.json. Measured 2026-09-20
+#     during the 1.63.0 evaluation: of those four sites, arm (a) below enforced
+#     exactly ONE pair (the MCP one). A bump of `@playwright/test` ALONE printed
+#     "pins: stable + zod lockstep + lockfile core ✅" and nothing else: Check 7a only screens for
+#     alpha/beta/rc and 7c only screens the LOCKFILE's core for alpha, so a clean, stable, SKEWED
+#     set passes both. That is the T-01/F-002 skew the overrides block exists to prevent, arriving
+#     through the half-done bump the comment warns about. Same unchecked-mirror shape as 9b/9bb/8.
+#     Three arms, all comparing version LITERALS (symbols), never prose:
+#     (c) `@playwright/test` == `overrides.playwright` — the runner and the forced core must be one
+#         version. Skewed, `overrides` drag core BACK DOWN under a newer runner (T-01).
+#     (d) `overrides.playwright` == `overrides.playwright-core` — @playwright/cli and @playwright/mcp
+#         each hard-depend on an ALPHA playwright-core, so pinning only `playwright` leaves a nested
+#         alpha core needing a browser revision `playwright install` never fetches (F-002).
+#     (e) `@playwright/test` is EXACT (no ^ or ~). This is what makes (c) MEAN anything: a caret lets
+#         a lockfile-less install float the runner to a newer 1.x while (c) still reads equal.
+#     Deliberately in its OWN `[ -f package.json ]` guard, NOT folded into the block below: that
+#     block is gated on `.mcp.explore.json` existing, so a project without an explore config got no
+#     lockstep check at all. These three pairs are package.json-internal and must not inherit that gate.
+if [ -f package.json ]; then
+  node -e '
+    const p = require("./package.json");
+    const dev = Object.assign({}, p.dependencies, p.devDependencies);
+    const runner = dev["@playwright/test"];
+    const ov = (p.overrides || {})["playwright"];
+    const ovCore = (p.overrides || {})["playwright-core"];
+    const bad = [];
+    const bare = v => String(v || "").replace(/^[~^]/, "");
+    // (e) exactness first — a caret here makes (c) a false green.
+    if (runner && /^[~^]/.test(runner))
+      bad.push("@playwright/test is `" + runner + "` — must be EXACT (no ^/~), else a lockfile-less install floats the runner above the forced core (T-01)");
+    // (c) runner <-> forced playwright
+    if (runner && ov && bare(runner) !== bare(ov))
+      bad.push("@playwright/test " + runner + " != overrides.playwright " + ov + " — runner/core skew (T-01)");
+    // (d) forced playwright <-> forced playwright-core
+    if (ov && ovCore && bare(ov) !== bare(ovCore))
+      bad.push("overrides.playwright " + ov + " != overrides.playwright-core " + ovCore + " — a nested ALPHA core survives the pin (F-002)");
+    if (bad.length) {
+      console.log("❌ Playwright four-site lockstep drift (package.json overrides_comment mandates these move together):");
+      for (const b of bad) console.log("   - " + b);
+      process.exit(2);
+    }
+    // Report what was actually COMPARED, not a blanket pass: a project that deleted a site has
+    // no pair to skew, and Check 9 (package.json is in resync-set.txt) already owns that class —
+    // but the green line must not claim an equality it never tested.
+    const sites = [runner && "@playwright/test", ov && "overrides.playwright", ovCore && "overrides.playwright-core"].filter(Boolean);
+    console.log("playwright lockstep: " + sites.length + "/3 package.json sites present and in step"
+      + (runner || ov || ovCore ? " at " + bare(runner || ov || ovCore) : "")
+      + (sites.length < 3 ? " — missing: " + ["@playwright/test","overrides.playwright","overrides.playwright-core"].filter(s => !sites.includes(s)).join(", ") + " (see Check 9 substrate drift)" : "") + " ✅");
+  ' 2>/dev/null
+  pwls_rc=$?
+  [ "$pwls_rc" -eq 2 ] && fail=$((fail+1))
+  { [ "$pwls_rc" -ne 0 ] && [ "$pwls_rc" -ne 2 ]; } && { echo "⚠️  could not read package.json Playwright pins — four-site lockstep UNVERIFIED"; warn=$((warn+1)); }
+fi
+
+#     (a)(b) — the MCP server site. As of Playwright 1.62 the MCP server ships BUNDLED with
 #     `playwright`, so .mcp.explore.json launches `npx -y playwright@<version> mcp`. That npx arg
 #     MUST be pinned and MUST equal the `overrides.playwright` pin: an UNPINNED `npx -y playwright
 #     mcp` silently fetches the LATEST Playwright whenever node_modules is absent (a fresh clone,
 #     a lockfile-less CI step) — the exact runner/core version skew the whole `overrides` block
-#     exists to prevent, except sourced from the explore config instead of the dep tree. Two arms:
+#     exists to prevent, except sourced from the explore config instead of the dep tree.
 #     (a) BUNDLED (current) — .mcp.explore.json's `playwright@X.Y.Z` npx arg vs overrides.playwright;
 #         a bare unpinned `playwright` arg is itself a FAIL.
 #     (b) LEGACY standalone `@playwright/mcp` — only if a project still carries that invocation;
