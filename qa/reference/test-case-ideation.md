@@ -296,7 +296,7 @@ refinements turned out to be already-solvable with parts you have:
 | Observable context for intake | `/qa:explore` + `playwright-cli snapshot` |
 | Bug regression "strong assertions" requirement | `must_fail_when:` (advisory intent record) |
 | Bug "stays dead via nearby paths" | `metamorphic-relations` skill |
-| Enhancement impact selection | `/qa:impact` (route/field/factory/area) |
+| Enhancement impact selection | `/qa:impact` (route/field/factory/area/operation/source) |
 | Enhancement **safe fallback** (full regression) | `npx playwright test` |
 | Spec compilation from approved cases | `/qa:new-spec` → `/qa:gen` |
 | Checklist quality gate | the `reviewer` agent (WARN/FAIL tiers) |

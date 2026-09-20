@@ -185,6 +185,20 @@ does not fix anything — each finding names its repair:
   `app.context.md` for a verification nobody requested, after which Check 7 and Check 5b both
   read the area the caller asked about as freshly handled while nothing was explored. Fix the
   invocation (or add the `…`); never widen the agent's default to make the check pass.
+- **Check 9k (unmanifested-walk ownership):** "which compiled tests carry no route manifest" is
+  one rule with two consumers that must never disagree — `/qa:impact` prints it as
+  `### BLIND SPOTS` (a zero-match there is only honest if the caller is told which specs were
+  invisible) and `/qa:coverage` dim 0 needs it to avoid the label it used to print, where an
+  unmanifested test's routes landed under "touched by NO compiled test (planned, untested)" —
+  false for a spec that was authored and compiled, and it sent the reader to write a second
+  spec instead of clearing the blocker the verifier withheld the manifest for. **Arms 1 and 2
+  key on SYMBOLS** — the `unmanifested)` mode name and the `*.metamorphic.spec.ts` exclusion
+  glob. Arm 2 is the one that matters: a twin never carries a manifest BY DESIGN (verifier V4
+  emits one per spec), so a copy that drops the exclusion makes both consumers cry wolf on
+  every twin until someone deletes the section. **Arm 3 keys on the CONSTRUCT** — an existence
+  test on a manifest path built from a variable — and scans **code, not comments**, because an
+  ownership check has to name the construct it bans and so matches its own documentation
+  otherwise. Fix by calling `scripts/spec-links.sh unmanifested`; never re-derive the walk.
 - **Check 2 / 9b (vocab drift):** re-sync the 16-key mirror with CLAUDE.md (and, for
   9b, upgrade/re-stamp the plugin agents) in the same commit as any vocab change.
 - **Check 3 (vacuous smoke):** tag at least the P1 happy path `@smoke`, then

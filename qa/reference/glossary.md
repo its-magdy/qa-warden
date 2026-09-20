@@ -89,10 +89,14 @@ everything else. Run it on every PR.
 before `/qa:new-spec`, pinning *what correct means* before anything is generated. Use it
 for P1 / money / compliance features. Contrast **fast lane**.
 
-**route manifest** — a per-spec record of the routes/fields/factories a test touches
+**route manifest** — a per-spec record of the routes/operations/fields/factories a test touches
 (`artifacts/route-manifests/`), emitted by the verifier once a spec passes verification — so a
 spec with no manifest is one that did not ship. It powers `/qa:impact` (which specs a
-change would affect).
+change would affect). A test that is compiled but **unmanifested** is therefore invisible to
+every manifest-derived answer while looking finished on disk; both commands that read the
+directory name that set explicitly — `/qa:impact` as `### BLIND SPOTS`, `/qa:coverage` as
+dim-0's "compiled but UNMANIFESTED" arm — off one shared walk
+(`scripts/spec-links.sh unmanifested`, doctor Check 9k).
 
 **run-of-record** — the one authoritative test run whose results (`artifacts/last-run.json`)
 `/qa:report` reads. Verification/heal re-runs deliberately do **not** overwrite it, so a

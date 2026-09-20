@@ -79,6 +79,16 @@ specfiles_for() {
 # --- shared tree walks — every dimension below reads these, nothing re-walks ------------------
 # Dims 0 and 4 both consume the route manifests.
 MANIFESTS=$(find artifacts/route-manifests -name '*.json' 2>/dev/null)
+# ...and both are SILENTLY WRONG about a compiled test whose manifest is missing or was WITHHELD
+# (verifier V4 withholds on a red parent, a BLIND/INCONCLUSIVE invariant, a disagreeing twin or
+# budget exhaustion — withholding IS the durable blocker signal). Such a test contributes no
+# routes, so dim 0 printed its routes under "touched by NO compiled test, planned, untested" —
+# false for a test that is on disk and compiled, and it sends the reader to WRITE A SPEC when the
+# real remedy is to clear the blocker — and dim 4's footprint quietly under-counted with no note.
+# /qa:impact has enumerated exactly this set as "BLIND SPOTS" all along; the walk is now shared
+# (scripts/spec-links.sh unmanifested, doctor Check 9k) rather than re-derived, so the two
+# commands cannot disagree about which specs are invisible to a manifest-derived answer.
+UNMANIFESTED=$(bash scripts/spec-links.sh unmanifested 2>/dev/null)
 # Every top-level `basis:` back-link in an authored spec, as `<path>:basis: <value>` (grep -H).
 # specfiles_for() is called once per feature from dims 1, 5 and 6, and each call used to run a
 # FULL recursive grep of specs/ — so a 20-feature project made ~40-60 complete traversals of the
@@ -105,6 +115,15 @@ if [ -n "$MANIFESTS" ]; then
   comm -23 <(printf '%s\n' "$DECL") <(printf '%s\n' "$TESTED") | sed '/^$/d; s/^/  ⚠ /'   # drop the blank line printf emits for an empty DECL/TESTED so it never prints a phantom "  ⚠ " gap (m-12)
   echo "-- touched by tests but declared in NO area file (unplanned/undocumented — refresh /qa:explore mode=area site=<id> area=<name>, or an API/login route area files legitimately don't list — review prompt, not defect list):"
   comm -13 <(printf '%s\n' "$DECL") <(printf '%s\n' "$TESTED") | sed '/^$/d; s/^/  ⚠ /'   # drop the blank line printf emits for an empty DECL/TESTED (m-12)
+  # Third arm — WHY the first arm may be lying. Print it only when non-empty, and name the
+  # remedy that differs: an unmanifested spec is authored AND compiled, so "write a spec" is
+  # the wrong instruction for every route it touches.
+  if [ -n "$UNMANIFESTED" ]; then
+    echo "-- compiled but UNMANIFESTED — these tests exist on disk and contribute NO routes above, so any route they touch is mis-reported as 'planned, untested' (the verifier withholds a manifest on a red parent, a BLIND/INCONCLUSIVE invariant, a disagreeing twin or budget exhaustion — clear the blocker, do NOT author a second spec):"
+    printf '%s\n' "$UNMANIFESTED" | while IFS=$'\t' read -r t base; do
+      echo "  ⚠ $t  (no artifacts/route-manifests/${base}.json — same set /qa:impact reports as BLIND SPOTS)"
+    done
+  fi
 else echo "— (no route manifests; dim-0 unavailable)"; fi
 
 echo "== 1. Requirement coverage — basis rules → spec/test exists =="
@@ -196,6 +215,10 @@ if [ -n "$MANIFESTS" ]; then
   printf '%s\n' "$MANIFESTS" | tr '\n' '\0' \
     | xargs -0 jq -r '(.routes[]? | "R\t\(.)"), (.area // empty | "A\t\(.)")' 2>/dev/null \
     | sort -u | awk -F'\t' '{c[$1]++} END{print "distinct routes: " c["R"]+0; print "distinct areas: " c["A"]+0}'
+  # The footprint is manifest-derived, so it is a FLOOR whenever dim 0's third arm fired. Say by
+  # how much rather than printing a bare count that reads as the whole picture.
+  nun=$(printf '%s' "$UNMANIFESTED" | grep -c . )
+  [ "${nun:-0}" -gt 0 ] && echo "FLOOR, not the total: $nun compiled test(s) carry no manifest and contributed 0 routes here — see dim-0's 'compiled but UNMANIFESTED' list"
 else echo "no route manifests — flow footprint unavailable (run /qa:gen on a spec first)"; fi
 
 echo "== 5. Case coverage — approved cases (*.cases.md) vs authored scenarios (RUN-18 backstop) =="

@@ -123,11 +123,12 @@ echo "### MATCHES"
 # for a spec left RED by a product bug). Such a spec is silently absent from the impact graph
 # — for a "don't miss an affected test" tool, a false "not impacted" is the cardinal failure.
 # ---------------------------------------------------------------------------
+# The walk itself is NOT inlined here: `scripts/spec-links.sh unmanifested` owns it, because
+# /qa:coverage dim 0 needs the same set (a withheld manifest made it print the route under
+# "touched by NO compiled test" — false for a compiled test, and the wrong remedy). One rule,
+# one place, each caller formatting its own prose; the metamorphic-twin exclusion in particular
+# is silent when a copy forgets it. Doctor Check 9k enforces that ownership.
 echo "### BLIND SPOTS"
-for t in $(find tests -name '*.spec.ts' ! -name '*.metamorphic.spec.ts' 2>/dev/null); do
-  rel="${t#tests/}"; base="${rel%.spec.ts}"          # e.g. checkout/coupon
-  # A manifest is emitted per spec under artifacts/route-manifests/<area>/<feature>.json
-  if [ ! -f "artifacts/route-manifests/${base}.json" ]; then
-    echo "  • $t  (no manifest — NOT in the impact graph; regenerate with /qa:gen specs/${base}.md)"
-  fi
+bash scripts/spec-links.sh unmanifested | while IFS=$'\t' read -r t base; do
+  echo "  • $t  (no manifest — NOT in the impact graph; regenerate with /qa:gen specs/${base}.md)"
 done

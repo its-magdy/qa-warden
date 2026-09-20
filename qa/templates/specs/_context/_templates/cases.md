@@ -81,7 +81,9 @@ Bug-class scan (WARN — consider, not required): same defect pattern may exist 
 
 <!-- enhancement kind:
 New-behavior cases: <lens-rotated cases for what changed>
-Regression set (from /qa:impact <route|field|factory|area>): <affected existing specs>
+Regression set (from /qa:impact <route|field|factory|area|operation|source>): <affected existing specs>
+  (GraphQL app? route= collapses to /graphql and discriminates nothing — use operation=.
+   Business rule changed rather than code? source=<name> finds the basis rules standing on it.)
 Safe fallback: full suite still runs as regression (npx playwright test) — impact selection
 does NOT replace it.
 -->

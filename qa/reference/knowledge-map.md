@@ -39,7 +39,7 @@ context; THIS file is read on demand for catalog / workflow-order / "what does X
 - ONE test failing → `/qa:heal <id>` (the artifacts/test-results/<dir> name from the failure output)
 - MANY failures, same shape (one selector/copy change) → `/qa:batch-fix <path-or-substring>` — diagnose once, patch everywhere
 - Fails SOMETIMES / passes on retry → `/qa:run mode=repeat <spec> [N]` — repeatability probe; @quarantine if the worst per-test rate <95%
-- Red right after an app change/deploy → `/qa:impact route=…|field=…|source=…` to scope the blast radius; `/qa:explore mode=area …` if the area context is stale
+- Red right after an app change/deploy → `/qa:impact route=…|field=…|factory=…|area=…|operation=…|source=…` to scope the blast radius; `/qa:explore mode=area …` if the area context is stale
 - EVERYTHING red / won't even start → check `.env` + host reachability (VPN?), then `/qa:doctor` — don't heal tests when the harness is the problem
 - After fixing → `/qa:run mode=smoke`, then `/qa:report` for the shareable summary
 

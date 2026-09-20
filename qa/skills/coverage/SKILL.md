@@ -68,7 +68,15 @@ shape below. Do not paraphrase, recompute, or estimate any number it emitted.
 0. **Route plan vs footprint** — both directions are WARN-only review prompts, not defect
    lists: a declared-but-untested route is *planned, untested*; a tested-but-undeclared
    route means either the area file needs an `/qa:explore mode=area site=<id> area=<name>` refresh or it is an
-   API/login route area files legitimately don't list.
+   API/login route area files legitimately don't list. **A third arm prints only when it has
+   rows — `compiled but UNMANIFESTED` — and it qualifies the first one.** A test on disk whose
+   route manifest is missing or was WITHHELD contributes no routes, so every route it touches
+   lands in the "planned, untested" list, which is false for a spec that was authored AND
+   compiled and sends the reader to write a second spec. The verifier withholds a manifest on a
+   red parent, a BLIND/INCONCLUSIVE invariant, a disagreeing twin or budget exhaustion — the
+   remedy is to clear that blocker. Report the arm verbatim when present; it is the same set
+   `/qa:impact` prints as `### BLIND SPOTS` (one shared walk, `scripts/spec-links.sh
+   unmanifested`, so the two commands cannot disagree — doctor Check 9k).
 1. **Requirement coverage** — features with a basis but **no spec** (uncovered — name them,
    lead with these); features with a spec but **fewer assertions than 🔵 rules**
    (under-asserted *signal* — name them, mark "approximate"). Ratio:
@@ -94,8 +102,12 @@ shape below. Do not paraphrase, recompute, or estimate any number it emitted.
    *declared-needed in the basis* is the strongest gap — surface it first (the ideation critic
    FAILs this per-feature; here it's the suite-level roll-up). Report per-lens: which features
    leave it empty.
-4. **Flow footprint** — the route/area counts. (Manifests are verifier-emitted, so a spec
-   not yet compiled contributes nothing — note that, same caveat as `/qa:impact`.)
+4. **Flow footprint** — the route/area counts, which are a **FLOOR, never the total**. Two
+   different things are missing from them and they need different fixes: a spec not yet
+   compiled (dim 1b names those), and a spec compiled but unmanifested (dim 0's third arm names
+   those). When the second set is non-empty the script prints a `FLOOR, not the total: N
+   compiled test(s) carry no manifest` line — pass it through; a bare route count reads as the
+   whole picture.
 5. **Case coverage (approved cases → scenarios)** — per feature, `<basis>_cases≈N (of T ideated)` vs
    `spec_scenarios≈M`, where the count is the **☑-approved** subset (not every ideated row — deferred/
    pruned rows are deliberate non-builds); the `<basis>` label is `approved` when the file uses ☑ boxes,
@@ -134,17 +146,19 @@ Return ONE Markdown block as your result (and, if `reports/` exists, also write
 - Zero-assertion specs: <none | name them>
 - Dropped-case risk: <feat: ~K approved cases vs ~M scenarios — diff for silent drops | none flagged>
 - Phantom waiver destinations: <specs/x.md, specs/y.md — waived-to but never authored | none>
+- Compiled but unmanifested: <tests/a.spec.ts — routes below under-count; clear the blocker | none>
 
 ### Numbers (context, not a grade)
 - Requirements: <C>/<T> features with a basis have a spec  ·  assertions vs 🔵 rules is APPROXIMATE
 - Assertion density: <mean> oracle keys/spec  ·  0 assertion-free ✓
 - Lens coverage: <k>/8 lenses non-empty across <N> features   (self-reported by /qa:ideate, not recomputed)
 - Case→scenario: <feat> ~<K> approved cases / ~<M> scenarios (approximate — data-driven collapse)
-- Flow footprint: <R> routes · <A> areas
+- Flow footprint: <R> routes · <A> areas   (a FLOOR if any spec is uncompiled or unmanifested)
 
 _Limits: feature-level requirement coverage is deterministic; rule→assertion mapping is a
-signal, not proof. Route footprint counts only compiled specs (manifest-derived). This is a
-report, not a gate — humans own what to test._
+signal, not proof. Route footprint counts only compiled specs **that carry a manifest** — an
+unmanifested one is invisible here exactly as it is to `/qa:impact`. This is a report, not a
+gate — humans own what to test._
 ```
 
 If a dimension's inputs are absent, print its line as `— (no <basis|cases|manifest> files)`

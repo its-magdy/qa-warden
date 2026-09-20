@@ -124,10 +124,15 @@ broadly. Produce exactly:
    behavior only.
 2. **Regression set** — you are a subagent and **cannot invoke the `/qa:impact` slash
    command**; do the equivalent work directly in Bash by reading the route manifests
-   the generator emits. For the route/field/factory/area in the basis delta:
+   the verifier emits. For the route/field/factory/area **and, on a GraphQL app, the
+   GraphQL operation** in the basis delta:
    ```bash
-   # manifests: artifacts/route-manifests/<area>/<feature>.json (fields: routes, fields, factories, area)
-   grep -rl '"<field-or-route-or-factory>"' artifacts/route-manifests/ 2>/dev/null
+   # manifests: artifacts/route-manifests/<area>/<feature>.json
+   #   keys: spec, test, site, area, routes, operations, fields, factories, last_generated
+   # The grep below matches a quoted VALUE anywhere in the JSON, so it works for an operation
+   # name too — which matters because on a GraphQL app every route collapses to /graphql and
+   # the operation name is the only discriminating key (the `/qa:impact operation=` case).
+   grep -rl '"<field-or-route-or-factory-or-operation>"' artifacts/route-manifests/ 2>/dev/null
    ```
    List the affected existing specs those manifests point at (the `spec` / `test` keys) to
    re-verify/update. (A human can later run `/qa:impact` for the richer intersection.)

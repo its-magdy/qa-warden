@@ -89,15 +89,23 @@ defect, never hide one).
 
 ## `spec-links.sh` — canonical basis/feature ↔ spec relation
 
-`scripts/spec-links.sh feature <basisfile> | index | match <feat>` — the one place two
-mechanical rules live: the **indent-tolerant `feature:` extractor** (a col-0-only `^feature:`
+`scripts/spec-links.sh feature <basisfile> | index | match <feat> | unmanifested` — the one
+place three mechanical rules live: the **indent-tolerant `feature:` extractor** (a col-0-only `^feature:`
 anchor silently drops indented YAML, leaving the caller with `specs/.md` and a no-op check
 instead of an error) and the **fanned-spec back-link anchor** (which must tolerate the trailing
 `# comment` the plugin's own fanned-spec convention writes). Both were hand-copied across
 `doctor.sh`, `/qa:coverage` and `/qa:impact`, each site carrying a "LOCKSTEP with …" comment
 rather than a mechanism — and the anchor had already needed one fix applied by hand in three
 places. `match` reads an `index` on **stdin** so a caller looping over N features stays one tree
-walk, not N.
+walk, not N. The third rule is the **unmanifested walk** (`unmanifested` — every compiled
+`tests/<base>.spec.ts` with no `artifacts/route-manifests/<base>.json`, printed as
+`<testpath>\t<base>`). `/qa:impact` renders it as `### BLIND SPOTS`; `/qa:coverage` dim 0 needs
+the same set because, without it, a withheld manifest made the routes of a compiled spec print
+under "touched by NO compiled test (planned, untested)" — false, and the wrong remedy. Its
+load-bearing half is the **metamorphic-twin exclusion**: a twin never carries a manifest by
+design, so a copy that forgets it reports every twin as a blind spot. Doctor **Check 9k**
+enforces the ownership (and, per its arm 3, scans code rather than comments — an ownership
+check must name the construct it bans, so it matches its own documentation otherwise).
 
 ## `post-run-checks.sh` — the canonical "is this green actually all-clear?" scans
 

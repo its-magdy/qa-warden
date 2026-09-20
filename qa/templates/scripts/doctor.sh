@@ -1332,6 +1332,79 @@ EOF
   fi
 fi
 
+# 9k. UNMANIFESTED-walk OWNERSHIP. "which compiled tests have no route manifest" is one rule
+#     with two consumers that must never disagree: /qa:impact prints it as ### BLIND SPOTS (a
+#     zero-match there is only honest if the caller is told which specs were invisible), and
+#     /qa:coverage dim 0 needs it to avoid the false label it used to print — an unmanifested
+#     test contributes no routes, so every route it touches landed under "touched by NO compiled
+#     test (planned, untested)", which is FALSE for a test that is on disk and compiled and
+#     sends the reader to author a second spec when the real remedy is to clear the blocker the
+#     verifier withheld the manifest for. The walk therefore lives in `scripts/spec-links.sh
+#     unmanifested` and nowhere else (the same move that put the `feature:` extractor and the
+#     back-link anchor there — see that file's header rules 1-3).
+#     Keys on SYMBOLS, never wording — the mode name, the twin-exclusion glob, and the shape of
+#     a manifest path built from a variable. Three arms:
+#       Arm 1 — scripts/spec-links.sh still carries the `unmanifested)` arm (the owner exists).
+#       Arm 2 — that arm still excludes `*.metamorphic.spec.ts`. This is the property that is
+#               SILENT when dropped: a twin never carries a manifest BY DESIGN (verifier V4
+#               emits one per spec), so without the exclusion every twin is reported as a blind
+#               spot and both consumers cry wolf until someone disables the section.
+#       Arm 3 — no OTHER file re-derives the walk. ADJACENCY is the anchor, as in 9j, and the
+#               exact anchor point was found by RUNNING the check, not by designing it. The
+#               obvious symbol — a manifest directory immediately followed by a shell
+#               interpolation, `route-manifests/${...}` — false-FAILED on THREE live sites on
+#               its first real run: coverage.sh's new dim-0 message, which QUOTES the missing
+#               path back to the reader, and doctor.sh itself (both the template and the
+#               stamped copy) because THIS COMMENT contains the shape. A symbol that fires on
+#               its own documentation is the check that gets deleted — the property 9bb and 9bd
+#               are each built around. So the anchor is the whole CONSTRUCT, not the mention:
+#               an existence TEST on a manifest path built from a variable
+#               (`-f "artifacts/route-manifests/${...}`), which is the walk itself and cannot
+#               be prose. Check 12's `${mf#artifacts/route-manifests/}` is a prefix STRIP (the
+#               `${` comes first) and was never a match either way.
+#               Then the tightened symbol false-FAILED on doctor.sh — because THESE COMMENT
+#               LINES spell it out. That recursion is the general property, not a quirk of this
+#               check: an ownership check has to name the construct it bans, so it will always
+#               match its own documentation unless it looks at CODE. So arm 3 drops full-line
+#               comments before matching. A mention parked in a TRAILING comment would still
+#               trip it; that is the deliberate direction, and the escape is to put the mention
+#               on its own comment line — which is where documentation lives anyway.
+#               Re-measured after both fixes: exactly one live site, spec-links.sh, the owner.
+if [ -f scripts/spec-links.sh ]; then
+  sl_arm=$(awk '/^[[:space:]]*unmanifested\)/{f=1} f{print} f&&/^[[:space:]]*;;/{exit}' scripts/spec-links.sh)
+  if [ -z "$sl_arm" ]; then
+    echo "❌ scripts/spec-links.sh has no \`unmanifested)\` arm — /qa:impact's ### BLIND SPOTS and /qa:coverage dim 0 both call it; without it impact reports a zero-match as if it were exhaustive and coverage re-labels every unmanifested test's routes as 'planned, untested'"
+    fail=$((fail+1))
+  elif ! printf '%s\n' "$sl_arm" | grep -q 'metamorphic'; then
+    echo "❌ scripts/spec-links.sh \`unmanifested\` no longer excludes *.metamorphic.spec.ts — a twin never carries a manifest by design (verifier V4 emits one per SPEC), so every twin now reports as a blind spot in /qa:impact and as an UNMANIFESTED warning in /qa:coverage dim 0"
+    fail=$((fail+1))
+  fi
+fi
+# Arm 3 — scan the plugin's own tree plus the project's scripts/ for a re-derived walk.
+# `-e` is MANDATORY here and is not style: this pattern BEGINS WITH `-f`, so passed positionally
+# it is consumed as grep's own `-f FILE` option. Caught by running the check — the error went to
+# the `2>/dev/null` the scan needs for absent dirs, arm 3 produced no output for ANY input, and it
+# read as permanently clean. A check that cannot fail is the false-green this toolkit exists to
+# catch; it was wearing a passing baseline at the time. (Reproduced on ugrep, which names the
+# option in its error; GNU/BSD grep swallow it the same way.)
+umw_re='-f[[:space:]]*"artifacts/route-manifests/\$\{'
+# File list, not `grep -rl`: each candidate is filtered through `sed` first. `bin/` is listed
+# explicitly because qa-scaffold is EXTENSIONLESS (the §6 note) and a `*.sh` glob misses it.
+UMW_PLUG=$([ -n "$TMPL" ] && cd "$TMPL/.." 2>/dev/null && pwd)   # resolve, as Check 9j does, so a
+# reported path reads `qa/skills/...` and not `qa/templates/../skills/...`.
+umw_files=$({ [ -n "$UMW_PLUG" ] && find "$UMW_PLUG" -name '*.sh' -type f 2>/dev/null
+              [ -n "$UMW_PLUG" ] && [ -d "$UMW_PLUG/bin" ] && find "$UMW_PLUG/bin" -type f 2>/dev/null
+              find scripts -name '*.sh' -type f 2>/dev/null
+            } | sort -u)
+umw_bad=0
+for f in $umw_files; do
+  case "$f" in */spec-links.sh) continue ;; esac
+  sed '/^[[:space:]]*#/d' "$f" 2>/dev/null | grep -qE -e "$umw_re" || continue
+  echo "❌ ${f#"${UMW_PLUG%/*}/"} builds a route-manifest path from a variable — the unmanifested walk is owned by \`scripts/spec-links.sh unmanifested\` (see its header rule 3). A second copy drifts silently: the twin exclusion is the half that is invisible when it is wrong, and /qa:impact and /qa:coverage must report the SAME invisible-spec set or one of them is quietly claiming a complete answer"
+  umw_bad=$((umw_bad+1))
+done
+fail=$((fail+umw_bad))
+
 # 10. Site-id ↔ config-project routing (F-51: a site declared in app.context.md with no matching
 #     playwright.config project — specs target a phantom site and silently run zero tests; renumbered
 #     from the old "F-15" tag, which collided with the last-run-staleness F15 in check 1 above — the

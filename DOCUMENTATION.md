@@ -257,7 +257,7 @@ former "drop `--strict`" advice applied only while `version` was omitted).
 ```
 
 **Side branches (quality probes, not in the build line):** `/qa:review url=<url>`,
-`/qa:run mode=repeat <spec> [N]`, `/qa:impact route=…|field=…|factory=…|area=…`,
+`/qa:run mode=repeat <spec> [N]`, `/qa:impact route=…|field=…|factory=…|area=…|operation=…|source=…`,
 `/qa:doctor`, `/qa:coverage`, `/qa:batch-fix <filter>`, `/qa:run mode=single <spec>`,
 `/qa:import-cases`, `/qa:retire`.
 
