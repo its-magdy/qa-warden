@@ -45,7 +45,7 @@ all-blob-reports/
 # deliberately wants it pinned for offline use.
 .claude/skills/playwright-cli/
 # Suite run output — regenerated every run, never source. Covers the /qa:report
-# summary, /qa:headless per-command JSON, and /qa:review url= findings so none of them
+# summary, /qa:run mode=single per-command JSON, and /qa:review url= findings so none of them
 # land as tracked VCS churn. If you WANT to keep a specific audit report, `git add -f`.
 reports/summary.md
 reports/headless-*.json

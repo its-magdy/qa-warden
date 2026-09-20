@@ -24,6 +24,10 @@ First time? Follow ${CLAUDE_PLUGIN_ROOT}/reference/tutorial-first-test.md.
 Design rationale (maintainers, not required to run): the plugin's
 `reference/test-case-ideation.md`.
 
+Parse `$ARGUMENTS` for `<area/feature>` and optional `site=` (default `app`; must match a
+`sites[].id` in `specs/_context/app.context.md` — same rule as `/qa:intake`), and pass the
+RESOLVED basis path to the subagent in the delegation prompt — never leave `<site>` for it to guess.
+
 The subagent reads
 `specs/_context/<site>/<area>/<feature>.basis.md` and:
 

@@ -43,7 +43,7 @@ slash-command, but when this skill is reached via the Skill tool / a subagent it
 (`bash ${CLAUDE_SKILL_DIR}/scripts/impact.sh route=/login`) — otherwise you get a usage
 error, not a result.
 
-**Exit codes:** `2` = usage error, `3` = no manifests on disk (run `/qa:gen` on a spec
+**Exit codes:** `2` = usage error or a missing `scripts/spec-links.sh` (relay the ERROR line), `3` = no manifests on disk (run `/qa:gen` on a spec
 first). **Neither is a zero-match result** — never report either as "not impacted".
 
 For the five manifest-backed keys the script emits two sections. `### MATCHES` is

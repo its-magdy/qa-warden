@@ -1,6 +1,6 @@
 ---
 description: Import existing manual test cases (TestRail/Zephyr/Xray CSV, markdown, or pasted table) into the plugin's cases.md + a minimal basis — provenance-stamped, deduped
-argument-hint: "<area/feature> [source=<name>] [<file-path>]"
+argument-hint: "<area/feature> [site=<id>] [source=<name>] [<file-path>]"
 disable-model-invocation: true
 ---
 
@@ -12,7 +12,8 @@ same plain-prose fallback as `/qa:intake`); it does NOT delegate to a subagent.
 
 1. **Parse args.** `<area/feature>` (validate `<area>` against `naming.area_dirs` in
    `specs/_context/app.context.md` — mirror intake's F-18 rule: on a mismatch, list the
-   valid `area_dirs` and stop), optional `source=` (name for provenance stamps, e.g.
+   valid `area_dirs` and stop), optional `site=` (default `app`; must match a `sites[].id` in
+   `app.context.md` — same rule as `/qa:intake`), optional `source=` (name for provenance stamps, e.g.
    `testrail`), optional file path. No file given → ask the user to paste the export.
 2. **Recognize the export shape.** The big-3:
    - **TestRail** — ID `C####`, Title, Section, Preconditions, Steps, Expected Result,
@@ -34,10 +35,14 @@ same plain-prose fallback as `/qa:intake`); it does NOT delegate to a subagent.
    ☐ [imported/<source> <ext-id>] <title> → oracle: <key(s)>  risk: <lvl>  @smoke|@regression
    ```
    The external id IS the row id.
-4. **Dedupe.** If `<feature>.cases.md` exists, a row asserting the same behavior on the
+4. **Write to `specs/_context/<site>/<area>/<feature>.cases.md`** — the same path `/qa:ideate`
+   writes and `/qa:approve` reads. A NEW file starts from
+   `specs/_context/_templates/cases.md` and MUST keep its `# cases: <area>/<feature>` H1:
+   `/qa:approve` anchors its banner under it, and `/qa:coverage` silently skips a cases file
+   without it. **Dedupe:** if the file already exists, a row asserting the same behavior on the
    same surface gets the external id APPENDED to the existing row
    (`… [also: <source> <id>]`), not a duplicate row.
-5. **Minimal basis.** If no `<feature>.basis.md` exists, write a MINIMAL one:
+5. **Minimal basis.** If no `specs/_context/<site>/<area>/<feature>.basis.md` exists, write a MINIMAL one:
    `story:` from the import context; `rules:` reverse-derived from the imported
    Expected Results, each stamped `[imported: <source> <ext-id>]`; plus one 🔴 open
    question: "oracle derived from imported expected-results, not from intent — verify

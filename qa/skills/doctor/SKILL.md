@@ -289,10 +289,11 @@ Only when `$ARGUMENTS` contains `--verify-invariants`: read
 `${CLAUDE_SKILL_DIR}/reference/verify-invariants.md` and follow it. That file is THE single
 source of the injection mechanism (the verifier's Process step 8b runs the same one); do not
 re-derive it here. In the default read-only pass, skip this section entirely — it is the only
-mode that runs tests, and it still writes nothing.
+mode that runs tests, and it leaves nothing behind (the TEMP in-test probe is reverted before
+you report — see the reference file).
 
 This skill runs as a forked subagent, so the caller sees only what you return: report the
 per-check ✅/⚠️/❌ lines and the rollup, then the interpretation above for each ❌/⚠️. Never
 return a bare "healthy" while any ❌ stands.
 
-This skill reruns nothing in default mode, invokes no healer, and writes nothing.
+This skill reruns nothing in default mode, invokes no healer, and writes nothing (the opt-in mode's TEMP probe is reverted, so it too leaves the tree unchanged).

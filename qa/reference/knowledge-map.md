@@ -61,7 +61,7 @@ every `/qa:*` is a skill under `skills/`. The side-effecting ones — `init` `ge
 `heal` `batch-fix` `retire` `approve` `run`
 `intake` `ideate` `import-cases` — are **user-only**: Claude never triggers them by itself, so it will
 recommend a command rather than run it. The read-only ones (`help` `review`
-`coverage` `doctor` `impact` `report` `explore`) Claude may also invoke on its own, and
+`coverage` `doctor` `impact` `report` `explore` `metamorphic-relations`) Claude may also invoke on its own, and
 `coverage`/`doctor`/`impact`/`report` run in their own subagent. Reasoning:
 `${CLAUDE_PLUGIN_ROOT}/reference/DESIGN.md` §"Why the invocation policy is what it is".
 (`reference/how-to-import-manual-cases.md` has a narrative walkthrough of the same

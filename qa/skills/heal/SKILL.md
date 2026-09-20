@@ -4,6 +4,19 @@ argument-hint: <failing-test-id>
 disable-model-invocation: true
 ---
 
+**No argument given?** If `$ARGUMENTS` is empty, do **NOT** proceed — an empty id resolves to
+the whole `artifacts/test-results/` dir and the healer would pick a failure itself. Print the
+block below verbatim and stop:
+
+```
+Usage:  /qa:heal <failing-test-id>
+Triage ONE failing test. The id is its results directory name — list them with:
+
+  ls artifacts/test-results/
+
+Several tests red with the same root cause? Use /qa:batch-fix instead.
+```
+
 **Guard first (prod-safety).** Before delegating, run the canonical shell prod-guard —
 `bash scripts/prod-guard.sh` — and **STOP if it exits non-zero.** Healing drives a live
 browser (interactive MCP replay, step 3) *before* any `npx playwright test`, so the enforced

@@ -53,6 +53,14 @@ fi
 if [ -n "$SITE" ] && [ ! -d "specs/_context/$SITE" ]; then
   echo "WARN: site=$SITE has no specs/_context/$SITE/ directory — check the site name (the basis-derived dim-1 rows will be empty for it); feature dimensions are still computed."
 fi
+# scripts/spec-links.sh owns the basis<->spec link index that dims 1, 5 and 6 (and the
+# `unmanifested` walk) are computed FROM. Without it those dimensions print ZERO rows — which
+# reads exactly like "no gaps". Refuse instead of emitting a partial report: an empty section
+# is this command's one unforgivable output.
+if [ ! -f scripts/spec-links.sh ]; then
+  echo "ERROR: scripts/spec-links.sh missing — dims 1, 5 and 6 cannot be computed and would print EMPTY (a false clean). Substrate predates it; run /qa:init --resync, then re-run. This is NOT a gap-free result."
+  exit 2
+fi
 # The closed oracle vocabulary — a REGISTERED mirror of CLAUDE.md §"Test case format
 # contract" (any new key beyond the current 16 must be added to this alternation in the
 # same commit as every other mirror; a stale copy silently under-counts assertions in

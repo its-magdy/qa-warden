@@ -20,6 +20,37 @@ Thirteen working sessions closing the 2026-09-06 audit (all four blocks). Four s
 changes a consumer cannot infer from a file diff, three deliberate decisions to change
 nothing, and a large body of correctness work.
 
+### Functional audit (2026-09-21) — every skill traced as if executed; two false-clean paths closed
+
+- **`/qa:coverage` and `/qa:impact` no longer go false-clean on an old substrate.** Both call
+  `scripts/spec-links.sh` and neither checked it exists: without it, coverage dims 1/5/6 and
+  impact's `BLIND SPOTS` printed EMPTY — which reads as "no gaps" / "complete". Both scripts now
+  refuse (exit 2) and name the fix (`/qa:init --resync`).
+- **`/qa:doctor` no longer prints `0/3 … missing … ✅`.** The Playwright lockstep line ended in an
+  unconditional ✅; fewer than three pin sites is now a ⚠️ and is tallied as a warning.
+- **`metamorphic-relations` credited the wrong agent.** Its description said the *generator*
+  authors the twins; the verifier owns steps 8a/8b (and the generator is barred from the skill).
+- **Verifier's last-resort probe cleanup could hang.** It told a subagent to `mv` the probe file
+  ("prompts once, acceptable") — a subagent's prompt has nobody to answer it. It now uses the
+  allow-listed `scripts/retire-delete.sh`.
+- **`/qa:doctor --verify-invariants`** said it "writes nothing" while its mechanism needs an
+  in-spec probe; it now says what it means — the probe is reverted, the tree is left unchanged.
+- **Scaffold `Next:` block** now leads with the fast lane (it called the optional rigor lane
+  REQUIRED, contradicting both READMEs) and points at `/qa:help` instead of a
+  `reference/glossary.md` that is never stamped into a project.
+- **Argument handling:** `/qa:heal` stops on an empty id instead of triaging the whole results
+  dir; `/qa:ideate` actually resolves the `site=` it advertises; `/qa:import-cases` takes
+  `site=`, names its output path, and keeps the `# cases:` H1 (`/qa:coverage` silently dropped a
+  file without it); `/qa:run` pre-approves its own script like `/qa:coverage`/`/qa:impact` do.
+- **Snippets that broke if followed literally:** `axe-a11y`'s headline snippet skipped the
+  settle floor the next paragraph mandates (a real contrast failure could scan clean);
+  `test-data-seed`'s `mergeTests` recipe imported a `./pom.fixtures` module nothing creates.
+- **Honesty:** the README's "fast lane skips no FAIL-level gate" now adds that Check 14 is
+  SKIPPED (not downgraded) without a `.cases.md`; `/qa:review` says `--resync` deliberately does
+  not deliver the optional CI workflow; `/qa:explore`'s unreachable message masks `user:pass@`.
+- Glossary gains **substrate**, **waiver**, **situation step**; smaller citation fixes in
+  `/qa:help`, `exploration.md`, `planner.md`, `knowledge-map.md`, `gitignore`.
+
 ### Outside-in audit (2026-09-20) — one false claim, two unguarded paths, one missing step
 
 - **Fixed a false claim.** `CLAUDE.md` §"Escalation rules" said a flaky test is *auto-moved* to

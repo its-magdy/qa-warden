@@ -18,7 +18,7 @@ Drop-in accessibility scanner using `@axe-core/playwright`. `getByRole`/`getByLa
 No install needed — `@axe-core/playwright` already ships in the scaffolded `templates/package.json` (`/qa:init` installs it). Just import and use it.
 Authoritative package: https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright
 
-Drop-in snippet (the whole skill in three lines):
+Drop-in snippet (the whole skill in one test):
 ```ts
 import { test, expect } from '../../fixtures/test';  // project fixtures barrel — standalone snippet, adjust the relative path
 import AxeBuilder from '@axe-core/playwright';
@@ -27,6 +27,8 @@ test('cart with items has no critical a11y violations', async ({ page }) => {
   await page.goto('/cart');
   await page.getByRole('button', { name: 'Add to cart' }).click();
   await page.getByText('1 item in cart').waitFor();
+  await page.waitForLoadState('load');                               // settle floor — see below; without it a
+  await page.evaluate(() => document.fonts.ready.then(() => {}));    // real contrast failure can scan as 0 violations
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations.filter(v => v.impact === 'critical' || v.impact === 'serious')).toHaveLength(0);
 });

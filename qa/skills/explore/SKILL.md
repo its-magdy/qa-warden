@@ -47,9 +47,10 @@ set -a; [ -f "${CLAUDE_PROJECT_DIR:-.}/.env" ] && . "${CLAUDE_PROJECT_DIR:-.}/.e
 # seed API surfaced later as a mystery red instead of a STOP here.
 while IFS="$(printf '\t')" read -r v host; do
   [ -n "$host" ] || continue
+  # echo the MASKED host only (same sed as prod-guard.sh's mask()) — a `user:pass@` target must not reach the transcript
   code=$(curl -sS -o /dev/null -m 10 -w '%{http_code}' "$host" 2>/dev/null) \
     && echo "$v reachable (HTTP $code)" \
-    || echo "STOP: $v=$host UNREACHABLE (DNS/timeout/refused) — check VPN, tunnel, .env before exploring"
+    || echo "STOP: $v=$(printf '%s' "$host" | sed -E 's#^([a-zA-Z]+://)?[^/?#]*@#\1***@#') UNREACHABLE (DNS/timeout/refused) — check VPN, tunnel, .env before exploring"
 done < <(bash scripts/prod-guard.sh --list-targets)
 ```
 

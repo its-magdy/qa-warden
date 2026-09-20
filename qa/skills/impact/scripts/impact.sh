@@ -37,6 +37,13 @@ if [ "$#" -eq 0 ]; then
   exit 2
 fi
 
+# scripts/spec-links.sh feeds both the source= arm (feature extractor) and the BLIND SPOTS
+# walk. Without it BLIND SPOTS prints EMPTY, which the skill reads as "complete" — refuse.
+if [ ! -f scripts/spec-links.sh ]; then
+  echo "ERROR: scripts/spec-links.sh missing — BLIND SPOTS cannot be computed and would print EMPTY (a false 'complete'). Substrate predates it; run /qa:init --resync, then re-run."
+  exit 2
+fi
+
 # ---------------------------------------------------------------------------
 # source= is the ODD ONE OUT: it queries the intake-authored [grounded: …] stamps in
 # specs/_context (not the route manifests), and a source NAME may contain spaces

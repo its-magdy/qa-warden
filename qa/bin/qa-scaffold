@@ -384,15 +384,17 @@ cat <<'NEXT'
 Next:
   1. Edit .env  — replace BASE_URL_APP=CHANGEME with your staging/QA host (NOT prod) + set QA_USER_* creds.
         Minimum to start: BASE_URL_APP + one QA_USER_EMAIL / QA_USER_PASSWORD pair. Everything else in .env is optional.
-  2. /qa:explore                              build specs/_context/app.context.md (site/auth map)
-  3. /qa:explore mode=area site=app area=auth   area context — REQUIRED before intake (intake hard-gates on it)
-  4. /qa:intake auth/login                    interview -> basis.md (pins the oracle: what "correct" means)
-  5. /qa:ideate auth/login                    SFDIPOT checklist -> cases.md
-  5b. /qa:approve auth/login                  record your approve/prune — REQUIRED before new-spec (the gate: new-spec STOPs on un-approved cases)
-  6. /qa:new-spec auth/login                  draft your first spec
-  7. /qa:gen specs/auth/login.md              compile spec -> .spec.ts
-  8. /qa:review                               reviewer gates the assertion contract (run on every PR)
-  9. /qa:run mode=smoke                       run the @smoke suite
+  2. /qa:explore                              build specs/_context/app.context.md (site/auth map) — review it, clear draft: true
+  3. /qa:new-spec auth/login                  draft your first spec (explores the area itself if needed)
+  4. /qa:gen specs/auth/login.md              compile spec -> .spec.ts (+ independent verifier)
+  5. /qa:review                               reviewer gates the assertion contract (run on every PR)
+  6. /qa:run mode=smoke                       run the @smoke suite
 
-  New to these terms (oracle, basis, SFDIPOT, assertion contract)? Run /qa:help or open reference/glossary.md.
+  Rigor lane (P1 / money / compliance) — insert between 2 and 3 to pin what "correct" means first:
+     /qa:explore mode=area site=app area=auth   area context (intake hard-gates on it)
+     /qa:intake auth/login                      interview -> basis.md
+     /qa:ideate auth/login                      SFDIPOT checklist -> cases.md
+     /qa:approve auth/login                     approve/prune — once a cases.md exists, new-spec STOPs until it is approved
+
+  New to these terms (oracle, basis, SFDIPOT, assertion contract)? Run /qa:help — e.g. "/qa:help what is an oracle".
 NEXT

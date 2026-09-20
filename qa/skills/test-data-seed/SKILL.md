@@ -95,9 +95,12 @@ Two steps the example above leaves implicit — both are load-bearing and both w
 - **Compose with `mergeTests`, not a re-`extend` chain.** When `fixtures/test.ts` already
   has a POM `base.extend<PomFixtures>({...})`, do **not** re-`extend` that with the seed
   fixture inline — chaining two independent `extend`s can silently drop the worker scope of
-  the seed fixture. Compose the two test objects with Playwright's `mergeTests`:
+  the seed fixture. **First MOVE that existing POM `base.extend<PomFixtures>({...})` block out
+  of `fixtures/test.ts` into a new `fixtures/pom.fixtures.ts`** (exporting it as `test`) — the
+  scaffold ships one flat barrel, so that module does not exist until you create it. Then
+  compose the two test objects with Playwright's `mergeTests`:
   ```ts
-  // fixtures/test.ts
+  // fixtures/test.ts  (the barrel every spec imports — its path must not change)
   import { mergeTests } from '@playwright/test';
   import { test as pomTest } from './pom.fixtures';      // { loginPage, checkoutPage, … }
   import { test as seedTest } from './seed/customer.seed'; // { seededUser } — worker-scoped

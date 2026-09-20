@@ -58,8 +58,11 @@ then PASS summary. It fixes nothing; on a FAIL, kick the spec back to the
 the twins and hits no network.
 
 **CI wiring (optional — the local gate is the `.reviewed` marker below + doctor Check 15).** The reviewer's competence is not the gap — its
-*triggering* is. Run it on every PR that touches the QA suite. `/qa:init` stamps this
-workflow as `.github/workflows/qa-review.yml.example` — rename it to enable. **The runner
+*triggering* is. Run it on every PR that touches the QA suite. A FRESH `/qa:init` stamps this
+workflow as `.github/workflows/qa-review.yml.example` — rename it to enable. (`/qa:init --resync`
+deliberately does NOT deliver it — it is optional, so it is kept out of the resync set; on a
+project scaffolded before it existed, copy it from
+`${CLAUDE_PLUGIN_ROOT}/templates/.github/workflows/qa-review.yml.example`.) **The runner
 must install the plugin** (`plugins:` + `plugin_marketplaces:`, the latter a Git URL): the
 `reviewer` subagent ships inside the plugin, so on a bare runner the prompt below names a
 subagent that does not exist. The shape:

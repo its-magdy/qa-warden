@@ -413,11 +413,15 @@ if [ -f package.json ]; then
     const sites = [runner && "@playwright/test", ov && "overrides.playwright", ovCore && "overrides.playwright-core"].filter(Boolean);
     console.log("playwright lockstep: " + sites.length + "/3 package.json sites present and in step"
       + (runner || ov || ovCore ? " at " + bare(runner || ov || ovCore) : "")
-      + (sites.length < 3 ? " — missing: " + ["@playwright/test","overrides.playwright","overrides.playwright-core"].filter(s => !sites.includes(s)).join(", ") + " (see Check 9 substrate drift)" : "") + " ✅");
+      + (sites.length < 3 ? " — missing: " + ["@playwright/test","overrides.playwright","overrides.playwright-core"].filter(s => !sites.includes(s)).join(", ") + " (see Check 9 substrate drift)" : "") + (sites.length < 3 ? " ⚠️" : " ✅"));
+    // A missing site is not drift (nothing to skew) but it is not a pass either: exit 3 so the
+    // shell tallies it as a warning instead of printing a ✅ beside "0/3 … missing".
+    if (sites.length < 3) process.exit(3);
   ' 2>/dev/null
   pwls_rc=$?
   [ "$pwls_rc" -eq 2 ] && fail=$((fail+1))
-  { [ "$pwls_rc" -ne 0 ] && [ "$pwls_rc" -ne 2 ]; } && { echo "⚠️  could not read package.json Playwright pins — four-site lockstep UNVERIFIED"; warn=$((warn+1)); }
+  [ "$pwls_rc" -eq 3 ] && warn=$((warn+1))
+  { [ "$pwls_rc" -ne 0 ] && [ "$pwls_rc" -ne 2 ] && [ "$pwls_rc" -ne 3 ]; } && { echo "⚠️  could not read package.json Playwright pins — four-site lockstep UNVERIFIED"; warn=$((warn+1)); }
 fi
 
 #     (a)(b) — the MCP server site. As of Playwright 1.62 the MCP server ships BUNDLED with

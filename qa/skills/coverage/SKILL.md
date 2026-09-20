@@ -57,8 +57,8 @@ re-derive, re-implement, or "improve" any dimension inline here.** It is pre-app
 skill's `allowed-tools`, so it runs without a permission prompt; run it exactly as written
 above (a rewritten invocation loses the grant and prompts).
 
-**Exit codes:** `2` = filter resolution error (a bogus `area=`) — report it as a RESOLUTION
-ERROR and STOP; it is *not* a gap-free result. Any other non-zero, or absent optional inputs,
+**Exit codes:** `2` = filter resolution error (a bogus `area=`) **or a missing
+`scripts/spec-links.sh`** — relay the script's ERROR line and STOP; it is *not* a gap-free result. Any other non-zero, or absent optional inputs,
 degrade gracefully: format whatever dimensions produced output.
 
 Your job from here is **formatting only** — take the script's output and render it in the
@@ -117,7 +117,7 @@ shape below. Do not paraphrase, recompute, or estimate any number it emitted.
    *"K approved cases vs ~M scenarios — diff the `.cases.md` against the spec's `scenarios:` for
    silently-dropped approved cases; a deliberate drop should carry a `# waived:` note."* Both counts are
    **approximate** (data-driven `scenarios:` collapse several cases) — say so, never render as a percentage.
-5b. **Waiver destinations exist** — every `# waived: … → specs/<path>.md` destination emitted by dim 5b
+5b. **Waiver destinations exist** — every `# waived: … → specs/<path>.md` destination emitted by dim 5's waiver notes
    that does **not** resolve to a file. A phantom destination means the approved case is unbuilt AND its
    stated home does not exist — coverage-looking, not coverage. Surface each under Gaps (deterministic
    companion to reviewer Check 14's waiver-to-phantom-spec WARN; the reviewer additionally judges bolded

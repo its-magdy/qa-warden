@@ -129,6 +129,11 @@ so the toolkit's count is **8**, not 7.)
 **site** — one deployed app under test, addressed by `BASE_URL_<SITE>` (e.g. `BASE_URL_APP`,
 `BASE_URL_ADMIN`). A project can test several sites; each gets its own Playwright project.
 
+**situation step** — a spec step that sets up a *condition* rather than clicking something:
+`fault:` makes a named network call fail or return a given response, `clock:` moves the
+browser's time, and `test lock:` serialises specs that share one piece of server data. They let
+a spec say "when the payment API is down…" without hand-written code.
+
 **smoke** — the fast nightly gate. Tests tagged `@smoke` are what `/qa:run mode=smoke` runs; the
 primary happy-path of a critical feature must be `@smoke`.
 
@@ -140,7 +145,16 @@ a fenced YAML oracle block). AI writes it; a human can read it. Not the compiled
 actually replays nightly. Generated from the **spec**. (Rule of thumb: *spec* = Markdown you
 read, *test* = TypeScript Playwright runs.)
 
+**substrate** — the toolkit-owned files `/qa:init` stamps into your project (`scripts/`,
+`playwright.config.ts`, `.claude/settings.json`, the context templates…). You don't edit them;
+`/qa:init --resync` refreshes them after a plugin upgrade, and `/qa:doctor` reports
+"substrate drift" when your copies differ from the plugin's.
+
 **trace** — a recorded, step-by-step replay of a test run — DOM snapshots, network, console,
 a screenshot at each step — that you open in a browser at
 [trace.playwright.dev](https://trace.playwright.dev) with no install. It's how a non-coder
 *sees* what a failing test did, without reading the test code.
+
+**waiver** — an explicit, written decision NOT to automate an approved case in this spec: a
+`# waived: <case> — <reason>` line (optionally `→ specs/<other>.md` when the case is covered
+elsewhere). The reviewer accepts a waived case as accounted-for; a silently dropped one is a WARN.

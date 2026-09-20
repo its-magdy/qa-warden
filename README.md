@@ -25,7 +25,7 @@ this through and shows what you'll see at each step. The quick version:
 2. `/qa:explore` — the first run writes a **DRAFT** app context; review + confirm it.
 3. `/qa:new-spec auth/login` → `/qa:gen specs/auth/login.md` → `/qa:review` → `/qa:run mode=smoke`
 
-**Rigor lane** (P1 / money / compliance): insert `/qa:intake` → `/qa:ideate` → `/qa:approve` between explore and new-spec — it pins *what correct means* before anything is generated. The fast lane skips no FAIL-level gate (Check 14 / coverage only WARN).
+**Rigor lane** (P1 / money / compliance): insert `/qa:intake` → `/qa:ideate` → `/qa:approve` between explore and new-spec — it pins *what correct means* before anything is generated. The fast lane skips no FAIL-level gate — but with no `.cases.md`, reviewer Check 14 (approved-case traceability) has nothing to read and is SKIPPED, not downgraded: *completeness* is unchecked on the fast lane.
 
 > **Day-1 glossary:** site — one deployed app under test (`BASE_URL_<SITE>`) · area — a product area, the folder specs group under · spec — the human-readable Markdown contract in `specs/` · test — the compiled Playwright `.spec.ts` in `tests/` · oracle — the spec's definition of "correct" (the assertions) · smoke — the `@smoke`-tagged fast gate `/qa:run mode=smoke` runs · **[full glossary →](qa/reference/glossary.md)**
 

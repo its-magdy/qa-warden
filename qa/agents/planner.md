@@ -37,7 +37,7 @@ A Markdown file (NOT pure YAML) with:
 ### YAML schema (all fields required unless noted)
 ```yaml
 name: <short scenario name>
-tags: [<smoke|regression>, <area>]   # smoke-lane RULE below — the primary happy-path of a P1/critical area MUST be `smoke`, not `regression`
+tags: [<smoke|regression>, <area>]   # smoke-lane RULE below — the primary happy-path of a P1/critical area MUST be `smoke`, not `regression`. MULTI-scenario spec: write `regression` HERE and put `smoke` on the ONE happy-path scenario's own `tags:` (a spec-level `smoke` tags every scenario)
 site: app                    # REQUIRED. MUST match a sites[].id in specs/_context/app.context.md. For cross-site specs use `sites: [admin, app]` instead.
 basis: checkout/coupon       # OPTIONAL — the intake/ideate feature this spec was fanned out from; REQUIRED whenever the spec basename differs from the checklist's <feature>. Check 14 + /qa:coverage resolve the .basis/.cases pairing through it.
 compliance_relevant: false   # optional; set true for PCI/HIPAA/SOX-flagged flows — enables the optional cross-vendor reviewer (see agents/reviewer.md §"Cross-vendor reviewer note")
