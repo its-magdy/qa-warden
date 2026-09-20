@@ -751,7 +751,7 @@ copies every file), so new templates never strand.
 
 | Package | Version | Note |
 |---|---|---|
-| `@playwright/test` | `1.62.1` | exact pin (no caret) + `overrides` pin `playwright`/`playwright-core` to `1.62.1` — all three move in lockstep |
+| `@playwright/test` | `1.62.1` | exact pin (no caret) + `overrides` pin `playwright`/`playwright-core` to `1.62.1`. These three **plus** the version-pinned npx arg in `.mcp.explore.json` are **FOUR sites that move in one change** — all four enforced by `/qa:doctor` Check 8b (the exact-pin arm matters: a caret floats the runner above the forced core while the equality arm still reads true). Evaluated against 1.63.0 on 2026-09-20 — deliberately **held** at 1.62.1; see `AUDIT-2026-09-06.md` §5. |
 | `@playwright/cli` | `0.1.17` | default transport; exact pin (pre-1.0, no float) — manual-bump |
 | `@playwright/mcp` | `^0.0.78` | **legacy fallback only** — explore/heal now use the MCP server bundled with `playwright` (`npx playwright mcp`, 1.62+); `.mcp.explore.json` launches the bundled server, not this package |
 | `@axe-core/playwright` | `^4.12.1` | a11y skill |
