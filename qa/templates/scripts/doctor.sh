@@ -1405,6 +1405,65 @@ for f in $umw_files; do
 done
 fail=$((fail+umw_bad))
 
+# 9l. `test lock:` PAIRING + shard voidance. Playwright 1.63 added `lock?: string | string[]` to
+#     `TestDetails`, the first cross-file mutual-exclusion primitive the runner has ever shipped,
+#     and reviewer Check 13's cross-FEATURE bullet now offers it as a narrower fix than pinning a
+#     whole lane. It is a hand-mirrored cross-file STRING with no runtime signal of its own — the
+#     9b/9bb/9be/8 shape — so it gets the deterministic half here and the judgment half there.
+#     Both arms key on SYMBOLS (the lock literal; the shard flag), never on wording, and both
+#     scan CODE — full-line comments are dropped first, because an ownership check that reads
+#     comments false-FAILs on its own documentation (the 9k lesson).
+#
+#     Arm 1 — a lock name occurring at exactly ONE site under tests/** is SILENTLY INERT. A lock
+#       excludes the holder from every OTHER group that wants the same name; with no second
+#       declaration there is nothing to exclude, so the suite races exactly as it did before and
+#       every oracle still passes. Measured on a fixture at 1.63.0, not reasoned: a pair sharing
+#       `lock:'seed:user2'` across two files never overlapped, while a third test holding a lock
+#       nobody else names overlapped both. That is session 9's non-firing `fault:` glob again,
+#       and it is why the cross-FEATURE case is the dangerous one — the CONSUMER side carries the
+#       name for no reason of its own, so it is the side a typo or a later edit drops.
+#       Counted per SITE, not per FILE: two same-lock tests in ONE file DO exclude each other
+#       under `fullyParallel` (each top-level test is its own group — verified on the same
+#       fixture), so a file-granular count would FAIL a pairing that genuinely holds.
+#     Arm 2 — locks + SHARDING is a void remedy. `filterForShard` splits the ordered group list
+#       by test count and never consults `group.locks`, so a lock-sharing pair straddles a shard
+#       boundary and the two shards run as separate processes with no shared lock table.
+#       Demonstrated: one filler spec was enough to push a lock-sharing pair into different
+#       shards, and running both shards concurrently put them back in overlap. Nothing in the
+#       suite can re-pin them — so once a project shards, the ONLY shard-safe answer is the one
+#       Check 13 still lists first, folding the contention into ONE file's serial `describe`.
+if [ -n "$TEST_FILES" ]; then
+  # `-e` on every pattern below (the 9k lesson): a pattern passed positionally that begins with
+  # a dash is eaten as an option and the arm goes silently dead behind a clean baseline.
+  lock_sites=$(for f in $TEST_FILES; do
+    sed '/^[[:space:]]*\/\//d' "$f" 2>/dev/null \
+      | grep -oE -e "lock:[[:space:]]*(\[[^]]*\]|'[^']*'|\"[^\"]*\")" \
+      | grep -oE -e "'[^']*'|\"[^\"]*\"" \
+      | tr -d "\"'" \
+      | sed -e "s|^|${f}	|"
+  done)
+  if [ -n "$lock_sites" ]; then
+    lock_names=$(printf '%s\n' "$lock_sites" | cut -f2- | sort -u)
+    while IFS= read -r lname; do
+      [ -z "$lname" ] && continue
+      lcount=$(printf '%s\n' "$lock_sites" | cut -f2- | grep -cxF -e "$lname")
+      [ "$lcount" -ge 2 ] && continue
+      lwhere=$(printf '%s\n' "$lock_sites" | grep -F -e "	$lname" | cut -f1 | head -1)
+      echo "❌ lock '$lname' is declared at exactly ONE site ($lwhere) — a singleton lock is SILENTLY INERT (it has no counterpart to exclude, so the pair races exactly as it did before and every oracle still passes). Declare the same name on the other side of the contention — for the cross-FEATURE case that is the CONSUMER spec, which carries it for no reason of its own — or drop it and fold the contention into one file's serial describe (reviewer Check 13)"
+      fail=$((fail+1))
+    done < <(printf '%s\n' "$lock_names")
+    lock_shard=$(for wf in .github/workflows/*; do
+      [ -f "$wf" ] || continue
+      case "$wf" in *.example) continue ;; esac
+      sed -e '/^[[:space:]]*#/d' "$wf" 2>/dev/null | grep -qE -e '--shard|^[[:space:]]*shard:' && echo "$wf"
+    done | head -1)
+    if [ -n "$lock_shard" ]; then
+      echo "❌ tests/** declares \`test lock:\` but $lock_shard shards the run — locks are SHARD-BLIND (filterForShard splits the ordered group list by test count and never reads group.locks), so a lock-sharing pair lands in whatever shards its position dictates and the two shard PROCESSES hold no common lock table. The mutual exclusion silently stops holding for anyone following this recipe: either drop the sharding, or use the shard-safe fix reviewer Check 13 lists first — fold the contention into ONE file's serial describe"
+      fail=$((fail+1))
+    fi
+  fi
+fi
+
 # 10. Site-id ↔ config-project routing (F-51: a site declared in app.context.md with no matching
 #     playwright.config project — specs target a phantom site and silently run zero tests; renumbered
 #     from the old "F-15" tag, which collided with the last-run-staleness F15 in check 1 above — the
@@ -1523,8 +1582,8 @@ while read -r basis; do
     for t in "tests/${b}.spec.ts" "tests/${b}.metamorphic.spec.ts"; do
       [ -f "$t" ] || continue
       found=$((found+1))
-      grep -qE "parallelIndex|workerIndex|mode:[[:space:]]*[\"']serial[\"']|seeded[A-Z]" "$t" \
-        || { echo "⚠️  $feat: basis declares mutates_server_state:true but $t shows no isolation marker (parallelIndex/serial/seed fixture) — un-isolated mutation is green at 1 worker, flaky at scale"; warn=$((warn+1)); }
+      grep -qE "parallelIndex|workerIndex|mode:[[:space:]]*[\"']serial[\"']|seeded[A-Z]|lock:[[:space:]]*[\"'[]" "$t" \
+        || { echo "⚠️  $feat: basis declares mutates_server_state:true but $t shows no isolation marker (parallelIndex/serial/seed fixture/lock:) — un-isolated mutation is green at 1 worker, flaky at scale"; warn=$((warn+1)); }
     done
   done
   [ "$found" -eq 0 ] && { echo "⚠️  $feat: basis declares mutates_server_state:true but NO compiled test resolved (neither tests/${feat}.spec.ts nor any fanned spec via 'basis: ${feat}') — the mutating feature is never isolation-checked; compile it or fix the basis 'feature:' path"; warn=$((warn+1)); }

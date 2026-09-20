@@ -160,7 +160,7 @@ oracle key (the fired-proof rule below is why none is needed). They exist so the
 enumerate *"the payments API returns 503"* or *"the session expires after 30 minutes"* and the
 planner had no way to author either.
 
-Argument shapes (verified against the pinned Playwright 1.62.1 type declarations). **The key column
+Argument shapes (verified against the pinned Playwright 1.63.0 type declarations). **The key column
 deliberately carries the trailing colon** (`` `fault:` ``, not `` `clock` ``) — these are `steps:`
 keys, not oracle keys, and the colon is also what keeps them out of `/qa:doctor` Check 9bb's
 oracle-arg-shape extractor, which matches a bare `` `key` `` in column 1 and would otherwise count
@@ -283,6 +283,7 @@ One JSON sink, one human view — kept parseable at the source.
 - **`dotenv.config({ quiet: true })` is mandatory** in the config — dotenv v17+ prints an "injected env" banner to **stdout** that corrupts every JSON reporter/`jq`. Suppress at the source; do not try to strip it downstream.
 - **Commands must not override `--reporter` casually.** An inline `--reporter=…` *replaces* the config array. `/qa:run mode=smoke` runs with `QA_RUN_OF_RECORD=1` and no `--reporter` override (config reporters fire, `last-run.json` refreshes); `/qa:run mode=single` writes `reports/headless-<name>.json` and `/qa:run mode=repeat` writes `artifacts/flake-<name>.json` — both knowingly do **not** refresh `last-run.json` (check freshness before summarizing).
 - **CI sharding:** shards emit `blob`; merge with `npx playwright merge-reports --reporter html ./all-blob-reports` (or `--reporter json` to rebuild `last-run.json`) before summarizing.
+  - **Sharding VOIDS `test lock:`.** `lock?: string | string[]` on `TestDetails` (Playwright 1.63+, on `test(title, details, body)` and `test.describe.parallel(...)`) is the only cross-file mutual-exclusion primitive the runner has, and reviewer Check 13 offers it for the cross-FEATURE mutator/consumer case — but the shard filter splits the ordered group list by **test count** and never reads the locks, so a lock-sharing pair straddles a shard boundary and the two shard *processes* hold no common lock table. Measured on 1.63.0, not inferred: one extra spec file was enough to split a locked pair, and the two shards then ran it concurrently. **If you adopt the recipe above, stop using `lock:`** — fold the contention into ONE file's serial `describe` (shard-safe under any layout) or give the mutator its own throwaway entity. Two more ways a lock is silently wrong, both enforced: a name declared at exactly **one** site is inert (`/qa:doctor` Check 9l FAILs it — the consumer side carries the name for no reason of its own and is the side that gets dropped), and a lock on a hooked `describe.parallel` is held at **group** granularity, stalling unlocked neighbours. `lock:` is emitted by the **generator**, never authored in a spec — it is not an oracle key and not a `steps:` form.
 
 ## Prompt-injection discipline
 

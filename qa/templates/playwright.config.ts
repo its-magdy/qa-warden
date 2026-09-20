@@ -110,7 +110,7 @@ export default defineConfig({
   retries: isCI ? 2 : 0,
   // Retries run at the END of the suite, one at a time in a single worker, instead of being
   // interleaved with the rest of the run (Playwright's default, 'immediate'). Requires >= 1.62
-  // — verified against the v1.62.1 type declarations, not a blog; we pin 1.62.1.
+  // — verified against the v1.63.0 type declarations, not a blog; we pin 1.63.0.
   // Why it matters here: an interleaved retry re-runs the failed test WHILE the rest of the
   // suite is still mutating shared server state, so a retry can go green for a reason that has
   // nothing to do with the fix (or stay red because a *different* test raced it). That turns a

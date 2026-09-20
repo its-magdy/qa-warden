@@ -199,6 +199,20 @@ does not fix anything — each finding names its repair:
   test on a manifest path built from a variable — and scans **code, not comments**, because an
   ownership check has to name the construct it bans and so matches its own documentation
   otherwise. Fix by calling `scripts/spec-links.sh unmanifested`; never re-derive the walk.
+- **Check 9l (`test lock:` pairing + shard voidance):** `lock?: string | string[]` on
+  `TestDetails` (Playwright 1.63+) is the only cross-file mutual-exclusion primitive the runner
+  ships, and reviewer Check 13 offers it for the cross-FEATURE mutator/consumer case. It is a
+  hand-mirrored cross-file **string with no runtime signal**, so this is its deterministic half.
+  **Arm 1** — a lock name at exactly **one** site under `tests/**` is silently inert: nothing to
+  exclude, the pair races exactly as before, every oracle still green. The consumer side carries
+  the name for no reason of its own, so it is the side a typo or a later edit drops. Fix by
+  naming the same literal on the other side of the contention, or by dropping the lock and
+  folding into one file's serial `describe`. Counted per **site**, not per file — two same-lock
+  tests in one file genuinely do exclude each other. **Arm 2** — locks plus a sharding workflow
+  is a void remedy: the shard filter splits by test count and never reads `group.locks`, so the
+  pair can land in two shard processes that share no lock table. Fix by dropping the sharding or
+  by taking the shard-safe fix (fold into one file, or give the mutator a throwaway entity).
+  Both arms scan **code, not comments** (the 9k lesson).
 - **Check 2 / 9b (vocab drift):** re-sync the 16-key mirror with CLAUDE.md (and, for
   9b, upgrade/re-stamp the plugin agents) in the same commit as any vocab change.
 - **Check 3 (vacuous smoke):** tag at least the P1 happy path `@smoke`, then
