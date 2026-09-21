@@ -22,9 +22,14 @@ claude plugin eval . --tag reviewer --runs 1 --ablation none \
 - Measured 2026-09-21: ~\$1.6 and ~6 min per run (the reviewer is pinned to opus). Run it
   before committing an edit to `agents/reviewer.md`, not on every commit.
 
-**Status 2026-09-21:** `reviewer-value-drift` was run end-to-end and scored 1.00. The other four
-cases' fixtures are verified (each plants exactly its one defect) but their graders have NOT yet
-been run against a real report — expect to adjust a regex on first run, the control case most of all.
+**Status 2026-09-21:** all five cases have been run end-to-end once. Four scored 1.00;
+`reviewer-no-expect` scored 0.25 twice while the reviewer's verdict was CORRECT — it wrote
+`**Check 1** (failable expect): **❌ FAIL**`, closing the bold before the parenthesis, and the
+grader's literal `Check 1 (` missed it. Patterns now allow `\W{0,4}` after the check id and
+`\W{0,20}` before the verdict; the new pattern was replayed against both saved traces (matches
+the FAIL, does not match a PASS, still passes the control). Report markdown VARIES between runs —
+when a grader fails, re-run with `--keep-temp` and read the trace before suspecting the agent.
+Not yet done: `--runs 3` for a variance figure.
 
 ## Cases (`reviewer/`)
 
