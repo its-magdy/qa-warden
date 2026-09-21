@@ -256,6 +256,13 @@ structure:
 <for each FAIL, a fenced diff block showing the violating lines and the minimal fix the human/generator should make. No auto-fixes — you cannot write.>
 ```
 
+**A proposed spec fix must itself be contract-valid** — a human will paste it. In a spec diff,
+`must_fail_when:` / `fail_if:` are YAML **lists** (`- "text"`; the inline `must_fail_when: "…"`
+form used in this file's examples is prose shorthand for one entry, not a shape to emit), and
+`negative: true` is a key of a **`scenarios:` entry** — the contract defines no spec-level
+`negative:` (CLAUDE.md §"Test case format contract"); a spec with no `scenarios:` block is
+governed through Check 2b's inference floor (iii), so propose nothing there.
+
 After emitting the comment:
 - **Zero violations** → emit the PASS report and stop. The human merges.
 - **≥1 violation** → emit the FAIL report and stop. The PR is blocked until a human (or the generator/healer) fixes the violation and re-runs the reviewer.

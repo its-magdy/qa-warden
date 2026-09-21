@@ -1,11 +1,11 @@
 ---
-description: Execute Playwright tests in one of three ways — run a single spec headless/CI-shaped (mode=single), run the @smoke-tagged suite (mode=smoke), or repeat-probe a spec N times to check flakiness/repeatability/stability (mode=repeat). Deterministic, JSON-only, no LLM in the loop. Do not hand-roll a bare `npx playwright test` for any of these — this skill owns the resolver, freshness/zero-test guards, and report paths every downstream consumer (`/qa:report`, `/qa:heal`) depends on.
-argument-hint: mode=single|smoke|repeat [<spec-path-or-test-path>] [N]
+description: Execute Playwright tests in one of four ways — run a single spec headless/CI-shaped (mode=single), run the @smoke-tagged suite (mode=smoke), repeat-probe a spec N times to check flakiness/repeatability/stability (mode=repeat), or run only the tests a git change touches (mode=changed). Deterministic, JSON-only, no LLM in the loop. Do not hand-roll a bare `npx playwright test` for any of these — this skill owns the resolver, freshness/zero-test guards, and report paths every downstream consumer (`/qa:report`, `/qa:heal`) depends on.
+argument-hint: mode=single|smoke|repeat|changed [<spec-path-or-test-path>|<git-ref>] [N]
 disable-model-invocation: true
 allowed-tools: Bash(bash ${CLAUDE_SKILL_DIR}/scripts/run.sh *)
 ---
 
-One entry point, three selection scopes — all deterministic, no LLM in the
+One entry point, four selection scopes — all deterministic, no LLM in the
 loop (plain `npx playwright test`, no MCP/LLM). Pick the mode from the ask:
 
 | Natural phrasing | Mode | What runs | Output |
@@ -13,9 +13,10 @@ loop (plain `npx playwright test`, no MCP/LLM). Pick the mode from the ask:
 | "run this spec headless", "CI-shaped run of X", "just run X once, no interaction" | `single` | one spec, one shot | `reports/headless-<name>.json` (+ `.log`) |
 | "run the smoke suite", "run smoke", "is the suite green" | `smoke` | `@smoke`-tagged tests | `artifacts/last-run.json` (config json sink) |
 | "is this test flaky", "check repeatability", "run this N times" | `repeat` | same spec × N (default 10), back-to-back | `artifacts/flake-<name>.json` |
+| "run what I changed", "run the tests this PR touches", "quick check before I push" | `changed` | tests git says the change touches | `reports/changed.json` (+ `.log`) |
 
 **Argument shape:** `mode=single <spec-path-or-test-path>` · `mode=smoke` (no
-further args) · `mode=repeat <spec-path-or-test-path> [N]`.
+further args) · `mode=repeat <spec-path-or-test-path> [N]` · `mode=changed [<git-ref>]`.
 
 **Safety rail (CLAUDE.md §Environment):** run `bash scripts/prod-guard.sh`
 first — STOP and ask the user to confirm in-chat if it exits non-zero. For
@@ -37,11 +38,11 @@ for a in "$@"; do
     *) REST+=("$a") ;;
   esac
 done
-: "${MODE:?usage: /qa:run mode=single|smoke|repeat [<spec-path-or-test-path>] [N]}"
+: "${MODE:?usage: /qa:run mode=single|smoke|repeat|changed [<spec-path-or-test-path>|<git-ref>] [N]}"
 bash ${CLAUDE_SKILL_DIR}/scripts/run.sh "$MODE" "${REST[@]}"
 ```
 
-All three modes' run/guard/aggregate logic is bundled in one script
+All four modes' run/guard/aggregate logic is bundled in one script
 (`scripts/run.sh`) — a bash-shebang script keeps run+guard sequencing in one
 process, avoiding the empty-`$RUN_START` hazard a split invocation would hit
 (the Bash tool starts a fresh shell per call). The script owns the shell
@@ -145,3 +146,25 @@ Report:
 
 Do NOT invoke the healer automatically — `mode=repeat` is diagnostic only.
 Use `/qa:heal <id>` afterwards if you want to fix a specific failure.
+
+## mode=changed
+
+A PR-speed lane: Playwright's `--only-changed` runs the test files that changed **plus every
+test file that imports a changed file**, so editing a page object re-runs its consumers. Bare
+`mode=changed` compares against uncommitted work; `mode=changed main` (any ref) compares
+against that branch. It never refreshes `artifacts/last-run.json` — it is **not the run of
+record**; `mode=smoke` and the nightly still are.
+
+What it cannot see, and the script says so rather than staying quiet:
+- **An edited spec (`specs/**/*.md`) selects nothing** — no test imports Markdown. The script
+  lists those specs; relay the list and say their tests are stale until `/qa:gen` recompiles
+  them. A re-run cannot fix that.
+- **App-side changes** are invisible to git-in-this-repo. `/qa:impact` is the tool for a
+  requirement or route change.
+- A repo with **no commit yet**, or a **ref that does not resolve**, makes Playwright select 0
+  tests with exit 0 and no error. The script refuses both (exit 2) instead.
+
+Report: the selected/passed/failed counts from `reports/changed.json`, per-failure first error
+line + `/qa:heal <dir>` command as in `mode=smoke`, and any listed stale specs. If the script
+printed `NOTHING SELECTED`, report exactly that — **nothing ran, so it is not a pass** — and
+suggest `mode=smoke` if the user wanted a health signal.

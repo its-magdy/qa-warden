@@ -20,10 +20,24 @@ Thirteen working sessions closing the 2026-09-06 audit (all four blocks). Four s
 changes a consumer cannot infer from a file diff, three deliberate decisions to change
 nothing, and a large body of correctness work.
 
+### `/qa:run mode=changed` + a reviewer fix-shape rule (2026-09-21)
+
+- **New `/qa:run mode=changed [<git-ref>]`** — runs only what a change touches, via Playwright's
+  `--only-changed` (changed test files plus every test that imports a changed page object or
+  fixture). Writes `reports/changed.json`; never touches `artifacts/last-run.json`, so it is not
+  the run of record. Two things it guards because Playwright answers both with "0 tests, exit 0"
+  and no error (measured): a repo with no commit yet, and a ref that does not resolve. It also
+  lists edited `specs/**/*.md` — no test imports Markdown, so those are never selected and their
+  tests stay stale until `/qa:gen`. "Nothing selected" is reported as nothing ran, not as a pass.
+- **The reviewer's proposed spec fixes must be contract-valid.** Its own examples write
+  `must_fail_when: "…"` inline as shorthand, and in one observed run it proposed exactly that
+  scalar shape (plus a spec-level `negative: true`) in a diff a human would paste. It is now told
+  the list form and that `negative:` is a `scenarios:`-entry key.
+
 ### Ceremony audit (2026-09-21) — two dead-end round-trips removed
 
-- **`/qa:explore site=<id> area=<name>` now runs** as `mode=area` and announces the inference,
-  instead of STOPping to make you retype it. Both keys were typed, so nothing is guessed. With
+- **`/qa:explore` given both `site=` and `area=` but no `mode=area` now runs** as `mode=area` and
+  announces the inference, instead of STOPping to make you retype it. Both keys were typed, so nothing is guessed. With
   only ONE of the two keys it still STOPs — the rule that a mistyped area run must never fall
   through to `mode=hot` (and stamp `last_verified`) is unchanged.
 - **`/qa:retire` can close an abandoned authoring chain.** Doctor Check 18 has always said "or

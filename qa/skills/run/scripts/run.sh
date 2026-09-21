@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run.sh — deterministic run+guard for /qa:run, all three modes.
+# run.sh — deterministic run+guard for /qa:run, all four modes.
 #
 # Consolidates the three former single-purpose runners (headless, run-smoke,
 # flake-check) behind one entry point. Each mode keeps its ORIGINAL on-disk
@@ -19,6 +19,7 @@
 #   run.sh single <spec-path-or-test-path>
 #   run.sh smoke
 #   run.sh repeat <spec-path-or-test-path> [N]
+#   run.sh changed [<git-ref>]
 #
 # Exit codes (all modes): 0 = completed cleanly, caller reads the named JSON and
 # summarizes. 2 = do NOT report a pass — the printed reason names why
@@ -182,8 +183,57 @@ case "$MODE" in
     exit 0
     ;;
 
+  changed)
+    # ---- changed: run only the tests git says this change touches (Playwright --only-changed) ----
+    # A PR-speed lane, never the run-of-record: inline --reporter=json replaces the config
+    # reporter array, so artifacts/last-run.json is untouched (same reasoning as `repeat`).
+    REF="${1:-}"
+    # Both guards exist because Playwright answers each of these with "0 tests, exit 0" and NO
+    # error (measured on a scratch repo, 2026-09-21) — indistinguishable from "nothing changed":
+    #   - a repo with no commit yet (fresh project: every file untracked, HEAD unborn)
+    #   - a ref that does not resolve (a typo in `main`)
+    git rev-parse --verify -q HEAD >/dev/null 2>&1 \
+      || { echo "run(changed): no git commit yet (or not a git repo) — --only-changed has no baseline and would silently select 0 tests. Commit once, or use mode=smoke."; exit 2; }
+    if [ -n "$REF" ]; then
+      git rev-parse --verify -q "$REF^{commit}" >/dev/null 2>&1 \
+        || { echo "run(changed): ref '$REF' does not resolve to a commit — Playwright would silently select 0 tests for it. Check the branch name (origin/main?)."; exit 2; }
+    fi
+    mkdir -p reports
+    OC="--only-changed"; [ -n "$REF" ] && OC="--only-changed=$REF"
+    npx playwright test "$OC" \
+      --reporter=json \
+      > reports/changed.json 2> reports/changed.log
+    PW_EXIT=$?   # F-04: CAPTURE the exit code NOW — see header note.
+    LR=$(bash scripts/check-last-run.sh reports/changed.json 900); lr_rc=$?
+    echo "run(changed): $LR (rc=$lr_rc)"
+
+    # Specs are Markdown — no test imports them, so an edited spec selects NOTHING. Name them:
+    # an edited spec's test is stale until /qa:gen recompiles it, which a re-run cannot fix.
+    CHANGED_SPECS=$( { git diff --name-only ${REF:-HEAD} -- specs/ 2>/dev/null; git ls-files --others --exclude-standard -- specs/ 2>/dev/null; } \
+      | grep -E '^specs/.*\.md$' | grep -v '^specs/_context/' | sort -u )
+    if [ -n "$CHANGED_SPECS" ]; then
+      echo "run(changed): spec(s) edited — NOT selected by --only-changed (no test imports a .md). Their tests are stale until /qa:gen recompiles them:"
+      printf '%s\n' "$CHANGED_SPECS" | sed 's/^/  - /'
+    fi
+
+    case "$lr_rc" in
+      0) : ;;
+      5) echo "run(changed): NOTHING SELECTED — no changed test, page-object or fixture file${REF:+ vs $REF}. Nothing ran; this is NOT a pass of anything."; exit 0 ;;
+      3) echo "run(changed): no JSON — startup error (prod-guard/config), not a green run. See reports/changed.log."; exit 2 ;;
+      *) echo "run(changed): unparseable/stale JSON (rc=$lr_rc) — do NOT report a pass."; exit 2 ;;
+    esac
+    if [ "${PW_EXIT:-1}" -ne 0 ] && [ "$(jq '.stats.unexpected // 0' reports/changed.json 2>/dev/null)" -eq 0 ]; then
+      echo "run(changed): playwright exited non-zero ($PW_EXIT) but the report shows 0 failures —"
+      echo "the run did NOT complete cleanly (timeout / worker crash). NOT green; inspect reports/changed.log and re-run."
+      exit 2
+    fi
+    echo "run(changed): report at reports/changed.json (log: reports/changed.log)"
+    bash scripts/post-run-checks.sh --only bugs
+    exit 0
+    ;;
+
   *)
-    echo "run.sh: unknown or missing mode '$MODE' — usage: run.sh <single|smoke|repeat> [args...]"
+    echo "run.sh: unknown or missing mode '$MODE' — usage: run.sh <single|smoke|repeat|changed> [args...]"
     exit 2
     ;;
 esac
