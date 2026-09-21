@@ -48,7 +48,7 @@ SPEC
 cat > tests/auth/login.spec.ts <<'TEST'
 import { test, expect } from '../../fixtures/test';
 
-test.describe('auth/login', { tag: ['@regression', '@auth'] }, () => {
+test.describe('auth/login', { tag: ['@regression', '@auth', '@site:app'] }, () => {
   test('wrong password is rejected', async ({ page }) => {
     await page.goto('/login');
     await page.getByLabel('Email').fill('alice@example.com');

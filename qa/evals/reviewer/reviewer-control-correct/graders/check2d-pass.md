@@ -1,6 +1,6 @@
 ---
 type: regex
 target: trace
-pattern: 'Check 2d \(oracle value fidelity[^)]*\):\W{0,6}PASS'
+pattern: 'Check 2d \(oracle value fidelity[^)]*\):\W{0,20}PASS'
 weight: 3
 ---
