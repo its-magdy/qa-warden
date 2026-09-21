@@ -276,8 +276,8 @@ does not fix anything — each finding names its repair:
   `interview: none`/absent — the human grounding is unattested (a fabricated basis looks identical).
   `/qa:intake` should stamp the real question count in the basis `interview:` field.
 - **Check 20 (`.env`-load idiom drift, WARN):** the canonical `.env`-load one-liner is duplicated
-  verbatim across several plugin skill/agent files (each subagent needs its own inline copy —
-  it can't read CLAUDE.md); this WARNs only if more than one distinct form exists. Re-sync every
+  verbatim across several plugin skill/agent files (a run-verbatim command belongs at its point
+  of use); this WARNs only if more than one distinct form exists. Re-sync every
   copy to the canonical `${CLAUDE_PROJECT_DIR:-.}`-anchored form in CLAUDE.md §Environment.
 - **Check 21 (fresh-project readiness, INFO):** not a warning — on a brand-new project (no
   `app.context.md`/specs) it prints a "setup looks healthy — next run `/qa:explore`" verdict so the

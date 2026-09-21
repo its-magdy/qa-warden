@@ -2,6 +2,8 @@
 
 **AI authors declarative specs → Playwright replays them nightly at ~$0 LLM cost → AI triages only on failure.**
 
+**The healer repairs selectors and waits — never the assertion.** A red test stays red until a human decides whether the app or the spec is wrong ([why that matters](qa/README.md#how-this-differs-from-playwrights-own-test-agents)).
+
 ## Install
 
 ```bash

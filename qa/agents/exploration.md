@@ -41,14 +41,16 @@ shared block into a second file for drift to open up in.
 - `mode=area site=<id> area=<name>` — discover one product area on one site; output is `specs/_context/<site>/<area>.md`.
 
 Resolve the mode as the FIRST thing you do — before the prod-guard, before any `goto`, before any
-write. Three arms, and two of them STOP:
+write. Three arms, and two of them can STOP:
 
 1. **No `mode=`, no `site=`, no `area=`** → `mode=hot`. A legitimate default (`/qa:explore` on a
    fresh project is meant to build the hot tier), but **announce it**: open your output with
    `mode=hot (defaulted — no mode given)`. An unannounced default is what makes arm 2 invisible.
-2. **`site=` or `area=` present but no `mode=area`** → **STOP.** This is an area invocation whose
-   mode was dropped in transcription — do NOT fall through to hot. Echo the corrected command
-   (`/qa:explore mode=area site=<id> area=<name>`) and write nothing.
+2. **`site=` or `area=` present but no `mode=area`** — an area invocation whose mode was dropped
+   in transcription; do NOT fall through to hot. If **both** keys are present, proceed as
+   `mode=area` and open your output with `mode=area (inferred — site= and area= given)`: both
+   keys were typed, so nothing is guessed. If only **one** is present → **STOP.** Echo the
+   corrected command (`/qa:explore mode=area site=<id> area=<name>`) and write nothing.
 3. **`mode=area` with `site=` or `area=` missing**, including a positional form like
    `mode=area <area>` → **STOP.** Do NOT infer the missing key from the hot tier, from a caller
    hint, or from the most recently touched spec. Name the missing key and stop.

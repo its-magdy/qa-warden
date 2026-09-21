@@ -1427,8 +1427,10 @@ while read -r basis; do
 done < <(printf %s\\n "$CTX_FILES" | grep -e "\\.basis\\.md$")
 
 # 20. Plugin-side normative-prose drift (F-016) — the canonical `.env`-load one-liner is duplicated
-#     VERBATIM across several plugin command/agent files (explore/exploration/intake) because each
-#     subagent needs its own inline copy (it cannot read CLAUDE.md). That copy-paste is a silent
+#     VERBATIM across several plugin command/agent files (explore/exploration/intake) because a
+#     command that must be run verbatim belongs at its point of use. (NOT because a subagent
+#     "cannot read CLAUDE.md" — this comment said so until 2026-09-21; subagents load the project
+#     CLAUDE.md unless their frontmatter sets `omitClaudeMd`.) That copy-paste is a silent
 #     drift risk: if one file's load line diverges, that path reads an empty $BASE_URL_* and quietly
 #     degrades. When $TMPL resolved, assert the idiom stays byte-identical wherever it appears — WARN
 #     only if MORE THAN ONE distinct form exists (all-identical = healthy, no warn). The

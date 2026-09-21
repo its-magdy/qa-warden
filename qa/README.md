@@ -55,7 +55,10 @@ Playwright ships planner / generator / healer agents (`npx playwright init-agent
 good at producing tests. The difference is what happens when a test goes red: the official
 healer's instructions list **"Fixing assertions and expected values"** among its repairs
 (`playwright/lib/agents/playwright-test-healer.agent.md`, checked against 1.63.0). A healer
-allowed to edit the expected value can turn a real regression green.
+allowed to edit the expected value can turn a real regression green — a 2026 case study of
+autonomous test repair documented exactly that: "concrete instances of assertion weakening and
+test-case deletion used as workaround mechanisms to achieve superficial convergence"
+([arXiv:2605.01471](https://arxiv.org/abs/2605.01471)).
 
 This plugin's healer patches selectors and waits and **never the assertion** — a `PreToolUse`
 hook denies the edit, and changed product copy is routed back to the planner as a question

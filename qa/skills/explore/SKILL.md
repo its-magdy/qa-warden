@@ -17,13 +17,16 @@ Two modes:
 - **`mode=area site=<id> area=<name>`** — discover one product area on one site. Writes `specs/_context/<site>/<area>.md` with routes in scope, domain vocab, observed flakes, and cross-site contracts (if any). Selectors are NOT cached — the generator pulls them live at compile time.
 
 **Dispatch before you delegate — the default is a guard, not a fallback.** Check the arguments
-first; `agents/exploration.md` §"Mode selection" carries the same three arms, and this is the
+first; `agents/exploration.md` §"Mode selection" carries the same arms, and this is the
 layer where a mistyped command can still be corrected for free:
 
 - **Nothing passed** → `mode=hot`, and say so (`mode=hot (defaulted — no mode given)`) so a
   defaulted run is never mistaken for the area refresh someone meant to ask for.
-- **`site=` or `area=` present without `mode=area`** → **STOP** and echo the corrected command.
-  Do **not** fall through to hot.
+- **BOTH `site=` and `area=` present without `mode=area`** → run it as `mode=area` and say so
+  (`mode=area (inferred — site= and area= given)`). Nothing is guessed: both keys were typed,
+  and no other mode consumes them.
+- **Only ONE of `site=` / `area=` present without `mode=area`** → **STOP** and echo the corrected
+  command. Do **not** fall through to hot.
 - **`mode=area` without both `site=` and `area=`** (including a positional `mode=area <area>`)
   → **STOP** and name the missing key. Do not infer it.
 

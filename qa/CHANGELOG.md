@@ -20,6 +20,19 @@ Thirteen working sessions closing the 2026-09-06 audit (all four blocks). Four s
 changes a consumer cannot infer from a file diff, three deliberate decisions to change
 nothing, and a large body of correctness work.
 
+### Ceremony audit (2026-09-21) — two dead-end round-trips removed
+
+- **`/qa:explore site=<id> area=<name>` now runs** as `mode=area` and announces the inference,
+  instead of STOPping to make you retype it. Both keys were typed, so nothing is guessed. With
+  only ONE of the two keys it still STOPs — the rule that a mistyped area run must never fall
+  through to `mode=hot` (and stamp `last_verified`) is unchanged.
+- **`/qa:retire` can close an abandoned authoring chain.** Doctor Check 18 has always said "or
+  `/qa:retire` the chain", but retire resolved `site:` from the spec's YAML — and an abandoned
+  chain has no spec. It now takes `<site>` from the `.cases.md` path and deletes just the
+  `.cases.md` + `.basis.md`.
+- Doctor Check 20's comment no longer claims a subagent "cannot read CLAUDE.md" (it can, unless
+  its frontmatter sets `omitClaudeMd`). Comment-only; the check is unchanged.
+
 ### Functional audit (2026-09-21) — every skill traced as if executed; two false-clean paths closed
 
 - **`/qa:coverage` and `/qa:impact` no longer go false-clean on an old substrate.** Both call

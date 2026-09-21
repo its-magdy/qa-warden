@@ -11,7 +11,12 @@ deleted, harness verified green afterwards. Git history is the archive: there is
 ## What to do
 
 1. **Build the plan (dry run — no writes yet).** Resolve the feature (+ `site:` from
-   the spec's YAML), then build the full plan as a table with a per-file verdict:
+   the spec's YAML), then build the full plan as a table with a per-file verdict.
+   **Chain-only retire** (doctor Check 18's "abandoned authoring chain" — a descoped feature
+   whose `.cases.md` exists but `specs/<area>/<feature>.md` never did): there is no spec YAML
+   to read, so take `<site>` from the `.cases.md` path itself
+   (`specs/_context/<site>/<area>/<feature>.cases.md`); the plan is just that file + its
+   `.basis.md`, and every spec-derived row below is reported as "absent — nothing to do":
 
    **DELETE**
    - `specs/<area>/<feature>.md`
