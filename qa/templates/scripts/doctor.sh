@@ -739,7 +739,8 @@ rail_window_ok() {
   local f="$1" ln line ok=1 hits=0
   while IFS=: read -r ln line; do
     [ -n "$ln" ] || continue
-    case "$line" in *--list-targets*) continue ;; esac
+    # --list-targets and --probe SCREEN nothing (enumerate / reachability only) — not rail invocations.
+    case "$line" in *--list-targets*|*--probe*) continue ;; esac
     hits=$((hits+1))
     win=$(sed -n "${ln},$((ln+1))p" "$f" | tr '\n' ' ')
     if printf '%s' "$win" | grep -qi 'stop' && printf '%s' "$win" | grep -q 'non-zero'; then

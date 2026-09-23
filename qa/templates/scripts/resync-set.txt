@@ -41,6 +41,8 @@ scripts/doctor.sh
 scripts/check-last-run.sh
 scripts/bug-status.sh
 scripts/retire-delete.sh
+scripts/cli-fill-env.sh
+scripts/review-marker.sh
 scripts/README.md
 scripts/resync-set.txt
 scripts/runtime-dirs.txt

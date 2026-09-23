@@ -24,22 +24,11 @@ first — STOP and ask the user to confirm in-chat if it exits non-zero. For
 the live target N times, multiplying blast radius rather than reducing it —
 flake probes run against **staging only**.
 
-Run the shell command exactly, binding the args first (zsh, this host's
-default Bash-tool shell, doesn't word-split unquoted vars the way bash does —
-force it so `mode=… spec N` splits correctly; no-op in bash):
+Run exactly this one command — the script parses `mode=` itself, so there is nothing to bind
+first (and an inline binding block would not match this skill's pre-approved `run.sh` call):
 
 ```bash
-[ -n "${ZSH_VERSION:-}" ] && setopt shwordsplit 2>/dev/null
-set -- $ARGUMENTS
-MODE=""; REST=()
-for a in "$@"; do
-  case "$a" in
-    mode=*) MODE="${a#mode=}" ;;
-    *) REST+=("$a") ;;
-  esac
-done
-: "${MODE:?usage: /qa:run mode=single|smoke|repeat|changed [<spec-path-or-test-path>|<git-ref>] [N]}"
-bash ${CLAUDE_SKILL_DIR}/scripts/run.sh "$MODE" "${REST[@]}"
+bash ${CLAUDE_SKILL_DIR}/scripts/run.sh $ARGUMENTS
 ```
 
 All four modes' run/guard/aggregate logic is bundled in one script
@@ -161,8 +150,8 @@ What it cannot see, and the script says so rather than staying quiet:
   them. A re-run cannot fix that.
 - **App-side changes** are invisible to git-in-this-repo. `/qa:impact` is the tool for a
   requirement or route change.
-- A repo with **no commit yet**, or a **ref that does not resolve**, makes Playwright select 0
-  tests with exit 0 and no error. The script refuses both (exit 2) instead.
+- A repo with **no commit yet** or an **unresolvable ref** exits 2 with a reason — relay it; it
+  is not a zero-match result.
 
 Report: the selected/passed/failed counts from `reports/changed.json`, per-failure first error
 line + `/qa:heal <dir>` command as in `mode=smoke`, and any listed stale specs. If the script

@@ -116,9 +116,17 @@ date: <YYYY-MM-DD>
 result: PASS|FAIL
 ```
 
-Compute the two digests portably — prefer `sha256sum <file>` (coreutils; present on minimal
-Linux/CI), falling back to `shasum -a 256 <file>` (macOS/BSD); take the first field. The digest
-value is identical either way, and `/qa:doctor` Check 15 reads them with the same fallback (T-05).
+Write it with the shipped script — ONE allow-listed call per pair, never an improvised
+`git rev-parse … && shasum … && printf …` chain (a compound command needs a rule per subcommand,
+so those prompt, and are denied headless):
+
+```bash
+bash scripts/review-marker.sh specs/<area>/<feature>.md tests/<area>/<feature>.spec.ts PASS|FAIL
+```
+
+It computes the digests with the same `sha256sum` → `shasum -a 256` fallback `/qa:doctor`
+Check 15 reads them with (T-05). If the script is missing (project scaffolded before it
+shipped), say so and point at `/qa:init --resync` rather than hand-rolling the file.
 
 Commit the markers with the reviewed change; they are agent-writable convenience
 for `/qa:doctor` Check 15 (which WARNs when a pair changed since its marker) — the

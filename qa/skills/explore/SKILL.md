@@ -36,25 +36,15 @@ of". So a wrong-mode run does not merely do the wrong work — it marks context 
 verified, and reports the area the caller actually asked about as handled. (`bin/qa-selfcheck` Check 9j
 keeps this repo's own printed invocations well-formed for the same reason.)
 
-**Safety rail (CLAUDE.md §Environment):** run `bash scripts/prod-guard.sh` first — STOP and ask the user to confirm in-chat if it exits non-zero.
+**Safety rail (CLAUDE.md §Environment):** run `bash scripts/prod-guard.sh` first — STOP and ask the user to confirm in-chat if it exits non-zero. Run it exactly as written — its last line states the verdict, and an appended `; echo $?` stops the command matching its allow rule.
 
 ```bash
-# Reachability probe (AFTER prod-guard passes). Reachability ONLY — any HTTP status
-# (200, 302, 401, 500…) means the host is up; it does NOT prove the app works.
-# Only DNS failure / timeout / connection-refused count as unreachable.
-set -a; [ -f "${CLAUDE_PROJECT_DIR:-.}/.env" ] && . "${CLAUDE_PROJECT_DIR:-.}/.env"; set +a
-# ASK the guard which targets exist rather than re-typing its var-set regex — `--list-targets`
-# prints the same `NAME<TAB>value` set prod-guard.sh screens ("every target a run could touch")
-# and screens nothing itself. This probe's own copy of that regex had already drifted NARROWER
-# than the guard's, so a target could be prod-GUARDED but never reachability-probed and a down
-# seed API surfaced later as a mystery red instead of a STOP here.
-while IFS="$(printf '\t')" read -r v host; do
-  [ -n "$host" ] || continue
-  # echo the MASKED host only (same sed as prod-guard.sh's mask()) — a `user:pass@` target must not reach the transcript
-  code=$(curl -sS -o /dev/null -m 10 -w '%{http_code}' "$host" 2>/dev/null) \
-    && echo "$v reachable (HTTP $code)" \
-    || echo "STOP: $v=$(printf '%s' "$host" | sed -E 's#^([a-zA-Z]+://)?[^/?#]*@#\1***@#') UNREACHABLE (DNS/timeout/refused) — check VPN, tunnel, .env before exploring"
-done < <(bash scripts/prod-guard.sh --list-targets)
+# Reachability probe (AFTER prod-guard passes) — the SAME target set the guard screens, as one
+# allow-listed call (it was an inline loop; a compound command needs a rule per subcommand, so it
+# prompted, and was denied outright headless). Reachability ONLY — any HTTP status (200, 302,
+# 401, 500…) means the host is up; it does NOT prove the app works. Only DNS failure / timeout /
+# connection-refused count as unreachable: a `STOP:` line / exit 1 → stop and relay it.
+bash scripts/prod-guard.sh --probe
 ```
 
 Examples:

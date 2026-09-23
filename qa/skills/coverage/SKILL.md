@@ -57,9 +57,9 @@ re-derive, re-implement, or "improve" any dimension inline here.** It is pre-app
 skill's `allowed-tools`, so it runs without a permission prompt; run it exactly as written
 above (a rewritten invocation loses the grant and prompts).
 
-**Exit codes:** `2` = filter resolution error (a bogus `area=`) **or a missing
-`scripts/spec-links.sh`** — relay the script's ERROR line and STOP; it is *not* a gap-free result. Any other non-zero, or absent optional inputs,
-degrade gracefully: format whatever dimensions produced output.
+**Exit codes:** `2` = the script refused (a bogus `area=`, or a missing `scripts/spec-links.sh`) —
+relay its ERROR line and STOP; it is *not* a gap-free result. Any other non-zero, or absent
+optional inputs, degrade gracefully: format whatever dimensions produced output.
 
 Your job from here is **formatting only** — take the script's output and render it in the
 shape below. Do not paraphrase, recompute, or estimate any number it emitted.

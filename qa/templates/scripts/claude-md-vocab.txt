@@ -43,3 +43,4 @@ fault:|the situation step that stubs a network dependency. A scaffolded project'
 clock:|the situation step that controls time — the SFDIPOT Time lens is not authorable without it, and the in-project reviewer has no definition to validate against
 lock:|the cross-file mutual-exclusion field the generator emits, together with the sharding caveat that VOIDS it. Absent, a reader adopts the sharding recipe and silently loses every lock
 verifier|the agent that grades the generator's output. Absent from the roster, the split reads as a single authoring agent and the `// verified:` stamp reviewer Check 2b trusts has no documented author
+cli-fill-env.sh|the wrapper that types a credential through playwright-cli without the value reaching the command line. Absent, an agent that must log in reads `.env` and puts the literal password in the transcript, or skips the login and leaves auth unverified

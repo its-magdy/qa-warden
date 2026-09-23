@@ -131,6 +131,22 @@ that needed a cardinality self-check on its own mirror. Same pattern as `resync-
 The only path by which `/qa:retire` removes a spec/test pair, so deletion is
 scoped and auditable rather than an open-ended `rm` in an agent's hands.
 
+## `cli-fill-env.sh` — type a `.env` value into a field without exposing it
+
+`bash scripts/cli-fill-env.sh <session> <target> <ENV_VAR>` — the only sanctioned way for an
+agent to enter a credential through `playwright-cli`. Every Bash tool call is a fresh shell, so a
+sourced `.env` never reaches the next call; without this wrapper an agent either types the
+literal password into `fill` (it lands in the transcript) or skips the login. Takes the variable
+NAME, suppresses the CLI's echo of the value, and refuses to put a secret-looking variable into
+anything but an `<input type="password">`.
+
+## `review-marker.sh` — write the `/qa:review` attestation marker
+
+`bash scripts/review-marker.sh <spec.md> <test.spec.ts> PASS|FAIL` writes
+`reports/review/<area>/<feature>.reviewed` (commit, both sha256 digests, date, result) — the
+file `/qa:doctor` Check 15 reads. One allow-listed call instead of an improvised compound
+command; it records a verdict the caller already confirmed and judges nothing itself.
+
 ## `resync-set.txt` — the toolkit-owned file manifest
 
 Not a script: the single list of files the **toolkit** owns (as opposed to the

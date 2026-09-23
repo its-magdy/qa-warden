@@ -7,7 +7,7 @@ set -u
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 "$PLUGIN_ROOT/bin/qa-scaffold" "$PWD" --no-install >/dev/null 2>&1 || { echo "qa-scaffold failed" >&2; exit 1; }
 
-mkdir -p specs/auth tests/auth specs/_context
+mkdir -p specs/auth tests/auth
 cat > specs/_context/app.context.md <<'CTX'
 ---
 last_verified: 2099-01-01

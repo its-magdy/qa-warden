@@ -36,8 +36,30 @@
 # abort the script before those guards ever run.
 set -uo pipefail
 
-MODE="${1:-}"
-shift || true
+# Accept BOTH `run.sh smoke …` and the skill's raw `run.sh mode=smoke …` (the `mode=` token may
+# sit anywhere). The skill used to bind `mode=` in an inline multi-line shell block before calling
+# this script; only `bash …/run.sh *` is pre-approved, so that block prompted — and was denied
+# headless (Test-35, 2026-09-21). Parsing here keeps the whole invocation one allow-listed call.
+MODE=""; _rest=()
+for _a in "$@"; do
+  case "$_a" in
+    mode=*) MODE="${_a#mode=}" ;;
+    *) _rest+=("$_a") ;;
+  esac
+done
+if [ -z "$MODE" ] && [ "${#_rest[@]}" -gt 0 ]; then MODE="${_rest[0]}"; _rest=("${_rest[@]:1}"); fi
+set -- ${_rest[@]+"${_rest[@]}"}
+
+# Shared by single/changed: a non-zero exit with 0 reported failures means the run did not
+# complete (timeout / worker crash) — never green. $1 = mode label, $2 = json, $3 = log phrase.
+# (smoke keeps its own copy: its message also has to explain --max-failures.)
+crash_guard() {
+  [ "${PW_EXIT:-1}" -ne 0 ] || return 0
+  [ "$(jq '.stats.unexpected // 0' "$2" 2>/dev/null)" -eq 0 ] || return 0
+  echo "run($1): playwright exited non-zero ($PW_EXIT) but the report shows 0 failures —"
+  echo "the run did NOT complete cleanly (timeout / worker crash). NOT green; inspect $3 and re-run."
+  exit 2
+}
 
 case "$MODE" in
   single)
@@ -59,11 +81,7 @@ case "$MODE" in
     PW_EXIT=$?   # F-04: CAPTURE the exit code NOW — see header note.
     LR=$(bash scripts/check-last-run.sh "reports/headless-$name.json" 900); lr_rc=$?
     echo "run(single): $LR (rc=$lr_rc)"
-    if [ "$lr_rc" -eq 0 ] && [ "${PW_EXIT:-1}" -ne 0 ] && [ "$(jq '.stats.unexpected // 0' "reports/headless-$name.json" 2>/dev/null)" -eq 0 ]; then
-      echo "run(single): playwright exited non-zero ($PW_EXIT) but the report shows 0 failures —"
-      echo "the run did NOT complete cleanly (timeout / worker crash). NOT green; inspect the .log and re-run."
-      exit 2
-    fi
+    [ "$lr_rc" -eq 0 ] && crash_guard single "reports/headless-$name.json" "the .log"
     case "$lr_rc" in
       0) : ;;
       3) echo "run(single): no/unparseable-as-missing JSON — startup error (prod-guard/config), not a green run."; exit 2 ;;
@@ -222,11 +240,7 @@ case "$MODE" in
       3) echo "run(changed): no JSON — startup error (prod-guard/config), not a green run. See reports/changed.log."; exit 2 ;;
       *) echo "run(changed): unparseable/stale JSON (rc=$lr_rc) — do NOT report a pass."; exit 2 ;;
     esac
-    if [ "${PW_EXIT:-1}" -ne 0 ] && [ "$(jq '.stats.unexpected // 0' reports/changed.json 2>/dev/null)" -eq 0 ]; then
-      echo "run(changed): playwright exited non-zero ($PW_EXIT) but the report shows 0 failures —"
-      echo "the run did NOT complete cleanly (timeout / worker crash). NOT green; inspect reports/changed.log and re-run."
-      exit 2
-    fi
+    crash_guard changed reports/changed.json reports/changed.log
     echo "run(changed): report at reports/changed.json (log: reports/changed.log)"
     bash scripts/post-run-checks.sh --only bugs
     exit 0

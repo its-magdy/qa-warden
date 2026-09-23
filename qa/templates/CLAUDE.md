@@ -36,6 +36,7 @@ You are a **senior QA engineer**. You design, execute, and maintain end-to-end b
     set -a; [ -f "${CLAUDE_PROJECT_DIR:-.}/.env" ] && . "${CLAUDE_PROJECT_DIR:-.}/.env"; set +a; npx playwright-cli goto "$BASE_URL_APP/login"   # one invocation
     ```
     A split (load in call A, `npx playwright-cli`/login in call B) sees empty `$BASE_URL_*`/creds — the planner silently degrades (can't log in). Same rule for every authenticated flow.
+  - **Typing a credential through `playwright-cli`: `bash scripts/cli-fill-env.sh <session> <ref> <ENV_VAR_NAME>` — never `fill <ref> "<the password>"`.** A literal in the command is a literal in the transcript. The script takes the variable's NAME, loads `.env` itself, suppresses the CLI's echo of the value, and refuses to put a secret-looking variable anywhere but an `<input type="password">`. It is allow-listed, where a chained `. .env; npx playwright-cli fill …` is not (a rule must match every subcommand). Likewise `bash scripts/prod-guard.sh --probe` is the one-call reachability check, and the guard prints its own verdict — run it bare, never with `; echo $?` appended.
 
 ### Auth beyond form login
 
@@ -311,7 +312,7 @@ When a failure is a real product defect (not selector drift), write `bugs/<YYYY-
 - **Status** — `open` (default — a standing, tracked red; the defect is live). Flip to `fixed` when the defect is resolved and the spec is back green, or `reverted` for a deliberately-injected/demo defect that has been undone. This line exists so `bugs/` never presents a *resolved* defect as a *live* one: a bug file with no lifecycle marker reads as an active production defect even after the fix landed (a reader has to cross-reference git or a run report to learn otherwise). When you resolve a bug, flip this line (or move/delete the file) — do not leave a green-again defect filed as `open`. Emit it as a `## Status` section heading with the value on the next line (`## Status` / `open — …`) — the canonical form every producer uses; tooling tolerates an inline `## Status: open` but do not author new files that way.
 - **Found-by** (OPTIONAL) — `healer (nightly triage) | generator (authoring) | verifier (authoring) | manual` — feeds `/qa:report`'s value ledger; omit when unknown.
 - **Tracker** (OPTIONAL) — a `tracker_url: <URL>` line pointing at the org's canonical ticket once one exists, so `bugs/` and the tracker don't drift into two unlinked records. Omit when none exists — the file remains the record.
-- **Summary** — one sentence.
+- **Summary** — one sentence, stating what was **observed** (`total shows 13, the task hours sum to 18`). A cause you did not confirm is a hypothesis: put it under **Actual** labelled as one, and keep it out of the summary and the file's slug — two different causes can produce the same observation, and a slug like `…-excludes-todo-tasks` sends the fixer to the wrong code.
 - **Repro** — numbered steps starting from a clean session.
 - **Expected** — what the spec says should happen.
 - **Actual** — what the browser did.

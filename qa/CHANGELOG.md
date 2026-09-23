@@ -20,6 +20,34 @@ Thirteen working sessions closing the 2026-09-06 audit (all four blocks). Four s
 changes a consumer cannot infer from a file diff, three deliberate decisions to change
 nothing, and a large body of correctness work.
 
+### First end-to-end run of 0.3.0 — five run-only defects fixed (2026-09-21)
+
+Found by driving explore → new-spec → gen → review → run headless against a live app. The
+pipeline worked (it caught the app's planted bug and kept the oracle); these are the frictions
+only a real run shows. Existing projects pick all of it up with `/qa:init --resync`.
+
+- **New `scripts/cli-fill-env.sh <session> <ref> <ENV_VAR_NAME>`** — the sanctioned way to type a
+  credential through `playwright-cli`. Every Bash call is a fresh shell, so a loaded `.env` never
+  reached the next call; agents either typed the literal password into `fill` (it landed in the
+  transcript, 2 of 3 runs) or skipped the login and left auth unverified. Takes the variable
+  NAME, hides the value, refuses to put a secret in a non-password field. `--check <VAR>…`
+  reports set/unset without reading values. `agents/exploration.md` and `CLAUDE.md`
+  §Environment now require it.
+- **`scripts/prod-guard.sh --probe`** replaces the inline reachability loop in `/qa:explore`, and
+  the guard now prints `prod-guard: PASS|REFUSED` as its last line. Both were permission
+  failures: a compound command needs a rule per subcommand, so the loop — and the
+  `; echo exit=$?` agents kept appending — never matched the allow rule.
+- **`/qa:run` parses `mode=` inside `run.sh`**; the skill is now one pre-approved call instead of
+  an inline binding block that was not.
+- **New `scripts/review-marker.sh <spec> <test> PASS|FAIL`** writes the `.reviewed` marker
+  (byte-identical to the hand-rolled form) in one allow-listed call; a single review had spent
+  4 denied calls improvising it.
+- **Generator: tags are string literals, never computed.** A data-driven loop emitting
+  `` `@${t}` `` is selected correctly by Playwright and invisible to every static check —
+  `/qa:doctor` FAILed a reviewed-green project with "no test carries @smoke".
+- **Bug files state the observation, not a guessed cause** (`CLAUDE.md` §Bug-report schema) — a
+  bug was filed and named after a cause that the seed data could not distinguish from the real one.
+
 ### `/qa:run mode=changed` + a reviewer fix-shape rule (2026-09-21)
 
 - **New `/qa:run mode=changed [<git-ref>]`** — runs only what a change touches, via Playwright's

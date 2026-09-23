@@ -74,10 +74,9 @@ not need to read it to do your job.) Respect:
    [LTM, IEEE TSE 2024]; here, judge semantically.)
 
 2b. **Level triage — does this case need a BROWSER?** Every row you emit becomes a full
-   browser test: the slowest, most maintenance-heavy kind there is. The Data lens alone can
-   enumerate eight boundary values per field, and eight UI tests per field is how a suite
-   becomes a 90-minute nightly nobody trusts. So for each **partition** (a set of candidates
-   the app should treat identically — all the over-max values, all the malformed emails):
+   browser test, the slowest and most maintenance-heavy kind. So for each **partition** (a set
+   of candidates the app should treat identically — all the over-max values, all the malformed
+   emails):
    - keep **ONE representative as a UI case** — the member with a distinct user-visible
      outcome (the message, the disabled button, the redirect);
    - end the *other* **rejected-input** members' rows (min-1, max+1, overflow, malformed —

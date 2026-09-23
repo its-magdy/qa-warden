@@ -41,6 +41,27 @@ if [ "${1:-}" = "--list-targets" ]; then
   exit 0
 fi
 
+# `--probe` — reachability of that SAME target set, as one allow-listed call. It used to be a
+# multi-line loop printed in /qa:explore's skill; a permission rule has to match every subcommand
+# of a compound command, so under the shipped allow-list that loop prompted (and was flatly denied
+# headless — Test-35, 2026-09-21) while this script's own invocation never does. Reachability ONLY:
+# any HTTP status means the host is up; DNS failure / timeout / refused is the STOP. Screens
+# nothing — run the plain guard first. Exit 1 if any target is unreachable.
+if [ "${1:-}" = "--probe" ]; then
+  prc=0
+  for v in $(target_names); do
+    eval "envval=\$$v"
+    [ -n "$envval" ] || continue
+    if code=$(curl -sS -o /dev/null -m 10 -w '%{http_code}' "$envval" 2>/dev/null); then
+      echo "$v reachable (HTTP $code)"
+    else
+      echo "STOP: $v=$(printf '%s' "$envval" | sed -E 's#^([a-zA-Z]+://)?[^/?#]*@#\1***@#') UNREACHABLE (DNS/timeout/refused) — check VPN, tunnel, .env before exploring"
+      prc=1
+    fi
+  done
+  exit $prc
+fi
+
 # mask userinfo credentials before ANY echo of a URL value — `.env` can carry
 # `https://user:pass@host` targets and this script's output lands in agent
 # transcripts / CI logs. Display-only: guard logic always uses the raw value.
@@ -138,4 +159,10 @@ done
 # Residual limit: a prod host with NO telltale name (www.acme.com) cannot be
 # auto-detected — keep every BASE_URL_* on staging/QA explicitly and treat an
 # empty/unexpected host as STOP-and-ask.
+
+# Say the verdict in words. Agents kept appending `; echo "exit=$?"` to read the status, and that
+# compound form no longer matches the `Bash(bash scripts/prod-guard.sh*)` allow rule — one denied
+# call per run, in every Test-35 trace (2026-09-21). With the verdict printed there is nothing
+# to append.
+if [ "$rc" -eq 0 ]; then echo "prod-guard: PASS (exit 0)"; else echo "prod-guard: REFUSED (exit $rc) — STOP"; fi
 exit "$rc"
