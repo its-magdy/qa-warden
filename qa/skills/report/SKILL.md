@@ -13,15 +13,12 @@ the network.
 Inputs:
 
 - `artifacts/last-run.json` (config `json` reporter output). This is the primary
-  sink. As of the reporting-pipeline fix it is reliable in the common case:
-  `dotenv.config({ quiet: true })` keeps it valid JSON, and `/qa:run mode=smoke` no
-  longer overrides `--reporter`, so a smoke run refreshes it. **Staleness guard
-  still applies:** `/qa:run mode=single` and `/qa:run mode=repeat` pass explicit
-  `--reporter=…` (for per-command files) and therefore do NOT refresh
-  `last-run.json`. **Run this scripted freshness check before aggregating — do not
-  rely on eyeballing it** (the F15 hardening: the guard was prose-only, and a
-  heal / reviewer Check-6 re-run silently overwrote the smoke stats the operator
-  assumed):
+  sink. `dotenv.config({ quiet: true })` keeps it valid JSON, and `/qa:run mode=smoke`
+  refreshes it. **Staleness guard:** `/qa:run mode=single` and `/qa:run mode=repeat` pass
+  explicit `--reporter=…` (for per-command files) and therefore do NOT refresh
+  `last-run.json`, and a heal or reviewer Check-6 re-run can silently overwrite the
+  smoke stats you assume are there. **Run this scripted freshness check before
+  aggregating — do not rely on eyeballing it:**
 
   ```bash
   # LOCKSTEP with /qa:doctor Check 1 — the gate is single-sourced in
@@ -51,7 +48,7 @@ Inputs:
   (a) prefer the per-command `reports/*.json` / `artifacts/flake-*.json`, or
   (b) refresh via `/qa:run mode=smoke` or `QA_RUN_OF_RECORD=1 npx playwright test`
   (the config's `json` sink is gated to run-of-record runs — a plain local
-  `npx playwright test` no longer rewrites `last-run.json`). Do NOT report
+  `npx playwright test` does not rewrite `last-run.json`). Do NOT report
   numbers from a `last-run.json` you have not confirmed corresponds to the
   current run.
 - Any `reports/*.json` the skill chooses to aggregate (headless runs →
@@ -160,10 +157,6 @@ signature grouping, audit findings, parked defects, value ledger and run metadat
 `${CLAUDE_SKILL_DIR}/reference/report-template.md`. **Read that file and render from it**; it is
 the sole owner of the report shape, so do not reconstruct the sections from memory.
 
-It is a separate file because this skill would otherwise sit over the ~5,000-token ceiling in
-`reference/knowledge-map.md`, which would place the output contract in the post-compaction
-truncation zone while this section still told you to render from it.
-
 ## Value-ledger derivation (deterministic — reuse, don't re-derive)
 - **Bug counts.** The `post-run-checks.sh` scan above ran `bug-status.sh --list-open`, which by
   design prints ONLY still-open bugs — so it gives you `<O>` but NOT `<FIXED>`. Derive the split
@@ -215,7 +208,7 @@ gh pr comment $PR --body-file reports/summary.md   # post to PR (--body-file tak
 (`/qa:report` takes no arguments — it aggregates whatever on-disk artifacts are current. There is no `--since=` flag; trend comparison is done by reading the prior LOCAL `reports/summary.md` when present — gitignored, not committed — never a CLI arg.)
 
 ## Gotchas
-- **Missing JSON** — the primary machine-readable sink is `artifacts/last-run.json` (the config's json reporter writes it on every run-of-record run: CI, or `QA_RUN_OF_RECORD=1` as `/qa:run mode=smoke` sets — a bare local `npx playwright test` no longer refreshes it); `reports/*.json` exist only when a per-command run (`/qa:run mode=single`, `/qa:run mode=repeat`) wrote one, and are OPTIONAL enrichment. So the hard-fail condition is **neither `artifacts/last-run.json` NOR any `reports/*.json` present** — do NOT fail just because `reports/` is empty (F-020): a normal smoke run leaves `reports/` empty yet has a complete `last-run.json`. Read `last-run.json` first, fold in any `reports/*.json`, and only fail loudly when both sources are absent.
+- **Missing JSON** — the primary machine-readable sink is `artifacts/last-run.json` (the config's json reporter writes it on every run-of-record run: CI, or `QA_RUN_OF_RECORD=1` as `/qa:run mode=smoke` sets — a bare local `npx playwright test` does not refresh it); `reports/*.json` exist only when a per-command run (`/qa:run mode=single`, `/qa:run mode=repeat`) wrote one, and are OPTIONAL enrichment. So the hard-fail condition is **neither `artifacts/last-run.json` NOR any `reports/*.json` present** — do NOT fail just because `reports/` is empty (F-020): a normal smoke run leaves `reports/` empty yet has a complete `last-run.json`. Read `last-run.json` first, fold in any `reports/*.json`, and only fail loudly when both sources are absent.
 - **Signature grouping is fuzzy** — use word-boundary substring match, not regex full-match. Over-specific grouping degenerates to 1 group per spec (= ungrouped).
 - **Do not LLM-summarize failures** — extract deterministically. LLM paraphrasing loses the error string, which is how humans grep-to-fix.
 - **Collapse long sections** with `<details>` so PR comments stay scannable.

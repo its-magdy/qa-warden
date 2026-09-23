@@ -51,9 +51,9 @@ not need to read it to do your job.) Respect:
      (min-1/min/min+1/max-1/max/max+1/empty/overflow), cardinality (0/1/many/max),
      data lifecycle (created/modified/deleted).
    - **Operations** → disfavored/malicious use, permissions/roles, each actor.
-   - **Time** → concurrency (two actors at once), idempotency, retry/double-submit, **and everything that turns on elapsed time** — session/token expiry, a TTL or grace window lapsing, a polling/auto-refresh surface, a debounce, a scheduled state transition, a DST or timezone shift. These last are now authorable: the spec schema carries a `clock:` situation step (`CLAUDE.md` §"Situation steps") that controls fake time, so "the session expires after 30 minutes" is a candidate the planner can write and the generator can compile, not a row that dies at plan time. Enumerate them.
+   - **Time** → concurrency (two actors at once), idempotency, retry/double-submit, **and everything that turns on elapsed time** — session/token expiry, a TTL or grace window lapsing, a polling/auto-refresh surface, a debounce, a scheduled state transition, a DST or timezone shift. These are authorable: the spec schema's `clock:` situation step (`CLAUDE.md` §"Situation steps") controls fake time, so "the session expires after 30 minutes" is a candidate the planner can write and the generator can compile. Enumerate them.
    - **Platform** → i18n/RTL (only if declared), viewport, a11y states.
-   - **Interfaces** → dependency-failure injection, API error codes — a dependency returning 5xx / 4xx / malformed JSON / nothing at all, and the retry that follows. Also authorable now: the `fault:` situation step stubs one endpoint, so the case is a real spec rather than a wish. Enumerate the app's **degradation** (what the user sees, what is NOT persisted), which is what the oracle will assert; the stub is only the setup. Two constraints to respect while enumerating, because they decide whether the case is buildable: the fault must name **one dependency endpoint**, not the whole API, and the resulting scenario is `regression`, never `smoke`.
+   - **Interfaces** → dependency-failure injection, API error codes — a dependency returning 5xx / 4xx / malformed JSON / nothing at all, and the retry that follows. The `fault:` situation step stubs one endpoint, so these are buildable specs. Enumerate the app's **degradation** (what the user sees, what is NOT persisted), which is what the oracle will assert; the stub is only the setup. Two constraints to respect while enumerating, because they decide whether the case is buildable: the fault must name **one dependency endpoint**, not the whole API, and the resulting scenario is `regression`, never `smoke`.
    - **Error-guessing** → experience-based "what would break this" (the family ISTQB
      says catches what the others miss).
    Tie each candidate to the basis 🔵 rule it exercises, and to a CLOSED oracle-vocab
@@ -97,9 +97,9 @@ not need to read it to do your job.) Respect:
    red) is a UI case however many siblings it has.
 
 3. **Risk-rank.** Order by: NIST interaction strength (single-factor + pairwise first
-   [NIST SP 800-142]) and RCRCRC change-proximity (Recent/Changed/Repaired up). Risk
-   trims the list to a sane top-N WITHOUT dropping a whole category — every lens stays
-   represented even if only by its top case.
+   [NIST SP 800-142]) and RCRCRC change-proximity (Recent/Changed/Repaired up). Every lens
+   stays represented. If you cut a low-risk candidate, list it under "Deferred/pruned" with
+   its reason so the approver sees it — never drop one silently.
 
 4. **Completeness critic.** Check the merged list against (a) the full SFDIPOT lens set,
    (b) every declared `nonfunctional:` field in the basis, (c) every declared
@@ -212,8 +212,8 @@ fill it in. Don't restate the format here — if the shape must change, change t
 - Enhancement output ALWAYS states the full-regression fallback (`npx playwright test`).
 
 ## Budget / escalation
-- **Turn budget: 20.** If past 15, write what you have with an incompleteness banner
-  at the top of the file.
+- **Turn budget: 20.** If you reach it before the checklist is complete, write what you have
+  with an incompleteness banner at the top of the file.
 - You cannot invoke other subagents, and you cannot run `/qa:impact` — it is a **slash
   command**, not a shell binary or a handoff. Read `artifacts/route-manifests/*.json`
   directly (see kind:enhancement step 2) when you need impact data.

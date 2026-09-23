@@ -213,8 +213,8 @@ agents/healer.md §"Anti-drift rule": you patch selectors and waits. Neither of 
                   re-point the locator or widen that matcher's own timeout: - both keep the
                   contract.
 
-To disable this layer for the session, set QA_HOOKS_OFF=1 in Claude Code's own
-environment or in .claude/settings.json's \"env\" block (a hook never reads the project .env)."
+If you believe this is a false positive, say so in your handoff rather than working around it;
+the operator can disable the layer for a session (hooks/README.md)."
   done
 fi
 
@@ -225,7 +225,7 @@ $(printf '%s' "$lost" | sed 's/^/    /' | head -5)
 
 $rule
 
-To disable this layer for the session, set QA_HOOKS_OFF=1 in Claude Code's own
-environment or in .claude/settings.json's "env" block (a hook never reads the project .env)."
+If you believe this is a false positive, say so in your handoff rather than working around it;
+the operator can disable the layer for a session (hooks/README.md)."
 
 exit 0

@@ -10,7 +10,7 @@ Find every spec affected by a change to `$ARGUMENTS` by intersecting against
 the per-spec route manifests under `artifacts/route-manifests/`.
 
 This is the "home-rolled test-impact analysis" — Move 2 of the change-cascade
-playbook. No vendor ships an E2E impact graph in 2026 — this is the gap-filler.
+playbook.
 
 ## Usage
 
@@ -107,4 +107,4 @@ deliverable — "5 specs affected" tells the caller nothing they can act on.
 
 ## Refresh policy
 
-If `/qa:impact` returns stale or zero matches you expect to see, the manifest is out of date. Run `/qa:gen <spec-path>` to regenerate. A future enhancement could auto-warn when a spec's `.md` mtime is newer than its manifest.
+If `/qa:impact` returns stale or zero matches you expect to see, the manifest is out of date. Run `/qa:gen <spec-path>` to regenerate. `/qa:doctor` Check 12 flags any spec newer than its manifest.

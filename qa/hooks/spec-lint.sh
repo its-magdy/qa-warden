@@ -69,8 +69,8 @@ Offending line in the proposed write to ${abs##*/}:
 $2
 
 This is a reviewer FAIL, so the write would be blocked at PR review anyway; the hook only
-moves the catch earlier. To disable this layer for the session, set QA_HOOKS_OFF=1 in Claude Code's own
-environment or in .claude/settings.json's "env" block (a hook never reads the project .env)."
+moves the catch earlier. If you believe this is a false positive, say so in your handoff rather
+than working around it; the operator can disable the layer for a session (hooks/README.md)."
 }
 
 first_match() { printf '%s\n' "$clean" | grep -nE "$1" | head -1; }

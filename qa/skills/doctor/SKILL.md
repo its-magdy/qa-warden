@@ -1,5 +1,5 @@
 ---
-description: Read-only health check — scripts every freshness / consistency / zero-test / hygiene guard the toolkit otherwise leaves to human memory. Turns "discipline" into "enforcement" without a hook.
+description: Read-only scripted health check of a scaffolded QA project — last-run freshness and zero-test guards, substrate drift, vocab mirrors, stale context and manifests, orphan sentinels, unreviewed or uncompiled specs. Use when something looks off, before trusting a green run, after a plugin upgrade, or when another command points here. Writes nothing; `--verify-invariants <spec>` is the only mode that runs tests.
 argument-hint: "[--verify-invariants specs/<area>/<feature>.md]"
 context: fork
 background: false
@@ -74,8 +74,8 @@ does not fix anything — each finding names its repair:
   both mirrors — a bare scalar FAILs. That key is in the YAML schema block, not the table, so
   the shape extractor cannot see it; it shipped scalar in CLAUDE.md and list in planner.md,
   and the reviewer reads shapes from the stamped CLAUDE.md.
-- **Checks 9b / 9bc / 9be / 9d / 9e / 9h / 9j are no longer part of doctor.** They read only the
-  plugin's own source, so nothing in a project could fix one; they now run from the toolkit repo as
+- **Check ids 9b / 9bc / 9be / 9d / 9e / 9h / 9j belong to `bin/qa-selfcheck`, not doctor.** They read only the
+  plugin's own source, so nothing in a project could fix one; they run from the toolkit repo as
   `bin/qa-selfcheck` (same ids, same messages). If a user reports one of those ids, the fault is in
   the plugin build, not their project — the remedy is updating the plugin, not editing anything here.
 - **Check 9bd (prod-guard rail coverage):** a skill listed in `scripts/prod-guard-rails.txt`
@@ -103,11 +103,8 @@ does not fix anything — each finding names its repair:
   scaffolded earlier. Repair is a plain `/qa:init` (the permission merge is additive and runs
   every time), not a hand edit. Scoped to the `mcp__` entries on purpose: those are capability
   grants with one right answer, whereas a user may legitimately delete a policy rule, and a
-  whole-allow-list check would nag them forever. That scoping was re-examined and **stands** —
-  a subset check was built and measured as reporting 37 missing on a resync-only upgrade
-  (right), 0 on a current project (right) and 2 on a current project whose owner had deleted
-  two deny rules on purpose (wrong); and `scripts/doctor.sh` is itself a resynced file, so a
-  check added here can only reach a project through the same command that now repairs the gap.
+  whole-allow-list check would nag them forever. (`scripts/doctor.sh` is itself a resynced file, so a
+  wider check here could only reach a project through the same command that repairs the gap.)
   **Arm 3 (WARN)** covers what the repair cannot: the merge needs `jq`, and without it the
   scaffold parks the shipped rules in `.claude/settings.qa-suggested.json`. That file's presence
   is proof the merge never ran — unlike a subset check it cannot confuse *undelivered* with
@@ -116,11 +113,11 @@ does not fix anything — each finding names its repair:
   reported separately as stale. The presence test sits outside the `jq` gate, because the state
   it detects is `jq` being absent.
 - **Check 9g (`/qa:gen`'s compiler → verifier chain + the manifest gate):** `generator` and
-  `verifier` are two agents on purpose — until the split, the agent that wrote an `expect(...)`
-  also decided at steps 8b/8c whether that `expect` catches an injected defect, and its cheapest
-  path was to claim it does. No subagent can spawn another, so the chain exists **only** as
-  prose in `skills/gen/SKILL.md`, which is an active trim candidate; a trim that drops the
-  second call leaves `/qa:gen` green with every spec compiled but ungraded. **FAIL** if
+  `verifier` are two agents on purpose — the agent that wrote an `expect(...)` never decides
+  at steps 8b/8c whether it catches an injected defect, because its cheapest path is to claim
+  it does. No subagent can spawn another, so the chain exists **only** as prose in
+  `skills/gen/SKILL.md`; if that prose drops the second call, `/qa:gen` goes green with every
+  spec compiled but ungraded. **FAIL** if
   `agents/verifier.md` is gone, or if that prose stops naming either agent (presence, not
   wording — same doctrine as 9bd). The third arm is the load-bearing one: the route manifest is
   the *ship* signal (`/qa:impact` counts a spec as live coverage only once its manifest exists)
@@ -133,14 +130,13 @@ does not fix anything — each finding names its repair:
 - **Check 9, CLAUDE.md vocabulary containment:** the delivery half of the upgrade path.
   `CLAUDE.md` is shared-ownership, so it is excluded from `--resync` *and* from Check 9's
   byte-compare — yet it is where every new authoring feature is documented, and the in-project
-  agents read it rather than the plugin. Measured on a real `0.2.0` → HEAD upgrade: after a
-  clean, green, exit-0 `/qa:init --resync` the stamped `CLAUDE.md` had zero mentions of `fault:`,
-  `clock:`, `lock:` or `verifier`, and doctor said nothing. The symbols come from
+  agents read it rather than the plugin. After a clean, green, exit-0 `/qa:init --resync` the
+  stamped `CLAUDE.md` can therefore lack every new authoring feature (`fault:`, `clock:`,
+  `lock:`, `verifier`) while doctor says nothing else. The symbols come from
   `scripts/claude-md-vocab.txt` and are gated on the shipped template, the same derive-don't-
-  hand-enumerate shape as the `.env.example` stock-var containment beside it. **Sections were
-  refuted by measurement** — the `## ` heading set was identical across that upgrade (19 = 19)
-  while 93 new lines landed inside ten pre-existing sections, so a section diff would have
-  reported green on the very release it was built for. **WARNs, never FAILs:** alone among
+  hand-enumerate shape as the `.env.example` stock-var containment beside it. The check is
+  symbol-level, not section-level: new rules land inside pre-existing sections, so a heading
+  diff reports green on exactly the release it was built for. **WARNs, never FAILs:** alone among
   Check 9's findings the repair is a hand-merge against the shipped template, not a command, and
   a repair the toolkit cannot perform must not be louder than the ones it can.
 - **Check 9i (the situation-step chain — `fault:` / `clock:`):** the two structured `steps:`
@@ -207,7 +203,7 @@ does not fix anything — each finding names its repair:
 - **Check 7/7d (pins / idiom):** fix `package.json` / regenerate the offending
   `fixtures/schemas/` file in the pinned major's idiom.
 - **Check 8b (Playwright FOUR-SITE paired-bump lockstep):** `package.json`'s `overrides_comment`
-  mandates four sites move together, and the check now enforces all of them. **Inside
+  mandates four sites move together, and the check enforces all of them. **Inside
   `package.json`:** `@playwright/test` must equal `overrides.playwright` must equal
   `overrides.playwright-core`, and `@playwright/test` must be **exact** (no `^`/`~`). Skew the
   runner above the forced core and `overrides` drag core back down (T-01); pin `playwright`
@@ -221,8 +217,7 @@ does not fix anything — each finding names its repair:
   explore config, where `overrides` cannot reach it. Fix by bumping **all four** sites in one
   change, never by unpinning. Note Check 7 does **not** cover this: 7a screens only for
   `alpha`/`beta`/`rc` strings and 7c screens only the lockfile's resolved core for alpha, so a
-  clean, stable, *skewed* set passes both (measured 2026-09-20 — a lone `@playwright/test` bump
-  printed `pins: … ✅` and nothing else). A missing site is reported, not failed — `package.json`
+  clean, stable, *skewed* set passes both. A missing site is reported, not failed — `package.json`
   is in `resync-set.txt`, so Check 9 owns the deleted-block case.
 - **Check 8/9 (canonical scripts / substrate drift):** `/qa:init --resync` (backs up
   drifted files to `*.qa-bak`). A missing stock var in `.env.example` → restore it from

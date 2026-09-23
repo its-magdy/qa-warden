@@ -34,10 +34,7 @@ substrate) that a plugin cannot carry on its own.
    substrate-drift check tells you when a project needs this.
 
    **`--resync` is the whole upgrade — do not tell the user to follow it with a
-   plain `/qa:init`.** It was two calls until permissions travelled with the
-   files: the `.claude/settings.json` merge ran only on the plain stamp, so a
-   resync-only upgrade from 0.2.0 delivered 0 of 37 new rules and still exited 0.
-   Both paths now call the same merge. Two files are therefore touched that the
+   plain `/qa:init`.** Both paths run the same permission merge. Two files are therefore touched that the
    list above does not cover, both additively and neither overwritten:
    `.claude/settings.json` (union of the permission arrays — it can add a rule
    but never remove one) and `.gitignore` (one appended `*.qa-bak` pattern, so
@@ -70,9 +67,8 @@ substrate) that a plugin cannot carry on its own.
   `package.json` / `playwright.config.ts` / `package-lock.json` / `prod-guard.*`,
   reading `/etc`). `.env` is not hard-denied — it is simply outside the
   write-allowlist, so an agent write to it needs explicit per-prompt human
-  approval (gitignored + human-owned, not blocked). The old black-box
-  denies (`Read(../**)`, `Read(/Users/**)`, `Write(../**)`, `Write(/Users/**)`)
-  have been removed: grey-box reading of product source to disambiguate
-  locators is now allowed, and writes are already scoped to the QA repo dirs.
+  approval (gitignored + human-owned, not blocked). Reading product source
+  outside the QA repo is allowed (grey-box locator disambiguation); writes are
+  scoped to the QA repo dirs.
 - This command writes project files. The first time, the user may need to
   approve the writes / the trust dialog for the folder.

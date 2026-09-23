@@ -130,8 +130,8 @@ write a basis under an unrecognized area.
    references [Femmer JSS 2017 / ISO 29148]. Each smell is a *candidate question*, not
    an auto-reject.
 
-3. **Interview by information value — and STOP early.** LLMs under-ask by default, so
-   you MUST ask; but naive over-asking backfires. Therefore:
+3. **Interview by information value — and STOP early.** Ask only what you cannot observe,
+   highest-value first, and stop when further answers would not change the case set:
    - Ask the **highest-value** questions first — the ones that most change the test set
      (the oracle / "what is correct", business rules, boundaries, risks, declared
      non-functional needs). Skip anything already known from step 1.

@@ -101,8 +101,8 @@ flag on the command line (CLAUDE.md §Oracle defense); the reviewer is the backs
 Repeatability probe: run the same spec N times in a row and report the
 pass/fail rate. A healthy test should stay above 95% over 10 runs; anything
 flakier goes into the `@quarantine` lane (CLAUDE.md §Escalation rules).
-Neither `mode=single` nor `mode=smoke` refreshes `artifacts/last-run.json`
-via this mode, and `mode=repeat` doesn't either.
+`mode=repeat` does not refresh `artifacts/last-run.json`; its output is the per-command
+`artifacts/flake-<name>.json`.
 
 **Quarantined target?** The config's `grepInvert: /@quarantine/` excludes
 `@quarantine` tests from this probe too — the run reports 0 executed (null

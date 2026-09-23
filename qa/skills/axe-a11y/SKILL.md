@@ -1,6 +1,6 @@
 ---
 name: axe-a11y
-description: Run automated WCAG checks on a rendered Playwright page via @axe-core/playwright. Use on every meaningful UI state (post-login, cart-with-items, error dialog open) — not every page, but every state transition of a page. Catches ~30-40% of WCAG violations by success-criterion count, ~57% by issue volume; the rest needs a human. Also use when adding an adversarial-pair spec to prove the detector is live.
+description: Compile an `a11y_violations_below` oracle into a settled, full-page @axe-core/playwright WCAG scan, or run the a11y half of a `/qa:review url=` live-page audit. Use when a spec's oracle declares that key (the planner declares it per meaningful UI state — post-login, cart-with-items, error dialog open — not per page), when auditing a live page, or when adding an adversarial-pair spec to prove the detector is live. Not for specs whose oracle does not declare it — an axe scan with no oracle item is an orphan assert. Catches ~30-40% of WCAG violations by success-criterion count, ~57% by issue volume; the rest needs a human.
 user-invocable: false
 disable-model-invocation: false
 ---
@@ -11,7 +11,7 @@ Drop-in accessibility scanner using `@axe-core/playwright`. `getByRole`/`getByLa
 
 ## When to use
 - On **every meaningful UI state**, not every page. "Every state transition of a page" is the rule — e.g. cart empty, cart with items, cart at error. A single scan per page misses state-specific violations.
-- Whenever you add a new spec under `specs/` — at least one axe call belongs in the generated `.spec.ts`.
+- When a spec's oracle declares `a11y_violations_below` — the generator compiles that key through this skill. An axe scan with no backing oracle item is an orphan assert (reviewer Check 2).
 - When auditing an existing app (the `/qa:review url=<url>` command delegates here).
 
 ## How

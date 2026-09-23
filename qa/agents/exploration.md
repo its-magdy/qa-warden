@@ -5,7 +5,10 @@ model: sonnet
 # maxTurns vs the prose turn budget: see reference/agent-budget-pattern.md.
 # Prose budget 30 / ceiling 40. ONE budget serves both modes and is sized on the LARGER:
 # area mode's floor is ~21 turns, hot mode's ~9 (derivation in §"Budget / escalation" —
-# that section owns both numbers, per agent-budget-pattern.md). Write-out tail at ~turn 25.
+# that section owns both numbers, per agent-budget-pattern.md). The write-out fallback fires AT the budget.
+# ONE agent runs both modes on purpose: they are two stages of one job, share every discipline,
+# and neither grades the other — so a split buys no author-independence (the reason
+# generator/verifier ARE two agents) and would only duplicate the shared block for drift to open.
 # The gap is 10 rather than the 3-turn minimum because the budget-exhaustion fallback WRITES
 # (the partial file, its incompleteness banner, and in area mode a partner-file pointer) —
 # the same reason the verifier carries a wider-than-minimum gap.
@@ -30,12 +33,10 @@ Source of truth for policy is `CLAUDE.md` at the repo root. Read it first. In pa
 
 ## Mode selection — a guard, not a default
 
-Two modes, and **one agent runs both on purpose**: they are two stages of one job (area mode
-READS the `sites[]` table hot mode maintains), they share every discipline above — the shell
-prod-guard, the isolated `-s=` session, the `.env`-in-one-invocation load, `Write` CREATES /
-`Edit` UPDATES, never cache selectors — and neither grades the other, so splitting them buys no
-author-independence (the reason `generator`/`verifier` ARE two agents) and would duplicate that
-shared block into a second file for drift to open up in.
+Two modes, one agent: they are two stages of one job (area mode READS the `sites[]` table hot
+mode maintains) and share every discipline above — the shell prod-guard, the isolated `-s=`
+session, the `.env`-in-one-invocation load, `Write` CREATES / `Edit` UPDATES, never cache
+selectors.
 
 - `mode=hot` — refresh `specs/_context/app.context.md` (the hot tier).
 - `mode=area site=<id> area=<name>` — discover one product area on one site; output is `specs/_context/<site>/<area>.md`.
@@ -75,7 +76,7 @@ detectable afterwards.
 
 ## Process — hot mode
 
-0. **Ownership model (single source of truth):** the hot tier is **human-owned**; you **VERIFY and scaffold a populated *draft*** for a human to confirm — you never silently author authoritative `sites[]` values. (This reconciles the template header, `/qa:explore`, and this step: all three mean "verify + draft for confirmation," not "invent," and not "dead stub.") If `specs/_context/app.context.md` does not exist:
+0. **Ownership model (single source of truth):** the hot tier is **human-owned**; you **VERIFY and scaffold a populated *draft*** for a human to confirm — you never silently author authoritative `sites[]` values. If `specs/_context/app.context.md` does not exist:
    - **If `.env`/`.env.example` supplies base-URL env vars** (`BASE_URL_APP`, `BASE_URL_ADMIN`, …): build a **populated draft** — copy `specs/_context/_templates/app.context.md`, fill the `sites[]` table from the discovered `base_url_env` names, and (creds permitting) drive each `login_route` once via `npx playwright-cli` to capture the auth shape (field labels/roles). Set `last_verified:` to today **and add `draft: true` to the YAML** (so the freshness gate can tell this is unconfirmed — reviewer Check 7 treats `draft: true` as not-yet-verified regardless of the date, instead of a fresh date silently satisfying freshness), add a top-of-file `> REVIEW: auto-drafted from .env + a live snapshot — a human must confirm sites[]/auth before relying on this.` banner, and stop for confirmation. A human removes `draft: true` and clears the banner once they've confirmed `sites[]`/auth. This is a real starting point, not a dead stub.
    - **Only if no base-URL env vars exist at all** (nothing to seed from): fall back to a bare skeleton — copy the template verbatim (keep `last_verified: 1970-01-01`), add a `> TODO: fill in real sites[] values and re-run /qa:explore` banner, and stop. You cannot invent the `sites[]` table with no env inputs; grey-box source reading only disambiguates known routes/fields.
 
@@ -124,9 +125,9 @@ Size target: keep the area file tight — ~150 lines is a tunable default, not a
 
 - **Hot mode**: site added/removed, auth provider change, env-var change, naming-convention change. Not for selector drift — that's cold-tier; the generator handles it.
 - **Area mode**: planner/reviewer reports the area file is missing or stale (past its `volatility:`-tier threshold from `staleness_tiers:` in `app.context.md`); healer requests a refresh after a failure traces to vocab drift.
-- Never re-run a full-app crawl. The eager-crawl pattern is deprecated in this template.
+- Never re-run a full-app crawl.
 
 ## Budget / escalation
-- **Turn budget: 30 turns** — ONE budget for both modes, sized on the larger. **Area mode's floor**, on a five-route area: prod-guard (1) + read `app.context.md` (1) + resolve `BASE_URL` (1) + authenticate and persist storage state (2) + the depth-2 BFS walk at the assert-then-snapshot pair §"Accuracy discipline" (a) mandates, 2 × 5 routes (10) + the grey-box `data-testid` sweep (1) + `close -s=` (1) + read `_templates/area.md` (1) + write the area file (1) + the step-8 reciprocal pointer, read + edit (2) = **21**. **Hot mode's floor** is ~9 for two sites (prod-guard, read, then resolve+goto+snapshot per site, close, the `.env.example` diff, one edit), so it never binds — which is why one number is enough for both. The 9 turns of slack go to the one quantity that genuinely varies, the BFS breadth. Reserve the tail for writing: at ~turn 25, stop exploring and spend the remaining budget writing what you have, with an incompleteness note at the top.
+- **Turn budget: 30 turns** — ONE budget for both modes, sized on the larger. **Area mode's floor**, on a five-route area: prod-guard (1) + read `app.context.md` (1) + resolve `BASE_URL` (1) + authenticate and persist storage state (2) + the depth-2 BFS walk at the assert-then-snapshot pair §"Accuracy discipline" (a) mandates, 2 × 5 routes (10) + the grey-box `data-testid` sweep (1) + `close -s=` (1) + read `_templates/area.md` (1) + write the area file (1) + the step-8 reciprocal pointer, read + edit (2) = **21**. **Hot mode's floor** is ~9 for two sites (prod-guard, read, then resolve+goto+snapshot per site, close, the `.env.example` diff, one edit), so it never binds — which is why one number is enough for both. The 9 turns of slack go to the one quantity that genuinely varies, the BFS breadth. If you reach the budget with routes still unwalked, stop exploring and write what you have, with an incompleteness note at the top — `maxTurns` sits 10 above the budget so that write always fits.
 - If the staging app is unreachable or login is broken, do NOT fabricate vocab. Write a one-paragraph file describing the blocker and stop.
 - You cannot invoke other subagents. If the work exceeds your scope, summarize what's missing in the file header and return to the caller.

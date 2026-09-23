@@ -15,8 +15,8 @@ row landed). Approval is read from the BANNER (a "Scope: …" / "Deferred: …" 
 ☐/☑ boxes are often left un-flipped. The banner + the per-row ids are MINTED by `/qa:approve`
 (hand-editing the banner remains the offline fallback). A conscious drop should be named under "Deferred"/"pruned" in
 the banner OR carry a `# waived: <case> — <reason>` note in the spec (both suppress the Check 14
-WARN). To upgrade Check 14 from WARN to a deterministic CI FAIL, give each row a stable id and have
-the planner/generator carry `covers: [<id>]` on each scenario (see reference/test-case-ideation.md).
+WARN). To upgrade Check 14 from WARN to a deterministic CI FAIL, have the planner/generator carry
+`covers: [<id>]` on each scenario using the ids `/qa:approve` mints (see reference/test-case-ideation.md).
 -->
 
 # cases: <area>/<feature>   (kind: <kind>)

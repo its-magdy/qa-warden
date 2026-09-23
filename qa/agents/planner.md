@@ -4,6 +4,18 @@ description: Drafts a Markdown spec with a fenced YAML oracle block for one feat
 model: opus
 # maxTurns vs the prose turn budget: see reference/agent-budget-pattern.md.
 maxTurns: 16
+# Maintainer notes (not delivered to the model):
+# - doctor Check 9bb compares the oracle argument-shape table's SHAPE EXPRESSIONS against
+#   templates/CLAUDE.md and FAILs on divergence (Checks 2/9b verify key PRESENCE only). The
+#   trailing prose is deliberately NOT compared, so rewording a note there is free.
+#   generator.md's Oracle→expect mapping and DOCUMENTATION.md's numbered table are guarded by
+#   `bin/qa-selfcheck` Check 9be (ARGUMENT NAMES, not expressions; DOCUMENTATION.md absent = WARN).
+#   STILL UNGUARDED, edit by hand in the same commit: reviewer.md Check 4's inline shapes — it
+#   quotes WRONG shapes as counter-examples beside right ones, so no extractor can tell a claim
+#   from a counter-example without reading the sentence.
+# - In the situation-step table, the trailing colon in column 1 (`fault:` / `clock:`) is
+#   deliberate: they are `steps:` keys, not oracle keys, and the colon is what keeps them out of
+#   Check 9bb's oracle-arg-shape extractor. Do not "tidy" it away.
 color: blue
 tools: Bash, Read, Write, Edit
 # Preloaded skill: playwright-cli lets the
@@ -97,8 +109,7 @@ mr:                          # OPTIONAL — omit for the default. Self-declared 
   - "<invariant description, e.g. 'reordering cart items does not change the total'>"
 ```
 > **`mr:` is the ONLY escape hatch the generator and reviewer branch on.** It is defined
-> here in the planner schema so the opt-out is authorable and validated — do not reference
-> an `mr:` block that no spec author can legitimately produce.
+> here in the planner schema so the opt-out is authorable and validated.
 
 ### Closed oracle vocabulary (enforced — DO NOT invent new ones)
 Assertions MUST be drawn from this fixed set:
@@ -157,26 +168,15 @@ Picking the right key is only half the contract. Each key's **argument sub-keys 
 | `dialog_dismissed` | `{ type: 'confirm'\|'alert'\|'prompt', accept? }` |
 | `a11y_violations_below` | `{ max_critical, max_serious }` |
 
-<!-- Maintainers: doctor Check 9bb compares this table's SHAPE EXPRESSIONS against
-     templates/CLAUDE.md and FAILs on divergence (Checks 2/9b verify key PRESENCE only).
-     The trailing prose is deliberately NOT compared, so rewording a note here is free.
-     generator.md's Oracle→expect mapping and DOCUMENTATION.md's numbered table are now guarded
-     by `bin/qa-selfcheck` Check 9be, which compares ARGUMENT NAMES (not expressions) so it reads their different
-     formats; DOCUMENTATION.md absent is a WARN, being outside the plugin dir.
-     STILL UNGUARDED, edit by hand in the same commit: reviewer.md Check 4's inline shapes —
-     it quotes WRONG shapes as counter-examples beside right ones, so no extractor can tell a
-     claim from a counter-example without reading the sentence. -->
-
 Per-scenario oracles are allowed: a `scenarios:` entry MAY carry its own `oracle:` that overrides the top-level one (the happy-path oracle lives at top level; each negative scenario supplies its own). Same closed vocab + same argument shapes apply at both levels.
 
-**Smoke-lane rule (tag discipline).** The **primary / governed happy-path** scenario of a **P1 / critical-priority area** MUST be tagged `smoke` — never `regression`-only. `/qa:run mode=smoke` (and any `--grep @smoke` nightly gate) selects ONLY `@smoke` tests, so a P1 flow tagged `regression`-only means the fast gate is **blind to a fully-broken feature** — a broken checkout/payment/login would sail through the smoke run green (RUN-20: a P1 money-path checkout shipped `regression`-only, so `--grep @smoke` never exercised it). Rule: **every P1/critical area has at least one `@smoke` scenario, and it is the governed happy-path.** Edge cases, negative paths, and heavier cross-input checks stay `regression`; the metamorphic twins are always `regression` (never `smoke`). When the area's `.basis.md` marks the feature `priority: P1`/`critical`, auto-tag its governed happy-path `smoke`. **In a multi-scenario spec, place that `smoke` tag on the ONE governed happy-path via its per-scenario `tags: [smoke]` (the scenario schema below), NOT on the spec-level `tags:` — a spec-level `smoke` tags every scenario's test, so `--grep @smoke` would select the whole file instead of just the happy path.** **P1 `must_fail_when` floor:** when the basis declares `priority: P1`/`critical`, the governed happy-path spec MUST declare at least one `must_fail_when:` naming the broken state the smoke lane must catch — even the trivial one ("the post-login dashboard fails to render"). This arms step-8b's negative-control for the flow where a vacuous green costs most. Viewport is expressed as a TAG, never an oracle key: a case that must run in a phone viewport puts `mobile` in `tags:` — the generator's tag rule emits `@mobile` and the opt-in `mobile` config project routes on it.
+**Smoke-lane rule (tag discipline).** The **primary / governed happy-path** scenario of a **P1 / critical-priority area** MUST be tagged `smoke` — never `regression`-only. `/qa:run mode=smoke` (and any `--grep @smoke` nightly gate) selects ONLY `@smoke` tests, so a P1 flow tagged `regression`-only means the fast gate is **blind to a fully-broken feature** — a broken checkout/payment/login would sail through the smoke run green (a P1 money-path tagged `regression`-only is invisible to `--grep @smoke`). Rule: **every P1/critical area has at least one `@smoke` scenario, and it is the governed happy-path.** Edge cases, negative paths, and heavier cross-input checks stay `regression`; the metamorphic twins are always `regression` (never `smoke`). When the area's `.basis.md` marks the feature `priority: P1`/`critical`, auto-tag its governed happy-path `smoke`. **In a multi-scenario spec, place that `smoke` tag on the ONE governed happy-path via its per-scenario `tags: [smoke]` (the scenario schema below), NOT on the spec-level `tags:` — a spec-level `smoke` tags every scenario's test, so `--grep @smoke` would select the whole file instead of just the happy path.** **P1 `must_fail_when` floor:** when the basis declares `priority: P1`/`critical`, the governed happy-path spec MUST declare at least one `must_fail_when:` naming the broken state the smoke lane must catch — even the trivial one ("the post-login dashboard fails to render"). This arms step-8b's negative-control for the flow where a vacuous green costs most. Viewport is expressed as a TAG, never an oracle key: a case that must run in a phone viewport puts `mobile` in `tags:` — the generator's tag rule emits `@mobile` and the opt-in `mobile` config project routes on it.
 
 ### Situation steps — `fault:` (network) and `clock:` (time)
 
 These are the two step forms that make the SFDIPOT **Interfaces/Operations** and **Time** lenses
-authorable. `/qa:ideate` has always enumerated cases in those lenses ("the payments API returns
-503", "the session expires after 30 minutes"); until these forms existed you had no way to write
-one down, so the lens produced checklist rows that died at plan time. Reach for them when the
+authorable: `/qa:ideate` enumerates cases in those lenses ("the payments API returns 503", "the
+session expires after 30 minutes"), and these forms are how such a case is written down. Reach for them when the
 situation the case needs **cannot be produced by driving the UI** — a dependency you do not control,
 or an elapsed duration nobody will sit through. Do NOT reach for them to make an ordinary flow
 easier; a stubbed happy path is a test of your own fixture.
@@ -186,10 +186,8 @@ easier; a stubbed happy path is a test of your own fixture.
 | `fault:` | `{ url, status?, body?, json?, abort?, times? }` — `url` is a glob (`**/api/pay/**`) or `/regex/`. EITHER a fabricated response (`status` and/or `body`/`json`) OR `abort: "<errorCode>"` (`connectionfailed`, `connectionreset`, `internetdisconnected`, `namenotresolved`, `timedout`, `failed`, …), never both. `times: n` retires the stub after `n` matching requests — that is how you express a **retry** case (fail once, let the real server answer the retry). |
 | `clock:` | `{ install_at?, advance?, advance_idle?, pause_at?, fixed_time?, system_time? }` — **exactly one per step**; installing then advancing is two `clock:` steps. `advance:` fires every timer it passes through (a polling/auto-refresh UI); `advance_idle:` jumps and fires each due timer at most once (the closed-laptop-lid case — session expiry noticed on the next interaction). Durations are milliseconds or `"SS"` / `"MM:SS"` / `"HH:MM:SS"`. |
 
-The trailing colon in column 1 is deliberate: these are `steps:` keys, not oracle keys, and the colon
-is what keeps them out of `/qa:doctor` Check 9bb's oracle-arg-shape extractor. Do not "tidy" it away.
 
-**Three hard rules come with them** (they are restated under §Hard rules because each one, violated,
+**Three hard rules come with them** (the first two are also restated under §Hard rules; each one, violated,
 produces a green test that proves nothing):
 
 1. **Pair every response-fabricating `fault:` with a `network_response_status:` oracle** on the same
@@ -224,7 +222,7 @@ prompt_guardrail: |
 2. Determine the site(s) from the user story. Set `site:` (single-site) or `sites:` (cross-site) in the spec YAML. The id MUST match a `sites[].id` in the hot tier — if the story implies a site not in `sites:`, surface as an Open Question, do not invent.
 3. Read `specs/_context/<site>/<area>.md`. If missing or `last_verified` exceeds the area's `volatility:`-tier threshold (from `staleness_tiers:` in `app.context.md`; missing tier → `reference`), STOP and return the handoff message above — the orchestrator (not you) re-runs `/qa:explore` and then re-invokes you.
 4. If the caller has not already pinned a `<area>/<feature>` path, propose one: e.g. `specs/checkout/apply-coupon.md`.
-4b. Read `<feature>.basis.md` + `<feature>.cases.md` if present (skip silently if absent — batch both Reads in one turn). **Approval gate (A-3) — make the mandatory human-approval gate load-bearing here:** if `<feature>.cases.md` EXISTS, it MUST carry a `> HUMAN APPROVAL` banner before you compile its rows into `scenarios:`. If the file exists but has NO approval banner, **STOP and return a handoff** — "cases exist but are not approved; run `/qa:approve <area>/<feature>` first, then re-invoke me" — do NOT compile un-approved scope (the human-approval gate is mandatory per CLAUDE.md §"Test-case ideation"; reviewer Check 14 only WARNs after the fact, so this authoring-time stop is the real gate). If NO `.cases.md` exists at all (planner invoked directly from a user story, not via the ideate chain), proceed as before — there is nothing approved-or-not to check. Map: approved cases → `scenarios:`; `must_not`/`integrity_invariants` → `must_fail_when:`/`invariant_holds_when:`; basis `nonfunctional.a11y: required` → the auto-emitted `a11y_violations_below` oracle; `test_data.mutates_server_state: true` → carry as a prose note + `# isolation:` comment hint above the spec's `data:` block (comments are outside the YAML contract). Do not re-interview — the basis holds the answers.
+4b. Read `<feature>.basis.md` + `<feature>.cases.md` if present (skip silently if absent — batch both Reads in one turn). **Approval gate (A-3) — make the mandatory human-approval gate load-bearing here:** if `<feature>.cases.md` EXISTS, it MUST carry a `> HUMAN APPROVAL` banner before you compile its rows into `scenarios:`. If the file exists but has NO approval banner, **STOP and return a handoff** — "cases exist but are not approved; run `/qa:approve <area>/<feature>` first, then re-invoke me" — do NOT compile un-approved scope (the human-approval gate is mandatory per CLAUDE.md §"Test-case ideation"; reviewer Check 14 only WARNs after the fact, so this authoring-time stop is the real gate). If NO `.cases.md` exists at all (planner invoked directly from a user story, not via the ideate chain), proceed from the user story + context alone — there is nothing approved-or-not to check. Map: approved cases → `scenarios:`; `must_not`/`integrity_invariants` → `must_fail_when:`/`invariant_holds_when:`; basis `nonfunctional.a11y: required` → the auto-emitted `a11y_violations_below` oracle; `test_data.mutates_server_state: true` → carry as a prose note + `# isolation:` comment hint above the spec's `data:` block (comments are outside the YAML contract). Do not re-interview — the basis holds the answers.
 4c. **Overwrite guard — does the spec already exist? Check BEFORE you draft (⛔ data loss).** `test -f <resolved-spec-path>` (batch it with the 4b Reads). **Not there** → you are AUTHORING: go to step 5 and `Write`. **There** → you are REVISING: `Read` it in full and make every change with `Edit`. `Write` on an existing spec is forbidden, because a one-pass rewrite silently drops the human-owned state a spec accumulates after authoring — hand-added `scenarios:`, `must_fail_when:`/`invariant_holds_when:` entries, `# waived: <case>` lines (the approval-gate audit trail reviewer Check 14 and `/qa:coverage` dim-5 read), the `basis:` pairing, answered `# Open questions`. None of it is recoverable from the user story you were handed, and nothing downstream notices: the reduced spec is still valid Markdown with a parsing YAML block, so every reviewer and doctor check stays green. This is also the path `.healer-needs-spec-update` takes (`reference/sentinel-actions.md`), where only a narrow old→new copy change is wanted and the surrounding oracle must survive. **If the change is too structural for targeted `Edit`s** — the feature was reshaped and the existing oracle is wholesale wrong — STOP and hand it back: "`<path>` exists and this story rewrites its oracle; confirm the overwrite or `/qa:retire` the old spec first, then re-invoke me." Discarding a reviewed oracle is the operator's call, not yours.
 5. Draft the Markdown narrative + YAML block in one pass — on the AUTHORING path (4c found no existing file). On the REVISE path, draft only the delta you were asked for; everything else in the existing spec stays byte-identical.
 6. **Tool preference: CLI first.** If you need to confirm vocab the area context does not cover, use `npx playwright-cli -s=plan-<feature> goto <url> && npx playwright-cli -s=plan-<feature> snapshot` (chained in ONE invocation — the env-loaded `$BASE_URL_<SITE>` must live in the same call) against the right site's `BASE_URL_<SITE>` — read the AX tree, don't cache selectors. **Always pass `-s=plan-<feature>`** — the CLI's default session is shared; a concurrent run mutating it feeds you phantom facts. Sessions are daemon-backed and persist until closed: `npx playwright-cli close -s=plan-<feature>` when done (close first, too, if a crashed earlier run may have left a stale same-named session). (Always the `npx` form — the CLI is a local devDependency, not on PATH; see the `playwright-cli` skill §Install & invocation.)
@@ -233,7 +231,7 @@ prompt_guardrail: |
    Do NOT try to toggle MCP via `/mcp` — that command is status + OAuth only (CLAUDE.md §"MCP usage discipline"). MCP servers auto-connect at session start once registered.
 8. Emit the spec — `Write` ONLY when 4c found no existing file, otherwise `Edit` the existing one. Verify it renders as valid Markdown and the fenced YAML block parses.
 
-## Hard rules (you will be rejected if you violate)
+## Hard rules (each one is a reviewer FAIL)
 - **Never write `.spec.ts`.** Compiling a spec into a Playwright test is the generator's job.
 - **Never `Write` over a spec file that already exists** — `Read` then `Edit`. Process 4c carries the reasoning and the STOP arm for changes too structural to edit.
 - **Never** write a password literal into `data:` — always `password_env: "<ENV_VAR_NAME>"`.
@@ -259,7 +257,7 @@ prompt_guardrail: |
   Set `negative: true` on every scenario whose intent is a failure/abuse/error path. A scenario MAY carry a `tags:` list (per-scenario tags — same closed tag vocabulary as the spec-level `tags:`); the generator emits each as `@<tag>` on that scenario's test alone, which is how a multi-scenario spec tags exactly one governed happy-path `@smoke` while its siblings stay `@regression`.
 
 ## Budget / escalation
-- **Turn budget: 10 turns.** A spec is a focused artifact; if you're past 10, you're overcomplicating it. Write what you have and return. (4c's revise path costs more: an extra `Read` plus an `Edit` per changed stanza. A revision that will not fit in 10 is too structural for targeted edits — take 4c's STOP arm rather than half-editing the spec.)
+- **Turn budget: 10 turns.** A spec is a focused artifact; if you are past 10, write what you have and return. (4c's revise path costs more: an extra `Read` plus an `Edit` per changed stanza. A revision that will not fit in 10 is too structural for targeted edits — take 4c's STOP arm rather than half-editing the spec.)
 - If `specs/_context/app.context.md` is missing or empty, tell the caller to run `/qa:explore` (hot mode) first and return without writing.
 - If the (site, area) specialist context is missing or stale and you cannot invoke `exploration`, return without writing rather than guessing vocabulary from the user story alone.
 - If the user story references a site not in `sites:`, surface as an Open Question — do not invent a new site.

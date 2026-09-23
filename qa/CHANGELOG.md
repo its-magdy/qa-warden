@@ -20,6 +20,36 @@ Thirteen working sessions closing the 2026-09-06 audit (all four blocks). Four s
 changes a consumer cannot infer from a file diff, three deliberate decisions to change
 nothing, and a large body of correctness work.
 
+### Prompt audit — dated instructions removed from the agent, skill and CLAUDE.md prompts (2026-09-24)
+
+A `/claude-api prompt-audit` pass over every prompt surface (7 agents, 24 skills, the shipped
+`CLAUDE.md`, the context templates, the hook deny messages) against the Claude 5 generation the
+`model:` pins resolve to. No thinking scaffolds, cadences, word caps or retired-model workarounds
+were found. What changed, all behaviour-neutral by intent except the first group:
+
+- **Nine places where two prompts disagreed** now say one thing: the generator's Process step 7
+  ran a mutating spec once while §Cross-RUN idempotency required twice; the reviewer's turn-budget
+  line said "stop at 15" while §Inputs designs the whole-tree fallback to exceed it, and its output
+  recap said "re-emit per check" while §Inputs says "in batches"; `CLAUDE.md` told the exploration
+  subagent to STOP on `site= area=` that `/qa:explore` accepts as inferred area mode, and credited
+  twin authoring to the generator inside the bullet that assigns it to the verifier; the planner's
+  "three hard rules … restated under §Hard rules" restated only two; `run/SKILL.md` said smoke does
+  not refresh `last-run.json` two screens after saying it does; `gen/SKILL.md` handed the generator
+  a "one expect per item" rule its own Hard rules 3–4 contradict; the generator called
+  `POST /api/test/reset` "harness-blocked" when only reviewer Check 13 catches it.
+- **Model-invocable trigger text that pushed orphan asserts** (`axe-a11y`, `visual-regression`)
+  now scopes to the oracle key / audit probes the assertion contract allows.
+- **Migration-relative and history phrasing** ("now enforces", "no longer", "until this split",
+  "the old generator", "before them", incident retellings, a 0.2.0→0.3.0 budget history in the
+  always-loaded core) rewritten as rules that always held. Incident-ID tags on live rules stay.
+- **Maintainer-only notes moved out of delivered prompt text** into frontmatter `#` comments
+  (reviewer check-count freeze and doctor-port notes, planner Check 9bb notes, healer
+  `HEALER_TURN_BUDGET` clamp arithmetic, generator sync note). Nothing was deleted.
+- **Turn-budget lines are ceilings, not countdowns** ("at ~turn 25 stop", "if past 15") — the
+  `**Turn budget: N` token selfcheck 9bc parses is unchanged.
+- **Hook deny messages** no longer tell the blocked agent how to switch the hook layer off; the
+  escape hatch stays documented in `hooks/README.md` for the operator.
+
 ### First end-to-end run of 0.3.0 — five run-only defects fixed (2026-09-21)
 
 Found by driving explore → new-spec → gen → review → run headless against a live app. The

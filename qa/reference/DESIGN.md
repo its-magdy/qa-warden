@@ -338,7 +338,7 @@ delete them to make the toolkit sound more complete than it is.
   is scoped to the invocation line.
 - **Turn budgets are a fail-safe; `maxTurns` is only a runaway ceiling.** Every agent states a
   turn budget in prose, and each one ends in a *behavior*: the healer files a bug and reverts the
-  patch, the reviewer emits `reviewer inconclusive` (§"Fail-closed on inconclusive",
+  patch, the reviewer leaves its `PARTIAL REVIEW` lead and `FAIL (inconclusive-partial)` verdict standing (§"Fail-closed on inconclusive",
   `agents/reviewer.md`; CI keys on the FAIL verdict it carries),
   exploration and ideation write what they have under an incompleteness banner. The harness
   `maxTurns` field runs **none** of that — it hard-stops and returns output marked PARTIAL. So the

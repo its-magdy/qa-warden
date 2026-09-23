@@ -16,10 +16,9 @@ kebab-case basename. This is a **two-agent** command and you are the orchestrato
 
 **Invoke them as two separate subagent calls, and never collapse them into one.**
 No subagent can spawn another, so the handoff routes through you. The separation is
-the point: until this split the same agent that wrote an `expect(...)` also decided
-whether that `expect` catches the injected defect, its cheapest path was to claim it
-does, and the resulting `// verified:` comment is durable evidence reviewer Check 2b
-trusts. Pass the generator's handoff (run log, step-5 route sweep, any
+the point: the agent that wrote an `expect(...)` must not also decide whether it catches
+the injected defect — its cheapest path is to claim it does, and the resulting
+`// verified:` comment is durable evidence reviewer Check 2b trusts. Pass the generator's handoff (run log, step-5 route sweep, any
 `<feature>.oracle.ts`) into the verifier verbatim, but do **not** add your own opinion
 about whether an oracle looks sound — the verifier's verdict has to come from a run.
 
@@ -60,8 +59,9 @@ Requirements the generator must honour:
 
 - Locators: the 7 official `getBy*` factories only — `getByRole`, `getByText`, `getByLabel`, `getByPlaceholder`, `getByAltText`, `getByTitle`, `getByTestId` (no XPath, no CSS). Prefer `getByRole` with an accessible `name:`; `getByText` for assertion targets, not click actions.
 - Auto-waiting assertions — **never** `page.waitForTimeout`.
-- One `expect(...)` per oracle-vocab item in the YAML; Playwright 1.49+
-  `page.ariaSnapshot()` is preferred for structural asserts.
+- At least one failable `expect(...)` per oracle item and none without one; for a region's
+  structure prefer `toMatchAriaSnapshot()`, which must still trace to oracle items (generator
+  Hard rules 3–4).
 - Closed oracle vocabulary only (CLAUDE.md §Assertion style).
 
 **Process scenarios SEQUENTIALLY if the spec contains multiple** (YAML
