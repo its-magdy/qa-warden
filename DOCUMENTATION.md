@@ -354,9 +354,11 @@ What *is* new is that each skill declares **who may invoke it** — see
   `ideate`). Claude will not run these on its own. `/qa:approve` is the load-bearing case:
   it stamps the human-approval banner, so a model able to invoke it could rubber-stamp its
   own test plan.
-- **You or Claude** — the read-only ones (`help`, `review`, `audit`, `coverage`, `doctor`,
+- **You or Claude** — the read-only ones (`help`, `review`, `coverage`, `doctor`,
   `impact`, `report`, `explore`). `/qa:explore` in particular MUST stay reachable by Claude:
   the planner and healer stop on stale context and rely on the orchestrator re-running it.
+  `metamorphic-relations` is also here even though it writes twin specs: the verifier
+  applies it on every new spec during `/qa:gen`.
 - **Runs in its own subagent** (`coverage`, `doctor`, `impact`, `report`) — the heavy
   read-only passes, so their working output stays out of your session.
 
@@ -368,7 +370,7 @@ What *is* new is that each skill declares **who may invoke it** — see
 | **`/qa:ideate`** | `<area/feature> [site=<id>]` | Enumerate candidate test cases (SFDIPOT fan-out, de-dup, risk-rank, completeness critic) → `.cases.md` checklist. **Never writes specs/tests.** | **ideation** |
 | **`/qa:approve`** | `<area/feature>` | Record the human verdict on a `.cases.md` checklist — approve/prune/defer per row, stamp the approval banner, mint stable row ids (the traceability anchor for Check 14 and TCM export). Closes by printing the **literal `/qa:new-spec` command per approved group** (slug derived from the group subject) rather than the naming rule — that hand-off is where the chain historically tripped people. | — (interactive) |
 | **`/qa:import-cases`** | `<area/feature> [source=<name>] [<file>]` | Import an existing manual test-case suite (CSV/TCM export) as `.cases.md` rows with `[imported:]` provenance; import-once, the external id becomes the row id. | — |
-| **`/qa:retire`** | `<spec-or-case>` | Retire a spec/case that no longer reflects the product — records the decision + reason instead of silently deleting, so coverage shows RETIRED, not a false gap. | — |
+| **`/qa:retire`** | `<area/feature>` | Retire a feature coherently — a dry-run plan of every linked artifact (spec, test, twins, route manifest, basis/cases), shared page-objects/fixtures deleted only when nothing else uses them, then `tsc` + `--list` verification. Git history is the archive. | — |
 | **`/qa:new-spec`** | `<area/feature>` | Draft one feature's Markdown spec with a closed-vocab YAML oracle → `specs/<area>/<feature>.md`. **Never emits `.spec.ts`.** | **planner** |
 | **`/qa:gen`** | `<spec-path or area/feature>` | Compile a spec → `tests/<area>/<feature>.spec.ts`; run it once and leave it green for the caller to commit. Keeps a confirmation `.webm` on new specs. | **generator** |
 | **`/qa:review`** | `[spec-or-path — default: working diff]` | Run the **load-bearing reviewer** over the diff (or a named path). The shipped trigger for the full assertion-contract check suite. Any FAIL blocks the PR. Read-only. | **reviewer** |
@@ -377,6 +379,8 @@ What *is* new is that each skill declares **who may invoke it** — see
 | **`/qa:heal`** | `<failing-test-id>` | Triage one failing test from its trace; patch **selectors/waits only, never assertions**; file a `bugs/*.md` on a product defect. | **healer** |
 | **`/qa:batch-fix`** | `<path-or-filter>` | Apply ONE healer pattern across every failing test matching a Playwright filter. **Proposes the pattern and waits for confirmation** (high blast radius). | **healer** |
 | **`/qa:run mode=repeat`** | `<spec> [N]` | Repeat one spec N times (default 10) back-to-back → `artifacts/flake-<name>.json`; report pass rate; recommend `@quarantine` if <95%. Diagnostic only. | — |
+| **`/qa:run mode=changed`** | `[<git-ref>]` | PR-speed lane via Playwright `--only-changed`: runs changed test files plus every test importing a changed file (bare = uncommitted work; a ref = diff against it). Lists edited `specs/*.md` it cannot select (stale until `/qa:gen`). Never refreshes `last-run.json`; `NOTHING SELECTED` is not a pass. | — |
+| **`/qa:metamorphic-relations`** | `<parent-spec-path>` | Generate 2–3 metamorphic "twin" specs of a passing `.spec.ts` by hand. The verifier already does this for every new spec during `/qa:gen`; use this to harden an existing critical flow. | — |
 | **`/qa:impact`** | `route=… \| field=… \| factory=… \| area=… \| source=… \| operation=…` | List every spec affected by a change to a route/field/factory/area — or, via `source=`/`operation=`, to a business source / seed operation. Reads `artifacts/route-manifests/`. Read-only. | — |
 | **`/qa:review url=<url>`** | `url=<url> [site=<id>]` | Full a11y + visual + closed-vocab audit of a URL → `reports/audit-<ts>.md`. Direct snapshot, no exploration. Also drives the page's documented **error/failure states** (invalid-submit alert, opened menu/modal) before the axe scan — a state-dependent violation (a low-contrast error alert) never renders in the pristine default state. | **reviewer** + **axe-a11y** + **visual-regression** |
 | **`/qa:report`** | *(none)* | Aggregate `last-run.json` + `reports/*.json` → PR/Slack summary → `reports/summary.md`. Pure aggregation, reruns nothing. Leads with the run **scope** read from the record (`--grep @smoke` → "N smoke tests"), so a green smoke subset is never presented as full-suite green — then a **qualified go/no-go verdict** that must stay qualified while any `bugs/*.md` is open, an audit reported violations, or the scope could not be established. Also surfaces passed-with-retries (flaky ≠ passing), a11y/visual audit headlines, and the running value ledger. | — (self-contained) |
@@ -413,11 +417,22 @@ vocabulary](#10-the-closed-oracle-vocabulary). Lifts "broken-when" prose into a
 `must_fail_when:` list. Never writes `.spec.ts`, never writes password literals
 (always `password_env`), never targets production. Tools: `Bash, Read, Write`.
 
-### 8.2 generator — compiles and proves the test
+### 8.2 generator + verifier — compiles, then proves the test
 
-Reads the spec, resolves the site, takes a **live AX snapshot for every route** (this
-is where selectors come from — never from source), reuses existing page objects, and
-writes the `.spec.ts` in one pass. Then it **runs the test once**. If green, it:
+`/qa:gen` is two subagent calls. The **generator** reads the spec, resolves the site,
+takes a **live AX snapshot for every route** (this is where selectors come from — never
+from source), reuses existing page objects, and writes the `.spec.ts` in one pass. Then
+it **runs the test once** and hands the green result to the verifier. It does not grade
+its own output.
+
+**8 hard rules** the reviewer enforces on the generator: only the 7 `getBy*` locator
+factories (no XPath/CSS); auto-waiting assertions only (never `waitForTimeout` /
+`networkidle`); ≥1 failable `expect()` per oracle item with no orphans; prefer
+`toMatchAriaSnapshot()` for structural oracles; wrap each step in a real `test.step`;
+no logging of secrets; STOP if the spec exceeds ~250 LOC; no `expect(true).toBe(true)`
+and no unlinked `test.fixme/skip`. Tools: `Bash, Read, Write, Edit, Skill`.
+
+The **verifier** did not write the test, and grades it:
 
 - **8a** authors 2–3 metamorphic "twin" specs (new specs only),
 - **8b** **fault-injects** each declared `must_fail_when:` to prove the oracle
@@ -426,12 +441,8 @@ writes the `.spec.ts` in one pass. Then it **runs the test once**. If green, it:
 - **8d** keeps a confirmation `.webm` (`QA_KEEP_VIDEO=1`) for a human to watch,
 - emits a route manifest (routes/fields/factories) for `/qa:impact`.
 
-**8 hard rules** the reviewer enforces: only the 7 `getBy*` locator factories (no
-XPath/CSS); auto-waiting assertions only (never `waitForTimeout` / `networkidle`); ≥1
-failable `expect()` per oracle item with no orphans; wrap each step in a real
-`test.step`; no logging of secrets; STOP if the spec exceeds ~250 LOC; no
-`expect(true).toBe(true)` and no unlinked `test.fixme/skip`. Tools: `Bash, Read,
-Write`.
+It **may not edit any `expect(...)`** in the parent spec — a `PreToolUse` hook denies it.
+Tools: `Bash, Read, Write, Edit, Skill`.
 
 ### 8.3 healer — the only thing invoked on failure
 
@@ -524,7 +535,7 @@ directly slash-callable.
 | **test-data-seed** | Worker-scoped, API-seeded, teardown-by-tag fixtures that stay parallel-safe at 10+ workers (keyed on `workerInfo.parallelIndex`), plus a pluggable seed adapter. | auto (generator authoring) | no |
 | **axe-a11y** | Drop-in `@axe-core/playwright` WCAG scanning per UI **state** (not per page), plus an adversarial-pair pattern to prove the detector is live. | auto; `/qa:review url=` | no |
 | **visual-regression** | `toHaveScreenshot()` layout/CSS/typography oracle with mandatory stable-state waits (`document.fonts.ready`, `reducedMotion`, masking). | `/qa:review url=`; otherwise on request in the main session. Not reachable from a spec — no oracle key requests a screenshot. | no |
-| **metamorphic-relations** | Generate 2–3 invariant-preserving "twin" specs (`@metamorphic`+`@regression`, never `@smoke`) that catch spec drift plain assertions miss. **Authored by the generator**; the reviewer only verifies they exist and agree. | generator; reviewer; `/qa:review url=`; human | **yes** |
+| **metamorphic-relations** | Generate 2–3 invariant-preserving "twin" specs (`@metamorphic`+`@regression`, never `@smoke`) that catch spec drift plain assertions miss. **Authored by the verifier**; the reviewer only verifies they exist and agree. | verifier; reviewer; `/qa:review url=`; human | **yes** |
 
 ---
 

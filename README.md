@@ -1,143 +1,314 @@
 # qa-toolkit — the `qa` Claude Code plugin
 
-**AI authors declarative specs → Playwright replays them nightly at ~$0 LLM cost → AI triages only on failure.**
+> AI writes your end-to-end tests from plain-language specs, Playwright replays them nightly with no LLM in the loop, and AI comes back only to triage a failure.
 
-**The healer repairs selectors and waits — never the assertion.** A red test stays red until a human decides whether the app or the spec is wrong ([why that matters](qa/README.md#how-this-differs-from-playwrights-own-test-agents)).
+`qa` is a Claude Code plugin that turns a Markdown spec into a Playwright `.spec.ts`. Each spec's definition of "correct" (its **oracle**) uses a closed 16-key YAML vocabulary. A non-coder can read it, and it compiles one-to-one into `expect()` calls. A separate verifier breaks the app on purpose and checks that each assertion goes red. A read-only reviewer blocks the PR when the spec and the test disagree. The nightly run is plain `npx playwright test`, so it has roughly $0 LLM cost.
 
-## Install
+**The healer repairs selectors and waits, never the assertion.** A red test stays red until a human decides whether the app or the spec is wrong. See [how this differs from Playwright's own test agents](#how-it-differs-from-playwrights-test-agents).
+
+---
+
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Commands reference](#commands-reference)
+- [How it differs from Playwright's test agents](#how-it-differs-from-playwrights-test-agents)
+- [Scope and limits](#scope-and-limits)
+- [Documentation](#documentation)
+- [For maintainers](#for-maintainers)
+- [License](#license)
+
+---
+
+## Prerequisites
+
+- **Claude Code** with plugin support (`/plugin` commands)
+- **Node.js `>=22`** and `npm` (for the Playwright project `/qa:init` stamps)
+- **`git`**
+- **`jq`**: required. Without it, `/qa:doctor` reports a ❌ and `.claude/settings.json` cannot be auto-merged.
+- **`ripgrep` (`rg`)**: recommended. Without it, `/qa:retire` consumer checks fall back to `grep`.
+- A **staging or local** instance of the app under test, plus a test account that already exists in it. Never use production.
+
+---
+
+## Installation
+
+Run these inside Claude Code, from the project that will hold the tests:
 
 ```bash
-# 1. register this marketplace (private git: SSH/HTTPS both work)
+# 1. Register the marketplace (private git: SSH or HTTPS)
 /plugin marketplace add git@your-host:org/qa-toolkit.git
 
-# 2. install the plugin at project scope (records it in .claude/settings.json,
-#    so teammates who clone + trust the repo are auto-prompted to install)
+# 2. Install at project scope. This records the plugin in .claude/settings.json,
+#    so teammates who clone and trust the repo are prompted to install it too.
 /plugin install qa@qa-toolkit --scope project
 
-# 3. stamp the runtime substrate into THIS project + install deps
+# 3. Stamp the runtime substrate into this project and install dependencies
 /qa:init
 ```
 
-## First test today (fast lane)
+`/qa:init` writes `package.json` (with `@playwright/test` pinned to `1.63.0`), `playwright.config.ts`, `tsconfig.json`, `CLAUDE.md`, `.claude/settings.json` permission rules, `.mcp.json`, `scripts/`, `fixtures/`, `page-objects/` and `.env.example`. Then it runs `npm install` and installs the Playwright browsers.
 
-**New here? Follow the [step-by-step tutorial](qa/reference/tutorial-first-test.md)** — it walks
-this through and shows what you'll see at each step. The quick version:
+| Flag | Effect |
+|---|---|
+| `--no-install` | Stamp files only; skip `npm install` / `npx playwright install` |
+| `--resync` | Force-refresh toolkit-owned files in an existing project. Changed files are backed up to `<file>.qa-bak`. `.env` and customized files are left alone. |
 
-1. Edit `.env` — `BASE_URL_APP` → your staging or localhost, **never prod**; `QA_USER_*` creds (the test account must already exist).
-2. `/qa:explore` — the first run writes a **DRAFT** app context; review + confirm it.
-3. `/qa:new-spec auth/login` → `/qa:gen specs/auth/login.md` → `/qa:review` → `/qa:run mode=smoke`
+---
 
-**Rigor lane** (P1 / money / compliance): insert `/qa:intake` → `/qa:ideate` → `/qa:approve` between explore and new-spec — it pins *what correct means* before anything is generated. The fast lane skips no FAIL-level gate — but with no `.cases.md`, reviewer Check 14 (approved-case traceability) has nothing to read and is SKIPPED, not downgraded: *completeness* is unchecked on the fast lane.
+## Configuration
 
-> **Day-1 glossary:** site — one deployed app under test (`BASE_URL_<SITE>`) · area — a product area, the folder specs group under · spec — the human-readable Markdown contract in `specs/` · test — the compiled Playwright `.spec.ts` in `tests/` · oracle — the spec's definition of "correct" (the assertions) · smoke — the `@smoke`-tagged fast gate `/qa:run mode=smoke` runs · **[full glossary →](qa/reference/glossary.md)**
+Copy the example env file and set the target app and test account:
 
-**"Isn't this just BDD again — prose specs the tests quietly ignore?"** No: Gherkin's failure was prose and automation held together by convention, drifting apart. Here the spec's oracle is a **closed 16-key vocabulary** that compiles 1:1 to `expect()` calls, and a read-only reviewer **blocks the merge** when they diverge — a step with no assertion, an assertion asserting the wrong literal, or an out-of-vocab "should look right" is a failed PR, not a style note. Declared invariants aren't trusted either: the generator **fault-injects each `must_fail_when` defect** at authoring time and refuses to ship an oracle that doesn't go red on it. And the agents can't "ignore the spec at runtime" because at runtime there are no agents — the nightly is plain `npx playwright test`, replaying exactly the code the reviewer gated.
+```bash
+cp .env.example .env
+```
 
-Privacy: see [DOCUMENTATION §Privacy & data flow](DOCUMENTATION.md#151-privacy--data-flow) — TL;DR: pages the agents visit transit the API during authoring/triage only; the nightly sends nothing; creds stay local.
+```bash
+BASE_URL_APP=http://localhost:3000     # staging or localhost, never prod
+QA_USER_EMAIL=member@example.test      # an account that already exists
+QA_USER_PASSWORD=your-test-password
+QA_ADMIN_EMAIL=                        # optional: admin-role tests
+QA_ADMIN_PASSWORD=
+```
+
+- `BASE_URL_APP` ships as `CHANGEME`. The prod-guard **fails closed** until you replace it.
+- Specs never contain passwords. They reference the variable name (`password_env: "QA_USER_PASSWORD"`).
+- Each additional site under test gets its own `BASE_URL_<SITE>` variable.
+
+Confirm the setup (read-only and offline; it never contacts `BASE_URL_APP`):
+
+```bash
+/qa:doctor
+```
+
+A healthy project prints a summary with no ❌ blockers.
+
+---
+
+## Usage
+
+### Fast lane: your first test
+
+```bash
+/qa:explore                   # learn the app → specs/_context/app.context.md
+/qa:new-spec auth/login       # draft specs/auth/login.md (plain language + YAML oracle)
+/qa:gen specs/auth/login.md   # compile → tests/auth/login.spec.ts, run it green, verify it can fail
+/qa:review                    # reviewer gates the assertion contract; any FAIL blocks the PR
+/qa:run mode=smoke            # run the @smoke suite (no LLM)
+```
+
+- The first `/qa:explore` writes `app.context.md` as a **draft**. Open it, correct it, and delete the `draft:` line to confirm it.
+- The spec is the only file you review. Here is the oracle `/qa:new-spec` produces:
+
+```yaml
+oracle:
+  url_matches: "/tasks"      # we land on the task list
+  text_visible: "My tasks"   # and the page actually rendered
+```
+
+- `/qa:gen` also keeps a `.webm` video of the run. It shows the real flow the test drove, so you don't need to read the TypeScript.
+
+The step-by-step version, including what you should see at each step, is in the [first-test tutorial](qa/reference/tutorial-first-test.md).
+
+### Rigor lane: P1, money and compliance features
+
+Add three steps between `explore` and `new-spec`. They pin down what "correct" means before any test is generated:
+
+```bash
+/qa:intake  checkout/coupon   # interview → .basis.md (the intended behaviour)
+/qa:ideate  checkout/coupon   # SFDIPOT checklist of candidate cases → .cases.md
+/qa:approve checkout/coupon   # a human approves/prunes/defers each row; mints stable row ids
+/qa:new-spec checkout/coupon
+```
+
+The fast lane skips no FAIL-level gate. It does skip reviewer Check 14 (approved-case traceability), which needs a `.cases.md` to read. On the fast lane, **completeness** is not checked.
+
+Existing manual test cases (TestRail, Zephyr or Xray CSV, Markdown, or a pasted table) can replace `/qa:ideate`:
+
+```bash
+/qa:import-cases checkout/coupon source=testrail exports/coupon.csv
+```
+
+### Running tests
+
+```bash
+/qa:run mode=smoke                          # @smoke suite; refreshes artifacts/last-run.json
+/qa:run mode=single tests/auth/login.spec.ts   # one spec, CI-shaped → reports/headless-login.json
+/qa:run mode=repeat tests/auth/login.spec.ts 20  # flakiness probe (default N=10)
+/qa:run mode=changed origin/main            # only tests touched since a git ref
+npx playwright test                         # the full suite: plain Playwright, no Claude
+```
+
+### When a test fails
+
+```bash
+ls artifacts/test-results/          # a failing test's id is its results directory name
+/qa:heal <test-results-dir-name>    # triage from the trace; patch selectors/waits or file bugs/*.md
+/qa:batch-fix tests/checkout        # apply one healer fix to every matching failure (asks first)
+```
+
+If product copy changed, the healer does not absorb it. It routes the question ("intentional, or a bug?") back to the planner.
+
+### Reporting and analysis
+
+```bash
+/qa:report                      # PR/Slack summary → reports/summary.md
+/qa:coverage area=checkout      # requirement/assertion/lens/flow coverage gaps (not line coverage)
+/qa:impact route=/api/orders    # every spec affected by a change to that route
+/qa:review url=https://staging.example.com/cart   # a11y + visual + closed-vocab audit of a live page
+```
+
+### Not sure what to run next
+
+```bash
+/qa:help                          # reads project state, names the next command
+/qa:help checkout/coupon          # scoped to one feature
+/qa:help "how do I add a test"
+```
+
+---
+
+## Commands reference
+
+**You only** means Claude will never run the command on its own, because it has side effects. `/qa:approve` is the key case: a model able to invoke it could approve its own test plan.
+
+| Command | Description | Invoked by |
+|---|---|---|
+| `/qa:init [--no-install \| --resync]` | Stamp the runtime substrate and install deps | You only |
+| `/qa:explore [mode=hot \| mode=area site=<id> area=<name>]` | Build or refresh the app/area context files | You or Claude |
+| `/qa:intake <area/feature>` | Interview for the test basis → `.basis.md` | You only |
+| `/qa:ideate <area/feature>` | Enumerate candidate cases → `.cases.md` | You only |
+| `/qa:approve <area/feature>` | Record the human verdict on a `.cases.md` | You only |
+| `/qa:import-cases <area/feature> [source=] [<file>]` | Import manual cases as `.cases.md` rows | You only |
+| `/qa:new-spec <area/feature>` | Draft a Markdown spec with a YAML oracle | You only |
+| `/qa:gen <spec-path>` | Compile a spec to a `.spec.ts`, run it green, verify it can fail | You only |
+| `/qa:review [path \| url=<url>]` | Reviewer gate over the diff, or a live-URL audit | You or Claude |
+| `/qa:run mode=single\|smoke\|repeat\|changed` | Run tests (no LLM) | You only |
+| `/qa:heal <failing-test-id>` | Triage one failure; fix selectors/waits or file a bug | You only |
+| `/qa:batch-fix <path-or-filter>` | Apply one healer fix across matching failures | You only |
+| `/qa:retire <area/feature>` | Retire a feature and every linked artifact (dry-run first) | You only |
+| `/qa:metamorphic-relations <spec>` | Generate 2–3 metamorphic "twin" specs of a passing test | You or Claude |
+| `/qa:report` | Aggregate the last run into a PR/Slack summary | You or Claude |
+| `/qa:coverage [area=] [site=]` | Static coverage report across 9 dimensions | You or Claude |
+| `/qa:impact route=\|field=\|factory=\|area=\|operation=\|source=` | List specs affected by a change | You or Claude |
+| `/qa:doctor [--verify-invariants <spec>]` | Read-only health check of the project | You or Claude |
+| `/qa:help [question \| area/feature]` | Situated help and "what's next" | You or Claude |
+
+Most commands also take `site=<id>` to target a site other than the default `app`.
+
+### Oracle vocabulary
+
+An oracle may use only these 16 keys. The reviewer fails anything else:
+
+`text_visible` · `url_matches` · `count_equals` · `value_between` · `error_shown` · `no_order_created` · `attribute_equals` · `element_state` · `network_response_status` · `response_body_contains` · `download_received` · `clipboard_contains` · `storage_state` · `upload_accepted` · `dialog_dismissed` · `a11y_violations_below`
+
+---
+
+## How it differs from Playwright's test agents
+
+Playwright 1.56+ ships its own planner, generator and healer agents (`npx playwright init-agents`). Authoring, replay and healing are now standard features. This plugin adds the oracle-defense and governance layer on top:
+
+| | Official Playwright agents | `qa` plugin |
+|---|---|---|
+| Healer may change assertions / expected values | Yes (listed in its instructions, 1.63.0) | No. A `PreToolUse` hook denies the edit |
+| Oracle format | Free-form TypeScript | Closed 16-key YAML a non-coder can review |
+| Human approval before code exists | No | `/qa:intake` → `/qa:ideate` → `/qa:approve` |
+| Proof each assertion can fail | No | The verifier fault-injects each `must_fail_when` defect |
+| PR gate on spec↔test drift | No | The reviewer blocks the merge |
+| Nightly LLM cost | None | None |
+
+Why it matters: a 2026 study of autonomous test repair documented "assertion weakening and test-case deletion used as workaround mechanisms" ([arXiv:2605.01471](https://arxiv.org/abs/2605.01471)). The full comparison is in [`DESIGN.md`](qa/reference/DESIGN.md#how-we-differ-from--and-complement--official-playwright-test-agents).
+
+---
+
+## Scope and limits
+
+- **Covers:** E2E and integration tests against a real browser.
+- **Does not cover:** unit, component or contract tests, load testing, security DAST, or native mobile.
+- **Partial oracles:** a green a11y scan does not mean the page is accessible, and visual diffs need a specialist for the long tail.
+- **Privacy:** pages the agents visit pass through the Anthropic API during authoring and triage only. The nightly run sends nothing, and credentials stay local. See [§15.1 Privacy & data flow](DOCUMENTATION.md#151-privacy--data-flow).
+
+---
 
 ## Documentation
 
-Four kinds of doc, pick by what you need right now:
-
-| | |
+| Need | Read |
 |---|---|
-| 🎓 **Learn** (first time) | [Tutorial — author your first test](qa/reference/tutorial-first-test.md) · [Reviewing AI-written tests without reading code](qa/reference/reviewing-without-code.md) |
-| 🔧 **Do** (a specific goal) | [How-to recipes](qa/reference/how-to.md) — import manual cases · fix a failing test · brownfield adoption · nightly CI · or ask `/qa:help "how do I …"` |
-| 📖 **Look up** (a fact) | [Full reference — `DOCUMENTATION.md`](DOCUMENTATION.md) · [Glossary](qa/reference/glossary.md) |
-| 💡 **Understand** (the why) | [Design rationale — `DESIGN.md`](qa/reference/DESIGN.md) · [How we differ from official Playwright Test Agents](qa/reference/DESIGN.md#how-we-differ-from--and-complement--official-playwright-test-agents) |
-
-> **Evaluating this against Microsoft's official Playwright Agents (1.56+)?** Read
-> [How we differ from — and complement — official Playwright Test Agents](qa/reference/DESIGN.md#how-we-differ-from--and-complement--official-playwright-test-agents):
-> the author/replay/heal mechanics are now commodity; this toolkit's value is the
-> oracle-defense + governance layer (closed vocabulary, blocking reviewer, intake→approve
-> rigor, fault-injection) that the official agents deliberately don't provide.
-
-From inside a project, **`/qa:help`** gives a live, project-aware "what do I do next" answer —
-or **`/qa:help <area/feature>`** to scope it to one feature.
+| Learn (first time) | [Tutorial: your first test](qa/reference/tutorial-first-test.md) · [Reviewing AI-written tests without reading code](qa/reference/reviewing-without-code.md) |
+| Do a specific task | [How-to recipes](qa/reference/how-to.md): import manual cases, fix a failing test, brownfield adoption, nightly CI |
+| Look up a fact | [`DOCUMENTATION.md`](DOCUMENTATION.md) (full reference) · [Glossary](qa/reference/glossary.md) |
+| Understand the why | [`DESIGN.md`](qa/reference/DESIGN.md) · [`MERGE-NOTES.md`](MERGE-NOTES.md) (design lineage) |
+| What changed | [`qa/CHANGELOG.md`](qa/CHANGELOG.md) |
 
 ---
 
 ## For maintainers
 
-### Layout
+### Repository layout
 
 ```
-.claude-plugin/marketplace.json   ← the catalog (lists the qa plugin)
-qa/                               ← the plugin
-├── .claude-plugin/plugin.json    ← manifest (pinned `version` → bump it to ship)
-├── agents/    planner, generator, verifier, healer, reviewer, exploration, ideation
-├── skills/    23 SKILL.md — the 19 /qa:* commands (/qa:init /qa:gen /qa:heal …)
-│              + 4 capability helpers (playwright-cli, axe-a11y, …)
-├── hooks/     2 PreToolUse gates — the lexical reviewer FAILs, and the
-│              healer/verifier assertion prohibition (see hooks/README.md)
-├── reference/ DESIGN.md (design rationale) + test-case-ideation.md + sentinel-actions.md
-├── templates/ the runtime substrate stamped into each project by /qa:init
-│              (incl. page-objects/ reuse layer + fixtures/test.ts barrel)
-└── bin/qa-scaffold  deterministic substrate installer
-    bin/qa-selfcheck the plugin's own consistency checks — NOT shipped to consumers
-    bin/qa-hooktest  regression tests for the two hooks  — NOT shipped to consumers
-    evals/           behavioural evals (`claude plugin eval`) — planted-defect cases for the reviewer
+.claude-plugin/marketplace.json   the marketplace catalog (lists the qa plugin)
+qa/                               the plugin
+├── .claude-plugin/plugin.json    manifest; pinned `version`
+├── agents/     planner, generator, verifier, healer, reviewer, exploration, ideation
+├── skills/     23 skills: the 19 /qa:* commands + 4 model-only helpers
+│               (playwright-cli, axe-a11y, visual-regression, test-data-seed)
+├── hooks/      2 PreToolUse gates: lexical reviewer FAILs, and the healer/verifier
+│               assertion prohibition (see qa/hooks/README.md)
+├── reference/  DESIGN.md, tutorial, how-to, glossary, ideation and sentinel references
+├── templates/  the runtime substrate /qa:init stamps into each project
+├── bin/qa-scaffold    deterministic substrate installer (used by /qa:init)
+├── bin/qa-selfcheck   plugin consistency checks (not shipped to projects)
+├── bin/qa-hooktest    hook regression tests (not shipped to projects)
+└── evals/             behavioural evals for the reviewer (`claude plugin eval`)
 ```
 
-### Before you commit a plugin change
+The plugin itself (agents, skills, hooks, `reference/`) updates automatically with the plugin. Everything under `templates/` is copied into a project once. A template fix reaches an existing project only through `/qa:init --resync`, and `/qa:doctor` reports when a project needs it.
+
+### Running the checks
+
+Run before every plugin commit:
 
 ```bash
-qa/bin/qa-selfcheck              # 7 checks over agents/ skills/ hooks/ reference/ — must end ✅
-qa/bin/qa-hooktest               # 20 real payloads through the two PreToolUse hooks — must end ✅
-claude plugin validate ./qa      # mandatory after ANY frontmatter edit
+qa/bin/qa-selfcheck            # 7 consistency checks over agents/ skills/ hooks/ reference/
+qa/bin/qa-hooktest             # 20 real payloads through the two PreToolUse hooks
+claude plugin validate --strict ./qa   # mandatory after any frontmatter edit
 ```
 
-Editing `agents/reviewer.md`? Also run the behavioural suite — it costs real model calls
-(~$1.6 and ~6 min per case), so it is per-change, not per-commit. See `qa/evals/README.md`:
+Expected tail:
+
+```
+qa-selfcheck: ✅ plugin is self-consistent — all 7 checks passed
+qa-hooktest: ✅ all 20 cases passed
+```
+
+When you change `qa/agents/reviewer.md`, also run the behavioural evals. They make real model calls (about $1.6 and 6 minutes per case), so run them per change, not per commit. Details are in [`qa/evals/README.md`](qa/evals/README.md).
 
 ```bash
 cd qa && claude plugin eval . --tag reviewer --runs 1 --ablation none --scaffold --trust-plugin --no-publish
 ```
 
-`qa-selfcheck` holds the checks that read only plugin source (oracle-key mirrors, `maxTurns`
-ordering, the `/qa:help` catalog, hook registration, `/qa:explore` invocation shapes). They used
-to run inside every consumer's `/qa:doctor`, where nobody could act on them. Everything that
-*compares a project with the plugin* is still in `templates/scripts/doctor.sh`.
+Load the plugin locally without the marketplace (run `/reload-plugins` after edits):
 
-### What the plugin carries vs. what `/qa:init` stamps
+```bash
+claude --plugin-dir ./qa
+```
 
-| Shipped *by the plugin* (live, auto-updates)         | Stamped *by `/qa:init`* (per-project, one-time) |
-| ---------------------------------------------------- | ----------------------------------------------- |
-| agents, skills, `/qa:*` commands, `reference/DESIGN.md` | `package.json`, `playwright.config.ts`, `tsconfig.json` |
-|                                                      | `CLAUDE.md` (the policy / source-of-truth file) |
-|                                                      | `.claude/settings.json` permission rules (incl. black-box deny) |
-|                                                      | `.mcp.json` + `.mcp.explore.json` (two-config MCP pattern) |
-|                                                      | `scripts/`, `fixtures/`, `.env.example`, `.gitignore` |
+### Versioning and releasing
 
-Why the split exists (and what each side carries in full): see
-[DOCUMENTATION §4.2](DOCUMENTATION.md#42-the-brain-vs-body-split-important) and
-[§16](DOCUMENTATION.md#16-the-runtime-substrate).
+The plugin ships in **versioned mode**: `qa/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.3.0`. Users receive an update only when that string changes.
 
-**Updating a stamped file after a plugin fix.** `/qa:init` is skip-if-exists, so a
-template fix never reaches an already-stamped project on its own. Run **`/qa:init --resync`**
-to force-refresh the toolkit-owned substrate (backs each changed file up to `<file>.qa-bak`,
-reinstalls deps if `package.json`/lockfile changed, leaves `.env` and customized files
-untouched); **`/qa:doctor`** flags when a project needs it.
+> **Bump `version` in the same commit as every user-visible change.** If you push without a bump, nothing ships, and `/plugin update` tells users they are already current. No error warns you.
 
-### Versioning
+To release:
 
-This plugin ships in **versioned mode** — `qa/.claude-plugin/plugin.json` carries an explicit
-`version`. Per the [plugins reference](https://code.claude.com/docs/en/plugins-reference),
-setting it *"pins the plugin to that version string, so users only receive updates when you
-bump it."*
+1. Bump `version` in `qa/.claude-plugin/plugin.json` and add an entry to `qa/CHANGELOG.md`.
+2. Run `claude plugin validate --strict ./qa`.
+3. Push, then tag with `claude plugin tag ./qa`.
 
-> ⚠️ **Bump `version` in the same commit as every user-visible change.** Pushing without
-> bumping ships **nothing** — consumers stay on the old copy and `/plugin update` reports
-> they are already current, with no error to tell you otherwise. This is the one release
-> mistake that fails silently.
-
-The alternative is **commit-SHA mode**: delete the `version` key entirely and Claude Code
-falls back to the git commit SHA, so every push counts as a new version automatically. That
-trades per-release control for never having to remember the bump. Pick one and keep this
-section in sync with `plugin.json` — a doc that describes the mode you are *not* in is how a
-release silently goes nowhere.
-
-Consumers pick up a bumped release with:
+Consumers pick up the release with:
 
 ```bash
 /plugin marketplace update qa-toolkit
@@ -145,18 +316,10 @@ Consumers pick up a bumped release with:
 /reload-plugins
 ```
 
-Validate before pushing:
+The alternative is **commit-SHA mode**. Delete the `version` key, and every push becomes a new version automatically. If you switch, update this section too.
 
-```bash
-claude plugin validate --strict ./qa
-```
+---
 
-(`--strict` passes clean in versioned mode — verified. The old note here said to drop
-`--strict` because the omitted `version` produced a warning; with `version` pinned there is
-no warning, so use the stricter form.)
+## License
 
-**Local dev** (no marketplace): `claude --plugin-dir ./qa` loads the plugin for that
-session only; run `/reload-plugins` after edits.
-
-> Design lineage (the Test-Browser oracle-defense plugin × POM reuse merge, and the
-> no-hooks decision): see [`MERGE-NOTES.md`](MERGE-NOTES.md).
+[MIT](LICENSE) © 2026 Mohamed Magdy Omar
