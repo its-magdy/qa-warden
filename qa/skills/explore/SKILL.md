@@ -13,7 +13,7 @@ ambiguity, it never becomes the selector authority.
 
 Two modes:
 
-- **`mode=hot`** (the default only on a *bare* invocation — see the dispatch guard below) — refresh `specs/_context/app.context.md`: verify `sites:` table, auth flows per site, env vars, naming conventions. Updates `last_verified:` to today. Keep the hot tier tight (~80 lines, a tunable target). **First run (no `app.context.md` yet):** the exploration agent scaffolds a populated `draft: true` context and STOPS for a human to confirm before it counts as verified — the reviewer treats a `draft: true` hot tier as unverified. So the first `/qa:explore` produces a draft to review, not a finalized file.
+- **`mode=hot`** (the default only on a *bare* invocation — see the dispatch guard below) — refresh `specs/_context/app.context.md`: verify `sites:` table, auth flows per site, env vars, naming conventions. Updates `last_verified:` to today. Keep the hot tier tight (~80 lines, a tunable target). **First run (no `app.context.md` yet):** the exploration agent scaffolds a populated `draft: true` context and STOPS for a human to confirm before it counts as verified — the reviewer treats a `draft: true` hot tier as unverified. So the first `/qa-warden:explore` produces a draft to review, not a finalized file.
 - **`mode=area site=<id> area=<name>`** — discover one product area on one site. Writes `specs/_context/<site>/<area>.md` with routes in scope, domain vocab, observed flakes, and cross-site contracts (if any). Selectors are NOT cached — the generator pulls them live at compile time.
 
 **Dispatch before you delegate — the default is a guard, not a fallback.** Check the arguments
@@ -50,10 +50,10 @@ bash scripts/prod-guard.sh --probe
 Examples:
 
 ```
-/qa:explore                                          # refresh hot tier
-/qa:explore mode=hot                                 # same
-/qa:explore mode=area site=admin area=refunds        # write specs/_context/admin/refunds.md
-/qa:explore mode=area site=app area=checkout         # write specs/_context/app/checkout.md
+/qa-warden:explore                                          # refresh hot tier
+/qa-warden:explore mode=hot                                 # same
+/qa-warden:explore mode=area site=admin area=refunds        # write specs/_context/admin/refunds.md
+/qa-warden:explore mode=area site=app area=checkout         # write specs/_context/app/checkout.md
 ```
 
 When to re-run:

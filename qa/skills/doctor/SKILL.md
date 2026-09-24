@@ -5,7 +5,7 @@ context: fork
 background: false
 ---
 
-`/qa:doctor` runs the deterministic self-checks (checks 0–21) the rest of the toolkit describes
+`/qa-warden:doctor` runs the deterministic self-checks (checks 0–21) the rest of the toolkit describes
 in **prose** ("confirm the run resolved tests", "verify freshness", "the 16-key vocab must
 match byte-for-byte", "every `@smoke` test must carry the tag"). The plugin's `PreToolUse`
 hooks cover only what is decidable from a single write (CLAUDE.md §Oracle defense); for
@@ -18,17 +18,17 @@ Run from the QA project root (the dir with `playwright.config.ts` + `CLAUDE.md`)
 ## Run the scripted pass
 
 The entire deterministic check suite (checks 0–21 + rollup) lives in
-`scripts/doctor.sh`, stamped into the project by `/qa:init`. Run it — do not
+`scripts/doctor.sh`, stamped into the project by `/qa-warden:init`. Run it — do not
 re-derive the checks inline:
 
 ```bash
 if [ ! -f scripts/doctor.sh ]; then
   if [ ! -f playwright.config.ts ] && [ ! -f package.json ]; then
-    # never scaffolded — no substrate at all → plain /qa:init (NOT --resync, which repairs a STALE substrate)
-    echo "scripts/doctor.sh missing and no playwright.config.ts/package.json — this project was never scaffolded; run /qa:init to stamp the runtime substrate (never silently pass)"
+    # never scaffolded — no substrate at all → plain /qa-warden:init (NOT --resync, which repairs a STALE substrate)
+    echo "scripts/doctor.sh missing and no playwright.config.ts/package.json — this project was never scaffolded; run /qa-warden:init to stamp the runtime substrate (never silently pass)"
   else
     # scaffolded before doctor.sh shipped — substrate present but stale → repair with --resync
-    echo "scripts/doctor.sh missing but a substrate exists — it predates doctor.sh; re-run /qa:init --resync to stamp it (never silently pass)"
+    echo "scripts/doctor.sh missing but a substrate exists — it predates doctor.sh; re-run /qa-warden:init --resync to stamp it (never silently pass)"
   fi
   exit 2
 fi
@@ -48,8 +48,8 @@ CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}" bash scripts/doctor.sh
 The script prints ✅ / ⚠️ / ❌ per check plus a rollup line, and exits 1 on any ❌
 (0 on healthy or warnings-only). If the script is missing, that is itself a finding —
 **never silently pass**. Distinguish the two states: **no `playwright.config.ts`/`package.json`
-at all** means the project was *never scaffolded* → `/qa:init`; a substrate that *exists but
-lacks `doctor.sh`* predates it → `/qa:init --resync` (the repair path for a stale substrate).
+at all** means the project was *never scaffolded* → `/qa-warden:init`; a substrate that *exists but
+lacks `doctor.sh`* predates it → `/qa-warden:init --resync` (the repair path for a stale substrate).
 
 ## Interpreting the output (what to run per failure)
 
@@ -57,13 +57,13 @@ Print a compact report to chat: one line per check, blocking ❌ first. `doctor`
 does not fix anything — each finding names its repair:
 
 - **Check 0/1 (jq / last-run.json):** the freshness + zero-test gate is single-sourced
-  in `scripts/check-last-run.sh` (shared with `/qa:report` — they used to mirror it in
+  in `scripts/check-last-run.sh` (shared with `/qa-warden:report` — they used to mirror it in
   prose and drifted). `total` there = expected+unexpected+skipped+flaky — every
   *resolved* test, so an **all-red run is fresh, not zero-test** (`expected` alone
   counts only PASSED tests). Corrupt/zero-test → fix the run and refresh via
-  `/qa:run mode=smoke`; stale/missing → confirm which run you mean or re-run.
+  `/qa-warden:run mode=smoke`; stale/missing → confirm which run you mean or re-run.
 - **Check 0b (ripgrep missing, WARN):** `rg` is an undeclared plugin-wide dependency. Install it
-  (`brew install ripgrep`) *before* running `/qa:retire` — a missing `rg` makes retire's
+  (`brew install ripgrep`) *before* running `/qa-warden:retire` — a missing `rg` makes retire's
   "is this shared?" consumer query return empty, which false-reads as "unused ⇒ safe to DELETE".
   A fail-OPEN on a destructive path, so treat it as blocking for retire even though it is a WARN.
 - **Check 9bb (arg-shape drift):** a key's argument shape diverged between
@@ -89,7 +89,7 @@ does not fix anything — each finding names its repair:
   excluded from Check 9's byte-compare and from `--resync` (shared ownership — users add their own
   rules), and the scaffold's jq merge is an additive UNION that can only ADD. So a rule the toolkit
   **retracts** is stranded in every already-scaffolded project forever with nothing to notice it.
-  Delete the named rule by hand; `/qa:init --resync` will not do it for you.
+  Delete the named rule by hand; `/qa-warden:init --resync` will not do it for you.
 - **Check 9f (healer MCP grant ↔ settings.json mirror):** the 17 `mcp__playwright__*` entries
   are hand-typed twice — as `agents/healer.md`'s `tools:` list and as `templates/settings.json`'s
   `permissions.allow[]` — and were the last hand-mirrored pair in the substrate with no check.
@@ -100,7 +100,7 @@ does not fix anything — each finding names its repair:
   A separate **WARN** arm compares the shipped MCP grants against this project's
   `.claude/settings.json`: this is the complement of 9c — 9c catches a rule the toolkit
   RETRACTED and stranded downstream, this catches one it ADDED that never reached a project
-  scaffolded earlier. Repair is a plain `/qa:init` (the permission merge is additive and runs
+  scaffolded earlier. Repair is a plain `/qa-warden:init` (the permission merge is additive and runs
   every time), not a hand edit. Scoped to the `mcp__` entries on purpose: those are capability
   grants with one right answer, whereas a user may legitimately delete a policy rule, and a
   whole-allow-list check would nag them forever. (`scripts/doctor.sh` is itself a resynced file, so a
@@ -112,15 +112,15 @@ does not fix anything — each finding names its repair:
   successful merge deletes the file, so the signal cannot go stale; a hand-merged leftover is
   reported separately as stale. The presence test sits outside the `jq` gate, because the state
   it detects is `jq` being absent.
-- **Check 9g (`/qa:gen`'s compiler → verifier chain + the manifest gate):** `generator` and
+- **Check 9g (`/qa-warden:gen`'s compiler → verifier chain + the manifest gate):** `generator` and
   `verifier` are two agents on purpose — the agent that wrote an `expect(...)` never decides
   at steps 8b/8c whether it catches an injected defect, because its cheapest path is to claim
   it does. No subagent can spawn another, so the chain exists **only** as prose in
-  `skills/gen/SKILL.md`; if that prose drops the second call, `/qa:gen` goes green with every
+  `skills/gen/SKILL.md`; if that prose drops the second call, `/qa-warden:gen` goes green with every
   spec compiled but ungraded. **FAIL** if
   `agents/verifier.md` is gone, or if that prose stops naming either agent (presence, not
   wording — same doctrine as 9bd). The third arm is the load-bearing one: the route manifest is
-  the *ship* signal (`/qa:impact` counts a spec as live coverage only once its manifest exists)
+  the *ship* signal (`/qa-warden:impact` counts a spec as live coverage only once its manifest exists)
   and it is gated on verification passing, so **exactly one agent may declare
   `Write(artifacts/route-manifests/**)`, and it must be the verifier.** If the generator ever
   reclaims that write, the gate detaches from the thing it gates and a never-verified spec ships
@@ -130,7 +130,7 @@ does not fix anything — each finding names its repair:
 - **Check 9, CLAUDE.md vocabulary containment:** the delivery half of the upgrade path.
   `CLAUDE.md` is shared-ownership, so it is excluded from `--resync` *and* from Check 9's
   byte-compare — yet it is where every new authoring feature is documented, and the in-project
-  agents read it rather than the plugin. After a clean, green, exit-0 `/qa:init --resync` the
+  agents read it rather than the plugin. After a clean, green, exit-0 `/qa-warden:init --resync` the
   stamped `CLAUDE.md` can therefore lack every new authoring feature (`fault:`, `clock:`,
   `lock:`, `verifier`) while doctor says nothing else. The symbols come from
   `scripts/claude-md-vocab.txt` and are gated on the shipped template, the same derive-don't-
@@ -161,9 +161,9 @@ does not fix anything — each finding names its repair:
   feature needs no 17th key, which makes the rule depend on a key it does not own. Retire that key
   and every `fault:` spec becomes unauthorable while four files still demand the pairing.
 - **Check 9k (unmanifested-walk ownership):** "which compiled tests carry no route manifest" is
-  one rule with two consumers that must never disagree — `/qa:impact` prints it as
+  one rule with two consumers that must never disagree — `/qa-warden:impact` prints it as
   `### BLIND SPOTS` (a zero-match there is only honest if the caller is told which specs were
-  invisible) and `/qa:coverage` dim 0 needs it to avoid the label it used to print, where an
+  invisible) and `/qa-warden:coverage` dim 0 needs it to avoid the label it used to print, where an
   unmanifested test's routes landed under "touched by NO compiled test (planned, untested)" —
   false for a spec that was authored and compiled, and it sent the reader to write a second
   spec instead of clearing the blocker the verifier withheld the manifest for. **Arms 1 and 2
@@ -191,10 +191,10 @@ does not fix anything — each finding names its repair:
 - **Check 2 / 9b (vocab drift):** re-sync the 16-key mirror with CLAUDE.md (and, for
   9b, upgrade/re-stamp the plugin agents) in the same commit as any vocab change.
 - **Check 3 (vacuous smoke):** tag at least the P1 happy path `@smoke`, then
-  `/qa:run mode=smoke`.
+  `/qa-warden:run mode=smoke`.
 - **Check 4 (orphaned sentinels):** close the loop per the sentinel→action table in
   `${CLAUDE_PLUGIN_ROOT}/reference/sentinel-actions.md` — re-seed / re-explore / migrate as the sentinel names.
-- **Check 5/5b (stale or draft context):** `/qa:explore mode=area site=<id> area=<name>` to refresh
+- **Check 5/5b (stale or draft context):** `/qa-warden:explore mode=area site=<id> area=<name>` to refresh
   (both keys — exploration STOPs on either one missing rather than guessing; Check 5b prints the
   exact command for each stale file),
   then clear `draft:` / bump `last_verified:`.
@@ -219,12 +219,12 @@ does not fix anything — each finding names its repair:
   `alpha`/`beta`/`rc` strings and 7c screens only the lockfile's resolved core for alpha, so a
   clean, stable, *skewed* set passes both. A missing site is reported, not failed — `package.json`
   is in `resync-set.txt`, so Check 9 owns the deleted-block case.
-- **Check 8/9 (canonical scripts / substrate drift):** `/qa:init --resync` (backs up
+- **Check 8/9 (canonical scripts / substrate drift):** `/qa-warden:init --resync` (backs up
   drifted files to `*.qa-bak`). A missing stock var in `.env.example` → restore it from
   the shipped template, or park it commented (`# VAR=`) — the stock list is derived from
   the template, and the file itself is shared-ownership and never byte-compared. The
   drift baseline is the RECORDED active plugin install; a "baseline GUESSED by newest
-  mtime" ⚠️ means the install record didn't resolve — re-run via `/qa:doctor` (which
+  mtime" ⚠️ means the install record didn't resolve — re-run via `/qa-warden:doctor` (which
   resolves `CLAUDE_PLUGIN_ROOT`) before trusting a drift verdict.
 - **Check 10 (site↔project routing):** add the missing `playwright.config.ts` project
   or fix the `sites[].id`.
@@ -237,45 +237,45 @@ does not fix anything — each finding names its repair:
   whose linked `bugs/*.md` is already `Status: fixed`/`reverted` — a stale marker laundering a
   resolved defect into the green roll-up. Remove the marker, or reopen the bug if it regressed
   (mirrors reviewer Check 3).
-- **Check 12 (stale manifest):** `/qa:gen <spec>` to regenerate the route manifest.
+- **Check 12 (stale manifest):** `/qa-warden:gen <spec>` to regenerate the route manifest.
 - **Check 13 (declared-mutation isolation, WARN):** the basis declares
   `mutates_server_state: true` but a resolved test shows no isolation marker
   (parallelIndex / serial / seeded fixture) — un-isolated mutation is green at 1 worker,
-  flaky at scale. Resolution mirrors `/qa:coverage` dim 1: the direct
+  flaky at scale. Resolution mirrors `/qa-warden:coverage` dim 1: the direct
   `tests/<feature>.spec.ts` PLUS every fanned spec linking back via `basis:` (twins
   included); a mutating feature that resolves to ZERO tests is its own WARN, never a
   silent skip. Wire the isolation (see the basis `test_data:` block) or regenerate via
-  `/qa:gen`. The reviewer's code-level Check 13 remains the enforcing gate.
+  `/qa-warden:gen`. The reviewer's code-level Check 13 remains the enforcing gate.
 - **Check 14 (unmanaged test, WARN):** a `tests/**/*.spec.ts` with no paired
   `specs/<area>/<feature>.md` sits outside the assertion contract — write the spec
-  (`/qa:new-spec`) or consciously exempt it (move to `tests-legacy/`).
+  (`/qa-warden:new-spec`) or consciously exempt it (move to `tests-legacy/`).
 - **Check 15/15b (review attestation, WARN):** the spec/test pair changed since its
   `reports/review/<area>/<feature>.reviewed` marker (or was never reviewed), or a
   `// verified: must_fail_when "…"` stamp no longer matches the spec's invariant text —
-  re-run `/qa:review` (and `--verify-invariants` for a stale stamp). Markers are
+  re-run `/qa-warden:review` (and `--verify-invariants` for a stale stamp). Markers are
   agent-writable convenience; the unforgeable layer is the CI required-status
-  (see `/qa:review` §CI wiring) — this catches *forgotten* reviews, not malicious ones.
+  (see `/qa-warden:review` §CI wiring) — this catches *forgotten* reviews, not malicious ones.
 - **Check 16 (smoke-tagged spec with no test, WARN):** a spec declares a `tags: [… smoke …]`
-  scenario but was never compiled — `/qa:run mode=smoke`'s `--grep @smoke` is blind to that P1 flow, so a
+  scenario but was never compiled — `/qa-warden:run mode=smoke`'s `--grep @smoke` is blind to that P1 flow, so a
   fully-broken governed path (admin RBAC, checkout charge==total) passes the smoke gate because no
   test exists to fail. Complements Check 3 (which only proves *some* test carries the tag). Compile
-  it (`/qa:gen`) or drop the smoke tag from the spec.
+  it (`/qa-warden:gen`) or drop the smoke tag from the spec.
 - **Check 17 (spec with no compiled test — ANY tag, WARN):** the complement to Check 16 — a
   `@regression`-only spec authored but never generated sits outside the assertion contract and no
-  run exercises it (Check 15 `continue`s past it, Check 16 is smoke-only). `/qa:gen` it, or
-  `/qa:retire` / `# waived:` it if its scenarios are intentionally folded into a sibling.
+  run exercises it (Check 15 `continue`s past it, Check 16 is smoke-only). `/qa-warden:gen` it, or
+  `/qa-warden:retire` / `# waived:` it if its scenarios are intentionally folded into a sibling.
 - **Check 18 (abandoned authoring chain, WARN):** a `.cases.md` (the approval artifact) with no
   downstream spec — the intake→ideate→approve chain ran but never produced a spec, so the intended
-  coverage silently never shipped. `/qa:new-spec <area/feature>` or `/qa:retire` the chain.
+  coverage silently never shipped. `/qa-warden:new-spec <area/feature>` or `/qa-warden:retire` the chain.
 - **Check 19 (unattested interview, WARN):** a `.basis.md` with `[human-answered]` oracle rules but
   `interview: none`/absent — the human grounding is unattested (a fabricated basis looks identical).
-  `/qa:intake` should stamp the real question count in the basis `interview:` field.
+  `/qa-warden:intake` should stamp the real question count in the basis `interview:` field.
 - **Check 20 (`.env`-load idiom drift, WARN):** the canonical `.env`-load one-liner is duplicated
   verbatim across several plugin skill/agent files (a run-verbatim command belongs at its point
   of use); this WARNs only if more than one distinct form exists. Re-sync every
   copy to the canonical `${CLAUDE_PROJECT_DIR:-.}`-anchored form in CLAUDE.md §Environment.
 - **Check 21 (fresh-project readiness, INFO):** not a warning — on a brand-new project (no
-  `app.context.md`/specs) it prints a "setup looks healthy — next run `/qa:explore`" verdict so the
+  `app.context.md`/specs) it prints a "setup looks healthy — next run `/qa-warden:explore`" verdict so the
   expected empty-project WARNs read as "expected at this stage", not "something's broken".
 
 ## Optional: `--verify-invariants specs/<area>/<feature>.md` (executable `must_fail_when`)

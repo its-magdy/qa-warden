@@ -10,12 +10,12 @@ Delegate to the `planner` subagent (uses `@playwright/cli`) to draft a new spec.
 feature — print the block below verbatim and stop:
 
 ```
-Usage:  /qa:new-spec <area/feature> [site=<id>]
+Usage:  /qa-warden:new-spec <area/feature> [site=<id>]
 Draft a spec for ONE feature. <area/feature> is a path you choose — for example:
 
-  /qa:new-spec auth/login          test the sign-in flow
-  /qa:new-spec tasks/update-task   test editing a task
-  /qa:new-spec checkout/coupon     test applying a discount code
+  /qa-warden:new-spec auth/login          test the sign-in flow
+  /qa-warden:new-spec tasks/update-task   test editing a task
+  /qa-warden:new-spec checkout/coupon     test applying a discount code
 
 First time? Follow ${CLAUDE_PLUGIN_ROOT}/reference/tutorial-first-test.md (a ~10-minute walkthrough).
 ```
@@ -40,20 +40,20 @@ for tok in "$@"; do
   esac
 done
 # Canonical resolver accepts bare <area>/<feature>, <area>/<feature>.md, or a full
-# specs/… path (missing script → re-run /qa:init to stamp it).
+# specs/… path (missing script → re-run /qa-warden:init to stamp it).
 SPEC_PATH=$(bash scripts/resolve-spec-path.sh spec "$FEATURE")   # e.g. specs/checkout/coupon.md
 ```
-So `/qa:new-spec admin/refund-partial site=admin` → `specs/admin/refund-partial.md` with
+So `/qa-warden:new-spec admin/refund-partial site=admin` → `specs/admin/refund-partial.md` with
 `site=admin` handed to the planner, never baked into the filename. With no `site=`, the planner
 infers from the story and raises an Open Question if ambiguous.
 
 **Area-name sanity check (WARN — the fast lane is deliberately lighter than
-`/qa:intake`) (F-20).** After resolving the `<area>` segment, check it against
-`naming.area_dirs` in `specs/_context/app.context.md` — the same list `/qa:intake`
+`/qa-warden:intake`) (F-20).** After resolving the `<area>` segment, check it against
+`naming.area_dirs` in `specs/_context/app.context.md` — the same list `/qa-warden:intake`
 **hard-stops** on. The fast lane does NOT hard-stop (it is the lighter path), but if
 `<area>` is not a declared `area_dir` (e.g. `catalog` when the declared area is
 `products`), **WARN**: "area `<area>` is not in `naming.area_dirs` — this creates a
-mismatched `specs/<area>/` tree that `/qa:coverage` will later flag as an orphan area;
+mismatched `specs/<area>/` tree that `/qa-warden:coverage` will later flag as an orphan area;
 add it to `area_dirs` or use the declared name." Then proceed — the operator may be
 intentionally introducing a new area.
 
@@ -61,9 +61,9 @@ intentionally introducing a new area.
 directory comes from the **bare `<area>/<feature>` token**. The shipped `admin`
 Playwright project routes by the **`@site:admin` tag** the generator always emits — NOT
 by a `tests/admin/**` path — so `site=admin` alone sends the spec to the admin baseURL
-wherever its area folder lives: `/qa:new-spec refund-partial site=admin` routes
+wherever its area folder lives: `/qa-warden:new-spec refund-partial site=admin` routes
 correctly. Group admin specs under an `admin/` area only for organization
-(`/qa:new-spec admin/refund-partial site=admin`), never because routing requires it.
+(`/qa-warden:new-spec admin/refund-partial site=admin`), never because routing requires it.
 `site=` flows to the planner for context/auth and to the generator as the `@site:` tag.
 (Why routing is tag-based, and the trap in re-introducing a path-routed project:
 `reference/DESIGN.md` §"Site routing is tag-based, not path-based".)
@@ -77,7 +77,7 @@ name the specific change. Its Process 4c then takes the `Read`+`Edit` path inste
 overwriting: a one-pass rewrite silently drops hand-added scenarios, `# waived:` lines and the
 `basis:` pairing with every downstream check still green. Same path `.healer-needs-spec-update`
 uses. If the story replaces the oracle wholesale rather than amending it, the planner STOPs and
-hands the decision back — `/qa:retire` the old spec first, then re-run this command clean.
+hands the decision back — `/qa-warden:retire` the old spec first, then re-run this command clean.
 
 The planner reads:
 
@@ -87,11 +87,11 @@ The planner reads:
    threshold in `staleness_tiers:`), the planner **cannot spawn exploration
    itself** (a subagent can't invoke another subagent). It STOPS and returns a
    handoff asking for area context; THIS command then runs
-   `/qa:explore mode=area site=<id> area=<name>` and re-invokes the planner.
+   `/qa-warden:explore mode=area site=<id> area=<name>` and re-invokes the planner.
    (This block is deliberate and has no escape hatch: the planner's own prompt
    forbids drafting from the hot tier alone — guessed area vocabulary is the
    failure mode this gate exists to prevent, and no downstream check reads a
-   `draft:` flag on a *spec*, so a "flagged" draft would flow into `/qa:gen`
+   `draft:` flag on a *spec*, so a "flagged" draft would flow into `/qa-warden:gen`
    unmarked in effect.)
 
 It produces Markdown narrative with a fenced ```yaml oracle block containing:
@@ -108,7 +108,7 @@ the evidence. `must_fail_when` is **advisory in the sense that the author isn't 
 to *declare* one — but once declared it IS enforced**: reviewer **Check 2b** FAILs any
 spec whose `must_fail_when:`/`fail_if:` invariant isn't reified as an oracle (or
 explicitly waived), and the verifier's post-green **step 8b** fault-injects each one to
-prove the oracle actually goes red (`/qa:doctor --verify-invariants` re-runs this). So a
+prove the oracle actually goes red (`/qa-warden:doctor --verify-invariants` re-runs this). So a
 declared invariant that you drop from the oracle is a merge blocker, not a silent pass.
 Only `output_schema` lacks a reviewer presence-check. (See CLAUDE.md §"Oracle defense".)
 
@@ -121,21 +121,21 @@ consciously leave one out (deferred to a follow-up spec, out of this spec's scop
 `# waived: <case> — <reason>` line to the spec (in `# Open questions` or a `waiver:` note) naming the
 specific case. An approved case that is neither a scenario nor a named waiver is flagged by reviewer
 **Check 14** (approved-case traceability, WARN — the green-but-incomplete catch) and shows up in
-`/qa:coverage` dim-5's count. Naming it "Deferred"/"pruned" back in the `.cases.md` banner also
+`/qa-warden:coverage` dim-5's count. Naming it "Deferred"/"pruned" back in the `.cases.md` banner also
 counts as a waiver. This keeps the human approval gate load-bearing rather than advisory.
-When approved groups fan out into separate specs (one `/qa:new-spec` per group), the planner
-sets `basis: <area>/<feature>` on every fanned spec so Check 14 and `/qa:coverage` can pair
+When approved groups fan out into separate specs (one `/qa-warden:new-spec` per group), the planner
+sets `basis: <area>/<feature>` on every fanned spec so Check 14 and `/qa-warden:coverage` can pair
 it back to the checklist.
 
-**Naming a fanned spec — deriving the `<feature-case>` the chain hands you.** After `/qa:approve`,
-`/qa:ideate` and `/qa:approve` point you at `/qa:new-spec <area/feature-case>` "for each approved
+**Naming a fanned spec — deriving the `<feature-case>` the chain hands you.** After `/qa-warden:approve`,
+`/qa-warden:ideate` and `/qa-warden:approve` point you at `/qa-warden:new-spec <area/feature-case>` "for each approved
 group." The `-case` suffix is a **human-readable slug of the approved rule-GROUP, not the raw row id**
 (R1, R2, NF.a11y…). Derive it from the group's subject:
-- one spec for the whole feature → just `/qa:new-spec auth/login` (no suffix)
-- a scoped group, e.g. approved rows about coupon-stacking → `/qa:new-spec checkout/coupon-stacking`
-- a non-functional group, e.g. `NF.a11y` → `/qa:new-spec checkout/coupon-a11y`
+- one spec for the whole feature → just `/qa-warden:new-spec auth/login` (no suffix)
+- a scoped group, e.g. approved rows about coupon-stacking → `/qa-warden:new-spec checkout/coupon-stacking`
+- a non-functional group, e.g. `NF.a11y` → `/qa-warden:new-spec checkout/coupon-a11y`
 
 Keep the slug kebab-case and stable; the planner stamps `basis: <area>/<feature>` (above) so
 coverage/Check 14 pair every fanned spec back to the same checklist regardless of the suffix.
 
-Do NOT emit `.spec.ts` here — that is `/qa:gen`'s job.
+Do NOT emit `.spec.ts` here — that is `/qa-warden:gen`'s job.

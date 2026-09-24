@@ -4,9 +4,9 @@
 # ALWAYS exits 0 — the caller decides what a WARN means for its own verdict.
 #
 # Usage: bash scripts/post-run-checks.sh [--prefix <str>] [--only <a,b,c>]
-#   --prefix  line prefix for each warning (default `WARN:`; /qa:doctor passes its ⚠️ marker)
+#   --prefix  line prefix for each warning (default `WARN:`; /qa-warden:doctor passes its ⚠️ marker)
 #   --only    comma-separated subset of `sentinels,stray,bugs` (default: all three).
-#             /qa:doctor runs `--only sentinels,stray` — it reconciles bug files itself in
+#             /qa-warden:doctor runs `--only sentinels,stray` — it reconciles bug files itself in
 #             Check 11b (evidence durability over ALL bugs, not just open ones), so surfacing
 #             them here too would double-count them into its warn rollup.
 #
@@ -15,8 +15,8 @@
 # so a caller can fold the counts into its roll-up (`… · 1 open bug → NOT all-clear`) without
 # re-deriving them.
 #
-# WHY THIS EXISTS: all three scans were copy-pasted across /qa:run mode=smoke, /qa:report,
-# /qa:run mode=single and doctor Checks 4/11b/14 — the sentinel one-liner was BYTE-identical in
+# WHY THIS EXISTS: all three scans were copy-pasted across /qa-warden:run mode=smoke, /qa-warden:report,
+# /qa-warden:run mode=single and doctor Checks 4/11b/14 — the sentinel one-liner was BYTE-identical in
 # run-smoke and report, and the stray-spec loop's `_`-prefix filter existed in four copies that
 # have to stay in lockstep with playwright.config.ts's `testIgnore`. Each copy also carried its
 # own 6-10 line comment essay re-explaining the same rationale. One owner, every caller invokes it.
@@ -53,7 +53,7 @@ done < <(find artifacts -maxdepth 1 -name '.healer-needs-*' -type f 2>/dev/null)
 # EXCLUDE `_`-prefixed scratch specs in BOTH forms — basename AND directory segment — in lockstep
 # with playwright.config.ts's `testIgnore: ['**/_*.spec.ts','**/_*/**']`. `-path '*/_*/*'` alone
 # catches only a `_`-prefixed DIRECTORY; a `_`-prefixed BASENAME at the tests/ root (the sanctioned
-# /qa:review url=<url> throwaway `tests/_audit-visual.spec.ts`) has just ONE slash and never matches it. Without
+# /qa-warden:review url=<url> throwaway `tests/_audit-visual.spec.ts`) has just ONE slash and never matches it. Without
 # both, the warning below is FACTUALLY WRONG for that file — it claims a full run "WILL run it" when
 # testIgnore provably drops it from collection, and a false alarm trains readers to ignore a warning
 # whose whole job is catching a genuinely stray spec.
@@ -61,7 +61,7 @@ enabled stray && while IFS= read -r t; do
   [ -n "$t" ] || continue
   rel="${t#tests/}"; base="${rel%.spec.ts}"; base="${base%.metamorphic}"   # twins pair by stripping .metamorphic
   [ -f "specs/${base}.md" ] && continue
-  echo "$PREFIX unmanaged spec $t — no specs/${base}.md, so it sits outside the assertion contract. It is not in this run's lane, but a full 'npx playwright test' WILL collect it: qualify the go/no-go. Delete the stray spec (or pair it with a spec) and run /qa:doctor."
+  echo "$PREFIX unmanaged spec $t — no specs/${base}.md, so it sits outside the assertion contract. It is not in this run's lane, but a full 'npx playwright test' WILL collect it: qualify the go/no-go. Delete the stray spec (or pair it with a spec) and run /qa-warden:doctor."
   n_stray=$((n_stray+1))
 done < <(find tests -name '*.spec.ts' -type f ! -name '_*' ! -path '*/_*/*' 2>/dev/null)
 
@@ -77,7 +77,7 @@ enabled bugs && while IFS= read -r bug; do
   n_bugs=$((n_bugs+1))
 done < <(bash scripts/bug-status.sh --list-open 2>/dev/null)
 
-[ "$n_bugs" -gt 0 ] && echo "$PREFIX → $n_bugs open bug(s) on file: a run is NOT a verdict. Run /qa:report for the go/no-go quality state."
+[ "$n_bugs" -gt 0 ] && echo "$PREFIX → $n_bugs open bug(s) on file: a run is NOT a verdict. Run /qa-warden:report for the go/no-go quality state."
 
 echo "post-run: sentinels=$n_sent stray=$n_stray open-bugs=$n_bugs"
 exit 0

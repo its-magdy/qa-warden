@@ -10,7 +10,7 @@
 # exclusion list in scripts/resync-set.txt). Both exclusions are correct in isolation. Together
 # they leave a hole, and it is the widest one in the upgrade path: CLAUDE.md is where every new
 # AUTHORING feature is documented, and the in-project agents read THAT file, not the plugin.
-# Measured on a real 0.2.0 -> HEAD upgrade: after a clean, green, exit-0 `/qa:init --resync`
+# Measured on a real 0.2.0 -> HEAD upgrade: after a clean, green, exit-0 `/qa-warden:init --resync`
 # the stamped CLAUDE.md had ZERO mentions of `fault:`, `clock:`, `lock:` or `verifier`. The
 # runtime was current and the vocabulary was a whole release behind, and nothing said a word.
 #
@@ -25,7 +25,7 @@
 # NOT THE ORACLE KEYS. Those are Check 2's, read from scripts/oracle-keys.txt against this same
 # file. In particular `lock:` MUST NOT be added there: it is a `TestDetails` field, not an
 # oracle key (CLAUDE.md §"Reporting pipeline" says so outright), and oracle-keys.txt is also
-# read by Check 9b and by /qa:coverage's KEYS_RE — widening it would corrupt the closed
+# read by Check 9b and by /qa-warden:coverage's KEYS_RE — widening it would corrupt the closed
 # vocabulary in three consumers to patch a fourth.
 #
 # THE CHECK IS A FLOOR. Presence anywhere in the file satisfies it, like a commented `# VAR=`

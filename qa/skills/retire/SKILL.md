@@ -45,7 +45,7 @@ deleted, harness verified green afterwards. Git history is the archive: there is
 
    **KEEP**
    - `bugs/*.md` referencing the spec — historical record; append one line:
-     `> Note: referencing spec retired <date> by /qa:retire.`
+     `> Note: referencing spec retired <date> by /qa-warden:retire.`
    - `fixtures/auth.<site>.json` + `tests/<site>.setup.ts` — per-site, shared — NEVER touch.
    - The area context file — **resolve its path from the retired spec's `basis:` field /
      the (site, area) mapping, NOT a bare `specs/_context/<site>/<area>.md`
@@ -58,7 +58,7 @@ deleted, harness verified green afterwards. Git history is the archive: there is
      auto-delete.
 
 2. **Print the table and STOP** for explicit confirmation (blast-radius confirm,
-   like `/qa:batch-fix`). No confirmation, no deletion.
+   like `/qa-warden:batch-fix`). No confirmation, no deletion.
 
 3. **Execute.** Per confirmed file, delete through the **sanctioned deletion script**
    (one exact path per call — never a glob):
@@ -82,6 +82,6 @@ deleted, harness verified green afterwards. Git history is the archive: there is
    npx playwright test --list --reporter=line >/dev/null
    ```
 
-5. **Report** deleted/kept/why, the impact-graph note (manifest removed → `/qa:impact`
+5. **Report** deleted/kept/why, the impact-graph note (manifest removed → `/qa-warden:impact`
    no longer sees this feature), and the orphaned-area note if it applies. Remind:
    git history is the archive.

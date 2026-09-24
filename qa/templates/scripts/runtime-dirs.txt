@@ -1,7 +1,7 @@
 # runtime-dirs.txt — the ONE list of runtime directories the subagents write into.
 #
 # Two consumers read this file; neither hand-enumerates the set any more:
-#   - bin/qa-scaffold      : `mkdir -p` after stamping templates (the /qa:init path)
+#   - bin/qa-scaffold      : `mkdir -p` after stamping templates (the /qa-warden:init path)
 #   - scripts/init.sh      : `mkdir -p` in step 2      (the plugin-free `npm run init` path)
 # Both entry points MUST produce the same tree. That invariant used to live in two paired prose
 # comments ("Keep this list IDENTICAL to …") on two hand-kept brace lists — a comment cannot

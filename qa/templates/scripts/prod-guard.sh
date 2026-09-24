@@ -16,7 +16,7 @@
 #
 # Usage:  bash scripts/prod-guard.sh [url ...]
 # Any URL passed as an argument is screened by the SAME logic as the env vars — for
-# commands whose target comes from their arguments instead of .env (/qa:review url=<url>).
+# commands whose target comes from their arguments instead of .env (/qa-warden:review url=<url>).
 #
 # Exit 0 = safe to proceed; exit 1 = REFUSED (the calling command must STOP and
 # ask the user). Loads .env itself (set -a export), so it is safe to run as the
@@ -28,7 +28,7 @@ set -a; [ -f "${CLAUDE_PROJECT_DIR:-.}/.env" ] && . "${CLAUDE_PROJECT_DIR:-.}/.e
 # single-site forks use), API_URL and *_API_URL (the test-data-seed create/delete-users path drives
 # the API host directly, so a prod API with a real admin token would mutate production rows outside
 # a BASE_URL-only guard). `--list-targets` prints this set as `NAME<TAB>value` and exits WITHOUT
-# screening — it is how /qa:explore's reachability probe enumerates the same targets instead of
+# screening — it is how /qa-warden:explore's reachability probe enumerates the same targets instead of
 # re-typing the regex. That copy had already drifted narrower (`^BASE_URL_[A-Z0-9_]*`), so a target
 # could be prod-GUARDED but never reachability-probed and a down seed API surfaced later as a
 # mystery red instead of a STOP.
@@ -42,7 +42,7 @@ if [ "${1:-}" = "--list-targets" ]; then
 fi
 
 # `--probe` — reachability of that SAME target set, as one allow-listed call. It used to be a
-# multi-line loop printed in /qa:explore's skill; a permission rule has to match every subcommand
+# multi-line loop printed in /qa-warden:explore's skill; a permission rule has to match every subcommand
 # of a compound command, so under the shipped allow-list that loop prompted (and was flatly denied
 # headless — Test-35, 2026-09-21) while this script's own invocation never does. Reachability ONLY:
 # any HTTP status means the host is up; DNS failure / timeout / refused is the STOP. Screens
@@ -95,7 +95,7 @@ fi
 # screen_target <label> <url> — the ONE screening body: host extraction + placeholder sentinel
 # + word-boundary prod marker. Sets rc=1 on refusal. Used for every BASE_URL_*/API_URL in the
 # environment AND for any URL passed as a positional argument (see the arg loop below), so a
-# caller that takes a bare URL — /qa:review url=<url> — no longer has to re-implement this screening by
+# caller that takes a bare URL — /qa-warden:review url=<url> — no longer has to re-implement this screening by
 # hand in prose. Prose can't reproduce the scheme strip, the greedy userinfo strip, or the
 # placeholder sentinels correctly, and a hand-rolled copy drifts from the .ts layer.
 screen_target() {
@@ -149,7 +149,7 @@ for v in $(target_names); do
 done
 
 # Positional URL arguments — screened by the SAME body as the env vars. A command whose TARGET
-# comes from its arguments rather than from .env (`/qa:review url=<url>`) passes it here:
+# comes from its arguments rather than from .env (`/qa-warden:review url=<url>`) passes it here:
 #   bash scripts/prod-guard.sh "$URL"
 # This script's header promises to screen "every target a run could touch", and an argument URL
 # is exactly that. Args are additive: the env sweep above always runs too.

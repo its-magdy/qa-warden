@@ -1,7 +1,7 @@
 # `--verify-invariants` — executable `must_fail_when` (targeted fault injection)
 
 THE single source of the injection mechanism. Two consumers read this file and must not
-diverge: the `/qa:doctor --verify-invariants` mode, and the **verifier** subagent.
+diverge: the `/qa-warden:doctor --verify-invariants` mode, and the **verifier** subagent.
 The **verifier**'s Process step 8b runs this exact injection inline on every new spec that declares a
 `must_fail_when:`/`fail_if:`. Do not invent a divergent mechanism in either place.
 

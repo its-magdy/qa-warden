@@ -1,10 +1,10 @@
 #!/bin/sh
-# retire-delete.sh — the ONE sanctioned deletion primitive for /qa:retire.
+# retire-delete.sh — the ONE sanctioned deletion primitive for /qa-warden:retire.
 #
 # WHY THIS EXISTS (F-031): the shipped .claude/settings.json deny-list blocks the
 # destructive primitives directly — `Bash(rm *)`, `Bash(find * -delete*)`,
 # `Bash(truncate *)` — and deny ALWAYS beats allow AND cannot be interactively
-# approved. So /qa:retire (whose whole job is to delete a retired feature's files)
+# approved. So /qa-warden:retire (whose whole job is to delete a retired feature's files)
 # had no way to actually delete out-of-the-box: its inline `find … -delete` was
 # denied, producing a correct dry-run inventory but a no-op execute phase.
 #

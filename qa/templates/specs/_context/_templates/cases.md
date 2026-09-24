@@ -1,27 +1,27 @@
 <!--
-CANDIDATE-CASE CHECKLIST template — written by /qa:ideate from the .basis.md.
+CANDIDATE-CASE CHECKLIST template — written by /qa-warden:ideate from the .basis.md.
 This is a PLAN of what to test, NOT runnable tests. A human approves/prunes, then
-each approved group → /qa:new-spec → /qa:gen.
+each approved group → /qa-warden:new-spec → /qa-warden:gen.
 ☐ = pending approval · ☑ = approved · ~~strike~~ = pruned.
 Group = one spec; its examples = that spec's scenarios. Delete this comment.
 
 FORMAT NOTE (F-20): these rows are a HUMAN-REVIEW checklist (free-text, comment-flavored),
-NOT a lintable structured schema. /qa:new-spec re-parses the prose. Two things guard against a
+NOT a lintable structured schema. /qa-warden:new-spec re-parses the prose. Two things guard against a
 silently-dropped approved case: (1) the reviewer's **Check 14** (approved-case traceability) reads
 this file's `> HUMAN APPROVAL` banner + rows and WARNs, per case, on an approved row that has no
-scenario and no waiver — the per-case (LLM-judged, prose→scenario) signal; (2) /qa:coverage dim-5 is
+scenario and no waiver — the per-case (LLM-judged, prose→scenario) signal; (2) /qa-warden:coverage dim-5 is
 the COARSE count companion (approved-case COUNT vs scenario count — it cannot verify each specific
 row landed). Approval is read from the BANNER (a "Scope: …" / "Deferred: …" prose list), since the
-☐/☑ boxes are often left un-flipped. The banner + the per-row ids are MINTED by `/qa:approve`
+☐/☑ boxes are often left un-flipped. The banner + the per-row ids are MINTED by `/qa-warden:approve`
 (hand-editing the banner remains the offline fallback). A conscious drop should be named under "Deferred"/"pruned" in
 the banner OR carry a `# waived: <case> — <reason>` note in the spec (both suppress the Check 14
 WARN). To upgrade Check 14 from WARN to a deterministic CI FAIL, have the planner/generator carry
-`covers: [<id>]` on each scenario using the ids `/qa:approve` mints (see reference/test-case-ideation.md).
+`covers: [<id>]` on each scenario using the ids `/qa-warden:approve` mints (see reference/test-case-ideation.md).
 -->
 
 # cases: <area>/<feature>   (kind: <kind>)
 
-> HUMAN APPROVAL — recorded by /qa:approve <YYYY-MM-DD>     <!-- /qa:approve writes this banner
+> HUMAN APPROVAL — recorded by /qa-warden:approve <YYYY-MM-DD>     <!-- /qa-warden:approve writes this banner
 > Scope: <approved ids>  · Deferred: <ids — reason>  · Pruned: <ids — reason>
      and stamps row ids (R<rule#>.<letter> / NF.<slug> / C.<slug>, append-only — do not hand-renumber). -->
 
@@ -70,7 +70,7 @@ Critic:
   ⚠ WARN: <basis inputs[] partition with no matching row — F-19>
   ✗ FAIL: <declared non-functional need with zero matching cases — blocks until resolved>
 
-Flow to specs: each rule above → one /qa:new-spec; its examples → that spec's scenarios:.
+Flow to specs: each rule above → one /qa-warden:new-spec; its examples → that spec's scenarios:.
 
 <!-- bug kind:
 Regression case (@regression, MUST carry must_fail_when — advisory intent record):
@@ -81,7 +81,7 @@ Bug-class scan (WARN — consider, not required): same defect pattern may exist 
 
 <!-- enhancement kind:
 New-behavior cases: <lens-rotated cases for what changed>
-Regression set (from /qa:impact <route|field|factory|area|operation|source>): <affected existing specs>
+Regression set (from /qa-warden:impact <route|field|factory|area|operation|source>): <affected existing specs>
   (GraphQL app? route= collapses to /graphql and discriminates nothing — use operation=.
    Business rule changed rather than code? source=<name> finds the basis rules standing on it.)
 Safe fallback: full suite still runs as regression (npx playwright test) — impact selection

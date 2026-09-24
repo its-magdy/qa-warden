@@ -1,5 +1,5 @@
 ---
-description: Execute Playwright tests in one of four ways — run a single spec headless/CI-shaped (mode=single), run the @smoke-tagged suite (mode=smoke), repeat-probe a spec N times to check flakiness/repeatability/stability (mode=repeat), or run only the tests a git change touches (mode=changed). Deterministic, JSON-only, no LLM in the loop. Do not hand-roll a bare `npx playwright test` for any of these — this skill owns the resolver, freshness/zero-test guards, and report paths every downstream consumer (`/qa:report`, `/qa:heal`) depends on.
+description: Execute Playwright tests in one of four ways — run a single spec headless/CI-shaped (mode=single), run the @smoke-tagged suite (mode=smoke), repeat-probe a spec N times to check flakiness/repeatability/stability (mode=repeat), or run only the tests a git change touches (mode=changed). Deterministic, JSON-only, no LLM in the loop. Do not hand-roll a bare `npx playwright test` for any of these — this skill owns the resolver, freshness/zero-test guards, and report paths every downstream consumer (`/qa-warden:report`, `/qa-warden:heal`) depends on.
 argument-hint: mode=single|smoke|repeat|changed [<spec-path-or-test-path>|<git-ref>] [N]
 disable-model-invocation: true
 allowed-tools: Bash(bash ${CLAUDE_SKILL_DIR}/scripts/run.sh *)
@@ -44,13 +44,13 @@ already printed why (missing/stale/corrupt/zero-test JSON, a non-zero
 Playwright exit masked by a 0-failure JSON — F-04 — or bad args). Stop and
 relay that message rather than summarizing.
 
-## mode=single (formerly `/qa:headless`)
+## mode=single (formerly `/qa-warden:headless`)
 
 CI-shaped single-shot run of one spec — no interactive session, JSON output
 only.
 
 **Do NOT pass `--output`.** Let failure traces land under the config
-`outputDir` (`artifacts/test-results/<id>/`) — that is exactly where `/qa:heal`
+`outputDir` (`artifacts/test-results/<id>/`) — that is exactly where `/qa-warden:heal`
 looks. Overriding `--output` strands the trace where the healer won't find it.
 
 **Never `2>&1` into the `.json` file** (the script already splits stdout/stderr
@@ -58,7 +58,7 @@ correctly — do not reintroduce a fold if you re-run anything by hand).
 
 Because `--reporter=json` overrides the config reporters, this run does **not**
 refresh `artifacts/last-run.json` — that is intentional (each single run owns
-its `reports/headless-<name>.json`). `/qa:report` reads the per-command file,
+its `reports/headless-<name>.json`). `/qa-warden:report` reads the per-command file,
 not `last-run.json`, for `mode=single` runs.
 
 Then print a one-paragraph summary of the JSON output to chat (pass/fail,
@@ -68,7 +68,7 @@ hit into the summary (F-17: Playwright folds conditional `test.fail` xfails
 into `expected`, so "N expected" can hide a scenario parked against a
 confirmed-live defect).
 
-## mode=smoke (formerly `/qa:run-smoke`)
+## mode=smoke (formerly `/qa-warden:run-smoke`)
 
 Runs the `@smoke`-tagged suite deterministically. Then print a compact summary
 to chat, reading counts from `artifacts/last-run.json` (the config `json`
@@ -77,26 +77,26 @@ sink; `dotenv({quiet:true})` keeps it valid JSON):
 - **Lead with a one-line roll-up (F-025)** so a glance yields the verdict.
   Fold in the counts from the script's `post-run:` trailer (do not recount)
   and any parked (`test.fail`/`test.fixme`) scenarios, e.g.:
-  `SMOKE: PASS (2/2) · 1 open bug · 2 parked xfail → NOT all-clear; see /qa:report`
-  or `SMOKE: FAIL (1/2) → /qa:heal`. This roll-up is a **smoke-lane signal, not
-  the go/no-go** — `/qa:report` remains the real quality verdict; say so on the
+  `SMOKE: PASS (2/2) · 1 open bug · 2 parked xfail → NOT all-clear; see /qa-warden:report`
+  or `SMOKE: FAIL (1/2) → /qa-warden:heal`. This roll-up is a **smoke-lane signal, not
+  the go/no-go** — `/qa-warden:report` remains the real quality verdict; say so on the
   same line.
 - Total / passed / failed / flaky (`jq '.stats' artifacts/last-run.json`).
 - For each failure: spec path + first error line + pointer to
   `artifacts/test-results/<dir>/trace.zip` (the config `outputDir`), and a
-  ready-to-paste heal command per failure: `/qa:heal <dir>`.
+  ready-to-paste heal command per failure: `/qa-warden:heal <dir>`.
 - Exit cleanly — do NOT invoke the `healer` subagent from here. Use
-  `/qa:heal <failing-test-id>` to triage a specific failure, or
-  `/qa:batch-fix <pattern>` for a pattern fix across many. If failures look
-  intermittent, run `/qa:run mode=repeat <spec>` before healing; if
-  *everything* is red, run `/qa:doctor` and check `.env`/VPN first.
+  `/qa-warden:heal <failing-test-id>` to triage a specific failure, or
+  `/qa-warden:batch-fix <pattern>` for a pattern fix across many. If failures look
+  intermittent, run `/qa-warden:run mode=repeat <spec>` before healing; if
+  *everything* is red, run `/qa-warden:doctor` and check `.env`/VPN first.
 
 Do not retry past the default Playwright retry count. Do not add
 `--retries=99` or similar cover-up flags. This is a **policy, not a hook** — the
 `hooks/` layer matches `Edit|Write`, never `Bash`, so nothing stops a cover-up
 flag on the command line (CLAUDE.md §Oracle defense); the reviewer is the backstop.
 
-## mode=repeat (formerly `/qa:flake-check`)
+## mode=repeat (formerly `/qa-warden:flake-check`)
 
 Repeatability probe: run the same spec N times in a row and report the
 pass/fail rate. A healthy test should stay above 95% over 10 runs; anything
@@ -134,7 +134,7 @@ Report:
   the aggregate).
 
 Do NOT invoke the healer automatically — `mode=repeat` is diagnostic only.
-Use `/qa:heal <id>` afterwards if you want to fix a specific failure.
+Use `/qa-warden:heal <id>` afterwards if you want to fix a specific failure.
 
 ## mode=changed
 
@@ -146,14 +146,14 @@ record**; `mode=smoke` and the nightly still are.
 
 What it cannot see, and the script says so rather than staying quiet:
 - **An edited spec (`specs/**/*.md`) selects nothing** — no test imports Markdown. The script
-  lists those specs; relay the list and say their tests are stale until `/qa:gen` recompiles
+  lists those specs; relay the list and say their tests are stale until `/qa-warden:gen` recompiles
   them. A re-run cannot fix that.
-- **App-side changes** are invisible to git-in-this-repo. `/qa:impact` is the tool for a
+- **App-side changes** are invisible to git-in-this-repo. `/qa-warden:impact` is the tool for a
   requirement or route change.
 - A repo with **no commit yet** or an **unresolvable ref** exits 2 with a reason — relay it; it
   is not a zero-match result.
 
 Report: the selected/passed/failed counts from `reports/changed.json`, per-failure first error
-line + `/qa:heal <dir>` command as in `mode=smoke`, and any listed stale specs. If the script
+line + `/qa-warden:heal <dir>` command as in `mode=smoke`, and any listed stale specs. If the script
 printed `NOTHING SELECTED`, report exactly that — **nothing ran, so it is not a pass** — and
 suggest `mode=smoke` if the user wanted a health signal.

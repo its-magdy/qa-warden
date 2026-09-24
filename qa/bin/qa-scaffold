@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # qa-scaffold — stamp the QA runtime substrate into a target project.
 #
-# Invoked by the /qa:init plugin command:
+# Invoked by the /qa-warden:init plugin command:
 #     "${CLAUDE_PLUGIN_ROOT}/bin/qa-scaffold" "${CLAUDE_PROJECT_DIR}" [--no-install]
 #
 # Idempotent and non-destructive: every file is created only if missing.
@@ -73,8 +73,8 @@ stamp_permissions() {
   if [ ! -f "$SETTINGS" ]; then
     # F-003 byte-idempotency: normalize allow/deny to sorted-unique on the FIRST write
     # too (via the SAME jq `unique` the re-run merge below uses), so a committed
-    # settings.json is byte-identical to what a later /qa:init self-merge produces —
-    # no spurious diff / no /qa:doctor drift the first time anyone re-runs init.
+    # settings.json is byte-identical to what a later /qa-warden:init self-merge produces —
+    # no spurious diff / no /qa-warden:doctor drift the first time anyone re-runs init.
     if command -v jq >/dev/null 2>&1; then
       norm="$(jq '.permissions.allow = ((.permissions.allow // []) | unique)
                   | .permissions.deny  = ((.permissions.deny  // []) | unique)' \
@@ -141,7 +141,7 @@ ensure_qa_bak_ignored() {
   {
     # leading blank line only when appending to existing content
     [ -s "$gi" ] && printf '\n'
-    printf '# `/qa:init --resync` backups — transient: review, then delete. Appended by\n'
+    printf '# `/qa-warden:init --resync` backups — transient: review, then delete. Appended by\n'
     printf '# qa-scaffold because .gitignore is outside the resync set, so this rule cannot\n'
     printf '# otherwise reach a project scaffolded before it shipped.\n'
     printf '*.qa-bak\n'
@@ -204,7 +204,7 @@ if [ "$RESYNC" = "1" ]; then
   chmod +x "$TARGET"/scripts/*.sh 2>/dev/null || true
   # Permissions travel with the substrate. Before this call a resync-only upgrade refreshed
   # every toolkit-owned FILE and delivered none of the new permission RULES, so the verified
-  # upgrade recipe needed a second, plain `/qa:init` that nothing in this banner mentioned.
+  # upgrade recipe needed a second, plain `/qa-warden:init` that nothing in this banner mentioned.
   # It runs unconditionally — `changed=0` means the files already matched, which says nothing
   # about whether the rules did — and is a measured no-op when they are already current.
   stamp_permissions
@@ -213,7 +213,7 @@ if [ "$RESYNC" = "1" ]; then
   if [ -n "$RESYNC_ERRS" ]; then
     printf "${RED}[qa-scaffold] ERROR${NC} resync FAILED for:\n" >&2
     for rel in $RESYNC_ERRS; do printf '  - %s\n' "$rel" >&2; done
-    echo "[qa-scaffold] refusing to continue — the substrate is now PARTIALLY resynced. Fix the copy failure (permissions? disk space?), then re-run /qa:init --resync. Files already refreshed are safe to re-resync (it is idempotent); review any .qa-bak backups." >&2
+    echo "[qa-scaffold] refusing to continue — the substrate is now PARTIALLY resynced. Fix the copy failure (permissions? disk space?), then re-run /qa-warden:init --resync. Files already refreshed are safe to re-resync (it is idempotent); review any .qa-bak backups." >&2
     exit 1
   fi
   if [ "$changed" -eq 0 ]; then
@@ -268,7 +268,7 @@ done < <(cd "$TEMPLATES" && find . -type f ! -name settings.json ! -name '.DS_St
 if [ -n "$COPY_ERRS" ]; then
   printf "${RED}[qa-scaffold] ERROR${NC} template copy FAILED for:\n" >&2
   for rel in $COPY_ERRS; do printf '  - %s\n' "$rel" >&2; done
-  echo "[qa-scaffold] refusing to continue — a partial substrate would green-stamp a broken project. Fix the copy failure (permissions? disk space?) and re-run /qa:init." >&2
+  echo "[qa-scaffold] refusing to continue — a partial substrate would green-stamp a broken project. Fix the copy failure (permissions? disk space?) and re-run /qa-warden:init." >&2
   exit 1
 fi
 chmod +x "$TARGET"/scripts/*.sh 2>/dev/null || true
@@ -322,7 +322,7 @@ else
     # Hard install steps must FAIL LOUDLY — `set -uo pipefail` has no `-e`, so a bare
     # `&& info` would let a broken install fall through to a green "done" banner with no
     # deps/browsers. Guard each with an explicit exit.
-    ( cd "$TARGET" && npm install ) || { printf "${RED:-}[qa-scaffold] ERROR${NC:-} npm install failed — fix the dependency error and re-run /qa:init\n" >&2; exit 1; }
+    ( cd "$TARGET" && npm install ) || { printf "${RED:-}[qa-scaffold] ERROR${NC:-} npm install failed — fix the dependency error and re-run /qa-warden:init\n" >&2; exit 1; }
     info "npm install done"
     info "installing Playwright browsers (chromium)..."
     # chromium ONLY — the stamped config's active projects are all Desktop Chrome
@@ -335,7 +335,7 @@ else
     # This is the authoritative, auto-updating command reference — our
     # skills/playwright-cli/SKILL.md is only a thin project companion (decision
     # rules + recipes), NOT a copy of Microsoft's tool list. Re-runs on every
-    # /qa:init so a `@playwright/cli` bump refreshes the skill.
+    # /qa-warden:init so a `@playwright/cli` bump refreshes the skill.
     info "installing the official playwright-cli agent skill (playwright-cli install --skills)..."
     ( cd "$TARGET" && npx playwright-cli install --skills ) \
       && info "official playwright-cli skill installed" \
@@ -365,11 +365,11 @@ else
         info "playwright-cli launched a real browser + snapshotted (browser executable present)"
       else
         ( cd "$TARGET" && npx playwright-cli close >/dev/null 2>&1 || true )
-        printf "${RED:-}[qa-scaffold] ERROR${NC:-} playwright-cli resolved but could NOT launch a browser — the Chromium executable is missing or the core is skewed. Run 'npx playwright install chromium' and re-run /qa:init; do NOT trust a green suite until this passes.\n" >&2
+        printf "${RED:-}[qa-scaffold] ERROR${NC:-} playwright-cli resolved but could NOT launch a browser — the Chromium executable is missing or the core is skewed. Run 'npx playwright install chromium' and re-run /qa-warden:init; do NOT trust a green suite until this passes.\n" >&2
         exit 1   # fail loudly like the npm/browser install steps — otherwise the done banner below green-stamps a scaffold that cannot drive a browser
       fi
     else
-      printf "${RED:-}[qa-scaffold] ERROR${NC:-} 'npx playwright-cli --version' failed — the CLI did not resolve at all (strictly worse than a missing browser: every discovery/authoring command depends on 'npx playwright-cli'). Check the @playwright/cli install and re-run /qa:init; do NOT trust a green scaffold until this passes.\n" >&2
+      printf "${RED:-}[qa-scaffold] ERROR${NC:-} 'npx playwright-cli --version' failed — the CLI did not resolve at all (strictly worse than a missing browser: every discovery/authoring command depends on 'npx playwright-cli'). Check the @playwright/cli install and re-run /qa-warden:init; do NOT trust a green scaffold until this passes.\n" >&2
       exit 1   # fail loudly like the browser probe below — a soft WARN here inverted severity: total CLI breakage passed while a mere missing browser failed
     fi
   else
@@ -384,17 +384,17 @@ cat <<'NEXT'
 Next:
   1. Edit .env  — replace BASE_URL_APP=CHANGEME with your staging/QA host (NOT prod) + set QA_USER_* creds.
         Minimum to start: BASE_URL_APP + one QA_USER_EMAIL / QA_USER_PASSWORD pair. Everything else in .env is optional.
-  2. /qa:explore                              build specs/_context/app.context.md (site/auth map) — review it, clear draft: true
-  3. /qa:new-spec auth/login                  draft your first spec (explores the area itself if needed)
-  4. /qa:gen specs/auth/login.md              compile spec -> .spec.ts (+ independent verifier)
-  5. /qa:review                               reviewer gates the assertion contract (run on every PR)
-  6. /qa:run mode=smoke                       run the @smoke suite
+  2. /qa-warden:explore                              build specs/_context/app.context.md (site/auth map) — review it, clear draft: true
+  3. /qa-warden:new-spec auth/login                  draft your first spec (explores the area itself if needed)
+  4. /qa-warden:gen specs/auth/login.md              compile spec -> .spec.ts (+ independent verifier)
+  5. /qa-warden:review                               reviewer gates the assertion contract (run on every PR)
+  6. /qa-warden:run mode=smoke                       run the @smoke suite
 
   Rigor lane (P1 / money / compliance) — insert between 2 and 3 to pin what "correct" means first:
-     /qa:explore mode=area site=app area=auth   area context (intake hard-gates on it)
-     /qa:intake auth/login                      interview -> basis.md
-     /qa:ideate auth/login                      SFDIPOT checklist -> cases.md
-     /qa:approve auth/login                     approve/prune — once a cases.md exists, new-spec STOPs until it is approved
+     /qa-warden:explore mode=area site=app area=auth   area context (intake hard-gates on it)
+     /qa-warden:intake auth/login                      interview -> basis.md
+     /qa-warden:ideate auth/login                      SFDIPOT checklist -> cases.md
+     /qa-warden:approve auth/login                     approve/prune — once a cases.md exists, new-spec STOPs until it is approved
 
-  New to these terms (oracle, basis, SFDIPOT, assertion contract)? Run /qa:help — e.g. "/qa:help what is an oracle".
+  New to these terms (oracle, basis, SFDIPOT, assertion contract)? Run /qa-warden:help — e.g. "/qa-warden:help what is an oracle".
 NEXT

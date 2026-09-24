@@ -1,6 +1,6 @@
 #!/bin/sh
 # resolve-spec-path.sh — the ONE place the <arg> → specs/….md / tests/….spec.ts
-# mapping lives. Every /qa:* command that takes a spec-or-test argument accepts
+# mapping lives. Every /qa-warden:* command that takes a spec-or-test argument accepts
 # the same forms (bare <area>/<feature>, <area>/<feature>.md, specs/….md,
 # tests/….spec.ts); resolve them here so a layout change or a new accepted form
 # is a one-file edit, not a per-command grind. A mis-mapped path matches ZERO
@@ -18,7 +18,7 @@
 # single filename-safe token (auth/login → auth-login) for the per-command report
 # sinks — `reports/headless-<name>.json`, `artifacts/flake-<name>.json`. It lives
 # here, not in each command, because it is the same tests/… → identifier mapping
-# this script already owns: /qa:run mode=single and /qa:run mode=repeat carried byte-identical
+# this script already owns: /qa-warden:run mode=single and /qa-warden:run mode=repeat carried byte-identical
 # copies of the slug expression on the line right after their resolve call, so an
 # area-qualification change (added precisely so two areas' same-named specs cannot
 # clobber each other's report file) had to be made twice.
@@ -27,11 +27,11 @@ ARG="${2:?usage: resolve-spec-path.sh spec|test|reportname <arg>}"
 
 # Tolerate a stray inline `key=val` flag (e.g. `site=app`) passed alongside the
 # path — the spec/test path is the FIRST bare (non key=val) token. Callers learn
-# `site=` from /qa:new-spec and carry it over to /qa:gen out of habit; without
+# `site=` from /qa-warden:new-spec and carry it over to /qa-warden:gen out of habit; without
 # this, `resolve-spec-path.sh spec "checkout/coupon site=app"` would emit the
 # broken `specs/checkout/coupon site=app.md` (matches ZERO tests → phantom green).
 # Keeping the strip HERE — the one place the arg→path mapping lives — means every
-# caller (/qa:gen, /qa:new-spec, /qa:run mode=single, /qa:run mode=repeat, /qa:review…) is safe
+# caller (/qa-warden:gen, /qa-warden:new-spec, /qa-warden:run mode=single, /qa-warden:run mode=repeat, /qa-warden:review…) is safe
 # without duplicating the parse. A real spec/test path never contains '='.
 for tok in $ARG; do
   case "$tok" in
@@ -74,7 +74,7 @@ case "$MODE" in
       *)          TEST="tests/${ARG}.spec.ts" ;;       # bare no-slash <feature> — map like spec mode does (a literal pass-through here errored with the UNMAPPED path in the message); the existence check below still guards
     esac
     if [ ! -f "$TEST" ]; then
-      echo "No compiled test at '$TEST' (from '$ARG'). Run /qa:gen <spec> first, or pass the tests/*.spec.ts path." >&2
+      echo "No compiled test at '$TEST' (from '$ARG'). Run /qa-warden:gen <spec> first, or pass the tests/*.spec.ts path." >&2
       exit 2
     fi
     if [ "$MODE" = reportname ]; then

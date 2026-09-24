@@ -1,7 +1,7 @@
 #!/bin/sh
 # spec-links.sh — the ONE place the basis/feature ↔ spec relation is parsed.
 #
-# Two mechanical rules used to be hand-copied across doctor.sh, /qa:coverage and /qa:impact,
+# Two mechanical rules used to be hand-copied across doctor.sh, /qa-warden:coverage and /qa-warden:impact,
 # each site carrying its own "LOCKSTEP with …" comment instead of a mechanism:
 #
 #   (1) the indent-tolerant `feature:` extractor from a `<feature>.basis.md`. A col-0-only
@@ -14,7 +14,7 @@
 #       the feature to be the last thing on the line — silently dropping every commented link.
 #       That has already needed one lockstep fix applied by hand in three places.
 #   (3) the UNMANIFESTED walk — `tests/<base>.spec.ts` with no `artifacts/route-manifests/
-#       <base>.json`. Lived only in impact.sh until /qa:coverage was found to need the same
+#       <base>.json`. Lived only in impact.sh until /qa-warden:coverage was found to need the same
 #       set and to be getting it WRONG: a withheld manifest made coverage dim-0 print the
 #       route under "touched by NO compiled test", which is false for a test that is on disk
 #       and compiled, and points the reader at "write a spec" when the real remedy is "the
@@ -34,7 +34,7 @@
 #                                               #   test with no route manifest (twins excluded)
 #
 # `match` takes the index on stdin rather than rebuilding it so a caller iterating N features
-# stays one tree walk, not N (doctor Checks 13/18 and /qa:coverage all loop per feature):
+# stays one tree walk, not N (doctor Checks 13/18 and /qa-warden:coverage all loop per feature):
 #   INDEX=$(bash scripts/spec-links.sh index)
 #   printf '%s\n' "$INDEX" | bash scripts/spec-links.sh match "$feat"
 MODE="${1:?usage: spec-links.sh feature <basisfile> | index | match <feat> | unmanifested}"

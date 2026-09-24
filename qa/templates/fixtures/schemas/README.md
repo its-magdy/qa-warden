@@ -21,7 +21,7 @@
 > `fixtures/factories/`, and drop `zod` + `zod-fixture` from `devDependencies`.
 > Doing so also sheds the `zod-fixture@2.5.2` pin liability (it's unmaintained and
 > Zod-4-incompatible, forcing the `zod ~3.25.x` pin). Keep the layer when you have
-> real entity instantiation across specs; drop it when you don't. `/qa:doctor`
+> real entity instantiation across specs; drop it when you don't. `/qa-warden:doctor`
 > won't flag its absence.
 
 Zod schemas that define the shape of every entity your tests touch (User, Order, Org, ...).
@@ -30,7 +30,7 @@ Zod schemas that define the shape of every entity your tests touch (User, Order,
 ## Setup (one-time)
 
 No install needed — both `zod@~3.25.0` and `zod-fixture@^2.5.2` already ship in the
-scaffolded `package.json` at those exact pins (`/qa:init` installs them). The Zod 3.25
+scaffolded `package.json` at those exact pins (`/qa-warden:init` installs them). The Zod 3.25
 line is pinned on purpose: a bare `zod` pulls Zod 4, which BREAKS zod-fixture@2.5.2
 (its newest release; introspects Zod-3 internals). See package.json "zod_comment".
 
@@ -51,8 +51,8 @@ Example: signup goes from `first_name + last_name + email` → `full_name + phon
 
 1. Edit `schemas/user.ts` (one line set of fields).
 2. Run `npx tsc --noEmit` — TypeScript prints every file that still references `first_name`, `last_name`, or `email` on a User. That is your impact set.
-3. Run `/qa:impact field=full_name` to also catch specs that reference fields via the route manifest (covers tests/specs that don't go through TS).
-4. Edit the affected specs by hand, then regenerate with `/qa:gen`. (There is no `/qa:migrate` command in this toolkit — the migration is manual: schema edit → `tsc --noEmit` impact set → `/qa:impact` → edit specs → `/qa:gen`.)
+3. Run `/qa-warden:impact field=full_name` to also catch specs that reference fields via the route manifest (covers tests/specs that don't go through TS).
+4. Edit the affected specs by hand, then regenerate with `/qa-warden:gen`. (There is no `/qa-warden:migrate` command in this toolkit — the migration is manual: schema edit → `tsc --noEmit` impact set → `/qa-warden:impact` → edit specs → `/qa-warden:gen`.)
 
 ## What lives here vs `fixtures/factories/`
 

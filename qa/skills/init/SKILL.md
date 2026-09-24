@@ -1,10 +1,10 @@
 ---
-description: Bootstrap the QA runtime substrate into the current project (configs, scripts, fixtures, CLAUDE.md, permissions) and install dependencies. Run once per project after installing the qa plugin.
+description: Bootstrap the QA runtime substrate into the current project (configs, scripts, fixtures, CLAUDE.md, permissions) and install dependencies. Run once per project after installing the QA Warden plugin.
 argument-hint: "[--no-install] (skip npm/playwright install) | [--resync] (force-refresh toolkit-owned substrate in an already-scaffolded project)"
 disable-model-invocation: true
 ---
 
-You are bootstrapping this project to use the **qa** plugin. The plugin ships
+You are bootstrapping this project to use the **QA Warden** plugin. The plugin ships
 the *brain* (agents, skills); this command stamps the *body* (runtime
 substrate) that a plugin cannot carry on its own.
 
@@ -25,16 +25,16 @@ substrate) that a plugin cannot carry on its own.
    `playwright.config.ts`, `scripts/prod-guard.*`, a pinned dependency, …) does
    **not** reach a project that was scaffolded before the fix — and the project
    deny-list blocks any agent from repairing it in place (F-015/F-016). Run
-   `/qa:init --resync` to force-overwrite **only the toolkit-owned substrate**
+   `/qa-warden:init --resync` to force-overwrite **only the toolkit-owned substrate**
    from the current templates, backing up each changed file to `<file>.qa-bak`
    first, then reinstalling deps if `package.json`/lockfile changed. It never
    touches user-authored files (`.env`, a customized `CLAUDE.md`,
    `fixtures/test.ts`, or anything under
-   `specs/`/`tests/`/`page-objects/`/`steps/`/`bugs/`). `/qa:doctor`'s
+   `specs/`/`tests/`/`page-objects/`/`steps/`/`bugs/`). `/qa-warden:doctor`'s
    substrate-drift check tells you when a project needs this.
 
    **`--resync` is the whole upgrade — do not tell the user to follow it with a
-   plain `/qa:init`.** Both paths run the same permission merge. Two files are therefore touched that the
+   plain `/qa-warden:init`.** Both paths run the same permission merge. Two files are therefore touched that the
    list above does not cover, both additively and neither overwritten:
    `.claude/settings.json` (union of the permission arrays — it can add a rule
    but never remove one) and `.gitignore` (one appended `*.qa-bak` pattern, so
@@ -46,7 +46,7 @@ substrate) that a plugin cannot carry on its own.
 
 3. Summarize for the user what was stamped, then relay the script's `Next:`
    block **verbatim** — the scaffold already emits its commands in the namespaced
-   `/qa:` form (e.g. `/qa:explore`, `/qa:intake`), so relay them as-is; do not
+   `/qa-warden:` form (e.g. `/qa-warden:explore`, `/qa-warden:intake`), so relay them as-is; do not
    re-prefix or strip the namespace. The scaffold's heredoc is the single source
    of the next-steps list; do not maintain a separate copy here.
 
@@ -59,9 +59,9 @@ substrate) that a plugin cannot carry on its own.
   is **safety-only** — it blocks destructive/dangerous operations (**every `rm`
   command** — the rule is `Bash(rm *)`, not just `rm -rf`, and deny rules cannot
   be interactively approved; `find … -delete` and `truncate` are denied too, so
-  commands that must clean up do it WITHOUT those primitives: `/qa:run mode=repeat`
+  commands that must clean up do it WITHOUT those primitives: `/qa-warden:run mode=repeat`
   overwrites its own report files in place (`>`/`2>` truncate-and-rewrite), and
-  `/qa:retire` deletes through the allow-listed `scripts/retire-delete.sh` wrapper
+  `/qa-warden:retire` deletes through the allow-listed `scripts/retire-delete.sh` wrapper
   (the deny can't be bypassed inline — see F-031) — force-push, `git reset --hard`,
   `curl … | sh`, writes to
   `package.json` / `playwright.config.ts` / `package-lock.json` / `prod-guard.*`,

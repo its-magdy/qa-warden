@@ -1,7 +1,7 @@
 # qa-review — the reviewer gate on every PR that touches the QA suite.
 #
-# OPTIONAL. The everyday gate is local: /qa:review writes a hash-pinned .reviewed marker and
-# /qa:doctor Check 15 flags any test reviewed before its last change. Use this workflow only
+# OPTIONAL. The everyday gate is local: /qa-warden:review writes a hash-pinned .reviewed marker and
+# /qa-warden:doctor Check 15 flags any test reviewed before its last change. Use this workflow only
 # when you need a gate nobody can skip. Rename to qa-review.yml to enable.
 #
 # This is the companion to qa-nightly.yml.example:
@@ -13,7 +13,7 @@
 # That is the only attestation an agent cannot forge: a PR touching tests/ or specs/ then
 # cannot merge without the reviewer having run. (skills/review/SKILL.md §"CI wiring".)
 #
-# ── PREREQUISITE: the runner must be able to INSTALL the qa plugin ─────────────────────────
+# ── PREREQUISITE: the runner must be able to INSTALL the QA Warden plugin ──────────────────
 # The `reviewer` subagent ships INSIDE the plugin. A bare runner has no plugin, so without
 # the two inputs below the prompt asks for a subagent that does not exist and the review is
 # done by an un-instructed model — which reads like a review and gates nothing.
@@ -41,10 +41,10 @@ jobs:
           plugin_marketplaces: |
             https://github.com/<your-org>/<qa-toolkit-marketplace-repo>.git
           plugins: |
-            qa@qa-toolkit
+            qa-warden@qa-toolkit
           prompt: >-
             Use the reviewer subagent to review the PR diff and its imported page objects.
-            If no subagent named reviewer is available, fail the job and say the qa plugin
+            If no subagent named reviewer is available, fail the job and say the QA Warden plugin
             did not load — do NOT review the diff yourself.
             Fail the job on any reviewer FAIL, and also fail the job if the reviewer's report
             contains no explicit verdict line (a report cut off before a verdict is written

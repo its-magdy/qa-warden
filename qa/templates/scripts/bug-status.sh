@@ -10,7 +10,7 @@
 # `--class <file>` prints the CLASSIFICATION instead of the raw value — `resolved` or `open`:
 #   [ "$(bash scripts/bug-status.sh --class "$f")" = resolved ] && continue
 # Use this rather than re-typing the resolved-keyword case: that `fixed*|reverted*|resolved*|
-# closed*` alternation was itself copy-pasted into /qa:run mode=smoke, /qa:run mode=single, /qa:report and
+# closed*` alternation was itself copy-pasted into /qa-warden:run mode=smoke, /qa-warden:run mode=single, /qa-warden:report and
 # doctor Checks 11b + 11c — the same five-way duplication (one level up) that this script was
 # created to end, so a FIFTH resolved keyword still had to be hand-applied five times.
 # An absent/blank value classifies as `open` — the fail-safe direction (over-surface a defect,
@@ -19,16 +19,16 @@
 # `--list-open` prints the PATH of every still-open bug, one per line (no argument):
 #   while IFS= read -r bug; do …; done < <(bash scripts/bug-status.sh --list-open)
 # This owns the SCAN the way --class owns the keyword set. The scan shape — `find bugs -maxdepth 1
-# -name '*.md' -type f | while read` — was itself copy-pasted into /qa:run mode=smoke, /qa:run mode=single,
-# /qa:report and doctor Check 11b, each carrying its own copy of the F-36 rationale (under zsh, the
+# -name '*.md' -type f | while read` — was itself copy-pasted into /qa-warden:run mode=smoke, /qa-warden:run mode=single,
+# /qa-warden:report and doctor Check 11b, each carrying its own copy of the F-36 rationale (under zsh, the
 # Bash tool's default shell, a `for bf in bugs/*.md` glob fires `nomatch` on an EMPTY bugs/ — the
 # common all-green state — and aborts the caller before the loop body runs; `[ -d bugs ]` doesn't
 # help because the dir exists, and `shopt -s nullglob` is bash-only. `find` is safe in both). One
 # copy of `-maxdepth 1` per caller also means a future nested `bugs/<slug>/` layout breaks in four
 # places independently. Prints nothing (exit 0) when bugs/ is absent or every bug is resolved.
 #
-# WHY THIS EXISTS (M-4): this exact awk was copy-pasted into five spots — /qa:run mode=smoke,
-# /qa:run mode=single, /qa:report, and /qa:doctor Checks 11b + 11c — each COMMENTED "single-sourced
+# WHY THIS EXISTS (M-4): this exact awk was copy-pasted into five spots — /qa-warden:run mode=smoke,
+# /qa-warden:run mode=single, /qa-warden:report, and /qa-warden:doctor Checks 11b + 11c — each COMMENTED "single-sourced
 # / canonical parser" while being nothing of the sort. A first-keyword grep once read
 # `## Status: closed`/`resolved` as UN-resolved, and the fix had to be hand-applied to every
 # copy or a resolved defect launders green in whichever one drifted. Single-source it here,

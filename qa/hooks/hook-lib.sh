@@ -49,14 +49,14 @@ hook_require_jq() { command -v jq >/dev/null 2>&1 || exit 0; return 0; }
 #   2. the directory above that one is a scaffolded QA project.
 #
 # The marker pair is `playwright.config.ts` + `scripts/prod-guard.ts`. Both are stamped by
-# bin/qa-scaffold on every /qa:init and both are in scripts/resync-set.txt, so they exist
+# bin/qa-scaffold on every /qa-warden:init and both are in scripts/resync-set.txt, so they exist
 # from the first minute of a project's life and are force-restored by --resync. Plain
 # `playwright.config.ts` alone is NOT enough: it is present in thousands of unrelated
 # repositories, and matching on it would make this plugin lint every Playwright project
 # its owner happens to open. `prod-guard.ts` is this toolkit's own filename.
 #
 # Deliberately NOT keyed on specs/_context/app.context.md: that file is written by
-# /qa:explore, not by the scaffold, so a freshly-initialised project would be unguarded.
+# /qa-warden:explore, not by the scaffold, so a freshly-initialised project would be unguarded.
 hook_qa_root() {
   local abs="$1" root
   case "$abs" in

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# impact.sh — deterministic extraction for /qa:impact (test-impact analysis).
+# impact.sh — deterministic extraction for /qa-warden:impact (test-impact analysis).
 #
-# Extracted from the former /qa:impact prompt body: this is DATA COLLECTION only.
+# Extracted from the former /qa-warden:impact prompt body: this is DATA COLLECTION only.
 # The skill (../SKILL.md) owns the caveats and the output format; this script owns the
 # shell recipes and must never format, paraphrase, or estimate. Run from the PROJECT root
 # (cwd), not from the plugin dir — every path below is project-relative.
@@ -24,7 +24,7 @@
 ARGUMENTS="${1:-}"
 
 usage() {
-  echo "usage: /qa:impact (route|field|factory|area|operation|source)=<value>  (exactly one key)"
+  echo "usage: /qa-warden:impact (route|field|factory|area|operation|source)=<value>  (exactly one key)"
 }
 
 set -- $ARGUMENTS
@@ -40,7 +40,7 @@ fi
 # scripts/spec-links.sh feeds both the source= arm (feature extractor) and the BLIND SPOTS
 # walk. Without it BLIND SPOTS prints EMPTY, which the skill reads as "complete" — refuse.
 if [ ! -f scripts/spec-links.sh ]; then
-  echo "ERROR: scripts/spec-links.sh missing — BLIND SPOTS cannot be computed and would print EMPTY (a false 'complete'). Substrate predates it; run /qa:init --resync, then re-run."
+  echo "ERROR: scripts/spec-links.sh missing — BLIND SPOTS cannot be computed and would print EMPTY (a false 'complete'). Substrate predates it; run /qa-warden:init --resync, then re-run."
   exit 2
 fi
 
@@ -64,7 +64,7 @@ case "$1" in
     fi
     printf '%s\n' "$MATCHES" | while read -r basis; do
       # Canonical indent-tolerant `feature:` extractor (F-31: a col-0-only anchor silently
-      # drops indented YAML and no-ops the row). /qa:coverage and doctor Check 13 call the
+      # drops indented YAML and no-ops the row). /qa-warden:coverage and doctor Check 13 call the
       # same script, so the accepted YAML shapes stay one edit.
       feat=$(bash scripts/spec-links.sh feature "$basis")
       [ -z "$feat" ] && continue
@@ -98,7 +98,7 @@ esac
 # Guard: are there any manifests at all? No manifests != zero matches.
 MANIFESTS=$(find artifacts/route-manifests -name '*.json' 2>/dev/null | wc -l | tr -d ' ')
 if [ "$MANIFESTS" -eq 0 ]; then
-  echo "NO MANIFESTS FOUND under artifacts/route-manifests — run /qa:gen on a spec first; this is NOT a zero-match result."
+  echo "NO MANIFESTS FOUND under artifacts/route-manifests — run /qa-warden:gen on a spec first; this is NOT a zero-match result."
   exit 3
 fi
 
@@ -131,11 +131,11 @@ echo "### MATCHES"
 # — for a "don't miss an affected test" tool, a false "not impacted" is the cardinal failure.
 # ---------------------------------------------------------------------------
 # The walk itself is NOT inlined here: `scripts/spec-links.sh unmanifested` owns it, because
-# /qa:coverage dim 0 needs the same set (a withheld manifest made it print the route under
+# /qa-warden:coverage dim 0 needs the same set (a withheld manifest made it print the route under
 # "touched by NO compiled test" — false for a compiled test, and the wrong remedy). One rule,
 # one place, each caller formatting its own prose; the metamorphic-twin exclusion in particular
 # is silent when a copy forgets it. Doctor Check 9k enforces that ownership.
 echo "### BLIND SPOTS"
 bash scripts/spec-links.sh unmanifested | while IFS=$'\t' read -r t base; do
-  echo "  • $t  (no manifest — NOT in the impact graph; regenerate with /qa:gen specs/${base}.md)"
+  echo "  • $t  (no manifest — NOT in the impact graph; regenerate with /qa-warden:gen specs/${base}.md)"
 done

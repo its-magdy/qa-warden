@@ -13,15 +13,15 @@ the network.
 Inputs:
 
 - `artifacts/last-run.json` (config `json` reporter output). This is the primary
-  sink. `dotenv.config({ quiet: true })` keeps it valid JSON, and `/qa:run mode=smoke`
-  refreshes it. **Staleness guard:** `/qa:run mode=single` and `/qa:run mode=repeat` pass
+  sink. `dotenv.config({ quiet: true })` keeps it valid JSON, and `/qa-warden:run mode=smoke`
+  refreshes it. **Staleness guard:** `/qa-warden:run mode=single` and `/qa-warden:run mode=repeat` pass
   explicit `--reporter=…` (for per-command files) and therefore do NOT refresh
   `last-run.json`, and a heal or reviewer Check-6 re-run can silently overwrite the
   smoke stats you assume are there. **Run this scripted freshness check before
   aggregating — do not rely on eyeballing it:**
 
   ```bash
-  # LOCKSTEP with /qa:doctor Check 1 — the gate is single-sourced in
+  # LOCKSTEP with /qa-warden:doctor Check 1 — the gate is single-sourced in
   # scripts/check-last-run.sh — do not re-derive here (the two used to mirror the
   # logic in prose and drifted). Its total = expected+unexpected+skipped+flaky —
   # every RESOLVED test — so an all-red run reads as fresh, never as zero-test
@@ -41,23 +41,23 @@ Inputs:
       6) echo "WARN: >15min old — confirm it is the run you intend to summarize" ;;
     esac
   else
-    echo "WARN: scripts/check-last-run.sh missing — substrate predates it; re-run /qa:init --resync (do NOT summarize an unverified last-run.json)"
+    echo "WARN: scripts/check-last-run.sh missing — substrate predates it; re-run /qa-warden:init --resync (do NOT summarize an unverified last-run.json)"
   fi
   ```
   If the recorded count / age don't match the run you meant to summarize, either
   (a) prefer the per-command `reports/*.json` / `artifacts/flake-*.json`, or
-  (b) refresh via `/qa:run mode=smoke` or `QA_RUN_OF_RECORD=1 npx playwright test`
+  (b) refresh via `/qa-warden:run mode=smoke` or `QA_RUN_OF_RECORD=1 npx playwright test`
   (the config's `json` sink is gated to run-of-record runs — a plain local
   `npx playwright test` does not rewrite `last-run.json`). Do NOT report
   numbers from a `last-run.json` you have not confirmed corresponds to the
   current run.
 - Any `reports/*.json` the skill chooses to aggregate (headless runs →
   `reports/headless-<name>.json`), plus `artifacts/flake-*.json` — flake probes
-  write `artifacts/flake-<name>.json`, NOT under `reports/` (see `/qa:run mode=repeat`).
+  write `artifacts/flake-<name>.json`, NOT under `reports/` (see `/qa-warden:run mode=repeat`).
   Mutation scores belong here too, but only if a team has added its own producer
   (none ships — e.g. Stryker). Per-command and always current; prefer them when
   `last-run.json` cannot be confirmed fresh.
-- `reports/audit-*.md` — the a11y / visual / vocab findings from `/qa:review url=<url>`.
+- `reports/audit-*.md` — the a11y / visual / vocab findings from `/qa-warden:review url=<url>`.
   Surface at least the headline (WCAG violation counts, visual diffs) so the
   audit signal reaches the one place a reviewer looks.
 - **`bugs/*.md` with `Status: open` — the parked/known-defect input (F-19).** A
@@ -66,7 +66,7 @@ Inputs:
   even counted as `skipped`. So a report built only from run stats emits an
   unqualified "green to merge" while a human-confirmed live defect sits invisible.
   This scan, plus two more the summary's go/no-go depends on, are single-sourced in
-  `scripts/post-run-checks.sh` — the same script `/qa:run mode=smoke`, `/qa:run mode=single` and doctor
+  `scripts/post-run-checks.sh` — the same script `/qa-warden:run mode=smoke`, `/qa-warden:run mode=single` and doctor
   Checks 4/14 call. It surfaces: (1) **open filed defects**, fail-safe — every bug is surfaced
   UNLESS explicitly marked resolved, and the parse is robust to all three authored Status shapes
   (a naive `grep '## Status.*open'` silently misses the two-line heading form and *hides* the
@@ -81,7 +81,7 @@ Inputs:
   # Guarded like check-last-run.sh above — an older scaffold predates this script, and an
   # unguarded call errors out mid-skill instead of degrading to a named gap.
   if [ -f scripts/post-run-checks.sh ]; then bash scripts/post-run-checks.sh
-  else echo "WARN: scripts/post-run-checks.sh missing — substrate predates it; re-run /qa:init --resync. Open defects / sentinels / stray specs are UNCHECKED: do not issue an unqualified go."; fi
+  else echo "WARN: scripts/post-run-checks.sh missing — substrate predates it; re-run /qa-warden:init --resync. Open defects / sentinels / stray specs are UNCHECKED: do not issue an unqualified go."; fi
   ```
 - **Run metadata is NOT in the report** — commit SHA, branch, triggered-by and workflow are
   absent from a Playwright JSON report unless CI explicitly injects them into `config.metadata`.
@@ -202,13 +202,13 @@ Every retry must surface in the summary. A test that passes only on retry-3 is *
 
 ## Example invocation
 ```bash
-/qa:report                               # aggregates last-run.json + reports/*.json → reports/summary.md
+/qa-warden:report                               # aggregates last-run.json + reports/*.json → reports/summary.md
 gh pr comment $PR --body-file reports/summary.md   # post to PR (--body-file takes the path directly)
 ```
-(`/qa:report` takes no arguments — it aggregates whatever on-disk artifacts are current. There is no `--since=` flag; trend comparison is done by reading the prior LOCAL `reports/summary.md` when present — gitignored, not committed — never a CLI arg.)
+(`/qa-warden:report` takes no arguments — it aggregates whatever on-disk artifacts are current. There is no `--since=` flag; trend comparison is done by reading the prior LOCAL `reports/summary.md` when present — gitignored, not committed — never a CLI arg.)
 
 ## Gotchas
-- **Missing JSON** — the primary machine-readable sink is `artifacts/last-run.json` (the config's json reporter writes it on every run-of-record run: CI, or `QA_RUN_OF_RECORD=1` as `/qa:run mode=smoke` sets — a bare local `npx playwright test` does not refresh it); `reports/*.json` exist only when a per-command run (`/qa:run mode=single`, `/qa:run mode=repeat`) wrote one, and are OPTIONAL enrichment. So the hard-fail condition is **neither `artifacts/last-run.json` NOR any `reports/*.json` present** — do NOT fail just because `reports/` is empty (F-020): a normal smoke run leaves `reports/` empty yet has a complete `last-run.json`. Read `last-run.json` first, fold in any `reports/*.json`, and only fail loudly when both sources are absent.
+- **Missing JSON** — the primary machine-readable sink is `artifacts/last-run.json` (the config's json reporter writes it on every run-of-record run: CI, or `QA_RUN_OF_RECORD=1` as `/qa-warden:run mode=smoke` sets — a bare local `npx playwright test` does not refresh it); `reports/*.json` exist only when a per-command run (`/qa-warden:run mode=single`, `/qa-warden:run mode=repeat`) wrote one, and are OPTIONAL enrichment. So the hard-fail condition is **neither `artifacts/last-run.json` NOR any `reports/*.json` present** — do NOT fail just because `reports/` is empty (F-020): a normal smoke run leaves `reports/` empty yet has a complete `last-run.json`. Read `last-run.json` first, fold in any `reports/*.json`, and only fail loudly when both sources are absent.
 - **Signature grouping is fuzzy** — use word-boundary substring match, not regex full-match. Over-specific grouping degenerates to 1 group per spec (= ungrouped).
 - **Do not LLM-summarize failures** — extract deterministically. LLM paraphrasing loses the error string, which is how humans grep-to-fix.
 - **Collapse long sections** with `<details>` so PR comments stay scannable.

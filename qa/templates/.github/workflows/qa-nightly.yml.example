@@ -57,7 +57,7 @@ jobs:
             artifacts/test-results/**/trace.zip
       - name: Failure breadcrumb
         if: failure()
-        run: echo "::error title=qa-nightly red::Nightly run failed — download the qa-nightly artifact (trace.zip + last-run.json), then triage locally with /qa:heal <test-id>."
+        run: echo "::error title=qa-nightly red::Nightly run failed — download the qa-nightly artifact (trace.zip + last-run.json), then triage locally with /qa-warden:heal <test-id>."
       # Optional AI triage in CI (OFF by default — nightly stays $0 LLM). Requires an
       # ANTHROPIC_API_KEY secret; uses the same entrypoint as skills/review/SKILL.md's CI snippet
       # (anthropics/claude-code-action@v1, or the CLI: npm i -g @anthropic-ai/claude-code && claude -p).
@@ -71,4 +71,4 @@ jobs:
       #     # prod-guard/npm-ci failure) the bare && chain exits 1 and this heal step reports
       #     # itself failed, burying the real cause. (Not `|| true` either — that would also
       #     # swallow a genuine heal failure.)
-      #     if [ -n "$FAILED" ]; then npx @anthropic-ai/claude-code -p "/qa:heal $FAILED" --permission-mode acceptEdits; fi
+      #     if [ -n "$FAILED" ]; then npx @anthropic-ai/claude-code -p "/qa-warden:heal $FAILED" --permission-mode acceptEdits; fi

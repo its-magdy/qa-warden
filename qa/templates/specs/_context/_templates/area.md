@@ -63,8 +63,8 @@ known_flaky_surfaces:
     cause: <app|tooling|env>   # app = real product flake · tooling = CLI/MCP/session artifact · env = infra/timing
 
 # couples_with — OTHER areas whose state/rules can INVALIDATE an oracle written for THIS area
-# (inbound coupling — the interdependency view). This is the machine-readable slot /qa:intake
-# reads to seed a feature's own `couples_with:` and /qa:ideate reads to enumerate a case per
+# (inbound coupling — the interdependency view). This is the machine-readable slot /qa-warden:intake
+# reads to seed a feature's own `couples_with:` and /qa-warden:ideate reads to enumerate a case per
 # coupling. DISTINCT from "Cross-feature contracts" below, which records THIS area's OUTWARD
 # effects on others; couples_with is what FLOWS IN. Record a coupling when discovery shows this
 # area's displayed/computed values depend on a rule owned elsewhere (multi-unit summing, a

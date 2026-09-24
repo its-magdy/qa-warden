@@ -11,8 +11,8 @@ active projects are all Desktop Chrome). Prints next steps.
 
 Invoke via `npm run init` or `bash scripts/init.sh`.
 
-> **Relationship to `/qa:init`:** the canonical bootstrap is the plugin's
-> `bin/qa-scaffold` (run by `/qa:init`) — it stamps the full substrate, merges
+> **Relationship to `/qa-warden:init`:** the canonical bootstrap is the plugin's
+> `bin/qa-scaffold` (run by `/qa-warden:init`) — it stamps the full substrate, merges
 > `.claude/settings.json` permissions, and installs the official `playwright-cli`
 > skill. `init.sh` is the equivalent **plugin-free fallback** for a plain
 > `git clone` with no plugin installed; it does the dir/`.env`/npm/browser
@@ -22,12 +22,12 @@ Invoke via `npm run init` or `bash scripts/init.sh`.
 ## `prod-guard.sh` — canonical shell prod-guard (layer 1 of 2)
 
 `bash scripts/prod-guard.sh [url ...]` — run before any browser-driving or
-test-running step; every `/qa:*` command's safety rail calls it. Loads `.env`
+test-running step; every `/qa-warden:*` command's safety rail calls it. Loads `.env`
 itself, screens **every** exported `BASE_URL_*` / `API_URL`, and exits 1 on a
 word-boundary `prod`/`production` host marker (`QA_ALLOW_PROD=1` overrides).
 Any URL passed as an **argument** goes through the same screening body — that is
 how a command whose target comes from its arguments rather than `.env`
-(`/qa:review url=<url>`) screens it, instead of re-implementing the host match in prose. Layer 2 is
+(`/qa-warden:review url=<url>`) screens it, instead of re-implementing the host match in prose. Layer 2 is
 `prod-guard.ts` — the enforced Playwright `globalSetup` that throws before any
 browser opens. **Keep the marker regex in the two files in lockstep.** Both are
 deny-listed from agent edits in `.claude/settings.json`.
@@ -41,16 +41,16 @@ shell guard.
 ## `resolve-spec-path.sh` — canonical spec/test path mapping
 
 `scripts/resolve-spec-path.sh spec|test <arg>` maps every argument form the
-`/qa:*` commands accept (bare `<area>/<feature>`, `<area>/<feature>.md`,
+`/qa-warden:*` commands accept (bare `<area>/<feature>`, `<area>/<feature>.md`,
 `specs/….md`, `tests/….spec.ts`) to the spec or compiled-test path. `test` mode
 verifies the file exists (exit 2 if not) so a mis-mapped path can never become a
-phantom zero-test "green" run. Used by `/qa:gen`, `/qa:new-spec`,
-`/qa:run mode=single`, `/qa:run mode=repeat`, and `/qa:review` — the mapping lives here
+phantom zero-test "green" run. Used by `/qa-warden:gen`, `/qa-warden:new-spec`,
+`/qa-warden:run mode=single`, `/qa-warden:run mode=repeat`, and `/qa-warden:review` — the mapping lives here
 and only here.
 
 ## `doctor.sh` — deterministic self-check pass
 
-`bash scripts/doctor.sh` (what `/qa:doctor` runs) — checks 0–21 + rollup, all
+`bash scripts/doctor.sh` (what `/qa-warden:doctor` runs) — checks 0–21 + rollup, all
 read-only: reruns no tests, heals nothing, hits no network, writes nothing.
 Verifies the substrate itself: `last-run.json` freshness/zero-test (via
 `check-last-run.sh`), oracle-vocab lockstep (`oracle-keys.txt` vs `CLAUDE.md`),
@@ -61,8 +61,8 @@ wire it as a cheap CI pre-step or run it whenever the project "feels off".
 ## `check-last-run.sh` — canonical last-run.json gate
 
 `bash scripts/check-last-run.sh [file] [max_age_seconds]` (defaults:
-`artifacts/last-run.json`, 900) — the single source for `/qa:doctor` Check 1
-AND `/qa:report`'s pre-aggregation check (they used to mirror this logic in
+`artifacts/last-run.json`, 900) — the single source for `/qa-warden:doctor` Check 1
+AND `/qa-warden:report`'s pre-aggregation check (they used to mirror this logic in
 prose and drifted). Prints one parseable line
 (`last-run: <fresh|missing|corrupt|zero-test|stale> total=… age=…`) and exits
 distinctly per state, distinguishing corrupt from zero-test — the two
@@ -75,7 +75,7 @@ file's lifecycle value. Prints the lowercased `Status` value (`open`,
 `fixed — …`, `reverted`, …), tolerating all three authored forms (the two-line
 `## Status`\n`open` heading, the inline `## Status: open`, and a bare
 `Status: open` line); prints nothing when no marker is present. Used by
-`/qa:run mode=smoke`, `/qa:run mode=single`, `/qa:report`, and `/qa:doctor` (Checks 11b/11c);
+`/qa-warden:run mode=smoke`, `/qa-warden:run mode=single`, `/qa-warden:report`, and `/qa-warden:doctor` (Checks 11b/11c);
 the parser lives here and only here (it was copy-pasted across those five spots
 and drifted — the same single-sourcing rationale as `check-last-run.sh`).
 
@@ -94,12 +94,12 @@ place three mechanical rules live: the **indent-tolerant `feature:` extractor** 
 anchor silently drops indented YAML, leaving the caller with `specs/.md` and a no-op check
 instead of an error) and the **fanned-spec back-link anchor** (which must tolerate the trailing
 `# comment` the plugin's own fanned-spec convention writes). Both were hand-copied across
-`doctor.sh`, `/qa:coverage` and `/qa:impact`, each site carrying a "LOCKSTEP with …" comment
+`doctor.sh`, `/qa-warden:coverage` and `/qa-warden:impact`, each site carrying a "LOCKSTEP with …" comment
 rather than a mechanism — and the anchor had already needed one fix applied by hand in three
 places. `match` reads an `index` on **stdin** so a caller looping over N features stays one tree
 walk, not N. The third rule is the **unmanifested walk** (`unmanifested` — every compiled
 `tests/<base>.spec.ts` with no `artifacts/route-manifests/<base>.json`, printed as
-`<testpath>\t<base>`). `/qa:impact` renders it as `### BLIND SPOTS`; `/qa:coverage` dim 0 needs
+`<testpath>\t<base>`). `/qa-warden:impact` renders it as `### BLIND SPOTS`; `/qa-warden:coverage` dim 0 needs
 the same set because, without it, a withheld manifest made the routes of a compiled spec print
 under "touched by NO compiled test (planned, untested)" — false, and the wrong remedy. Its
 load-bearing half is the **metamorphic-twin exclusion**: a twin never carries a manifest by
@@ -114,7 +114,7 @@ advisory scans a run's verdict depends on: unprocessed healer sentinels, stray/u
 a full `npx playwright test` would collect but the smoke lane never touched, and still-open
 `bugs/*.md` a parked xfail may be hiding behind an "expected" count. Always exits 0 (advisory)
 and ends with a parseable `post-run: sentinels=<n> stray=<n> open-bugs=<n>` trailer for the
-caller's roll-up. Called by `/qa:run mode=smoke`, `/qa:report`, `/qa:run mode=single` (`--only bugs`) and
+caller's roll-up. Called by `/qa-warden:run mode=smoke`, `/qa-warden:report`, `/qa-warden:run mode=single` (`--only bugs`) and
 `doctor.sh` Checks 4/14 (`--only sentinels,stray`) — each of which used to inline all three,
 byte-identically in places, with its own copy of the `testIgnore` lockstep filter.
 
@@ -128,7 +128,7 @@ that needed a cardinality self-check on its own mirror. Same pattern as `resync-
 
 ## `retire-delete.sh` — sanctioned scoped-delete wrapper
 
-The only path by which `/qa:retire` removes a spec/test pair, so deletion is
+The only path by which `/qa-warden:retire` removes a spec/test pair, so deletion is
 scoped and auditable rather than an open-ended `rm` in an agent's hands.
 
 ## `cli-fill-env.sh` — type a `.env` value into a field without exposing it
@@ -140,11 +140,11 @@ literal password into `fill` (it lands in the transcript) or skips the login. Ta
 NAME, suppresses the CLI's echo of the value, and refuses to put a secret-looking variable into
 anything but an `<input type="password">`.
 
-## `review-marker.sh` — write the `/qa:review` attestation marker
+## `review-marker.sh` — write the `/qa-warden:review` attestation marker
 
 `bash scripts/review-marker.sh <spec.md> <test.spec.ts> PASS|FAIL` writes
 `reports/review/<area>/<feature>.reviewed` (commit, both sha256 digests, date, result) — the
-file `/qa:doctor` Check 15 reads. One allow-listed call instead of an improvised compound
+file `/qa-warden:doctor` Check 15 reads. One allow-listed call instead of an improvised compound
 command; it records a verdict the caller already confirmed and judges nothing itself.
 
 ## `resync-set.txt` — the toolkit-owned file manifest
@@ -167,7 +167,7 @@ measured delivering 0 of 37 new rules, exit 0) and appends the single `*.qa-bak`
 
 Also not a script: the single list of directories the subagents write into
 (`artifacts/`, `bugs/`, `specs/_context/`, `steps/`, …). Both bootstrap entry
-points read it — `bin/qa-scaffold` (the `/qa:init` path) and `init.sh` (the
+points read it — `bin/qa-scaffold` (the `/qa-warden:init` path) and `init.sh` (the
 plugin-free `npm run init` path) — so the two provably stamp the **same** tree.
 It replaced a pair of hand-kept `mkdir -p` lists held together only by matching
 "keep this list IDENTICAL" comments, which nothing enforced. Adding a runtime
@@ -182,7 +182,7 @@ Also not a script: the list of toolkit-owned **symbols** that must survive in a 
 it is excluded from `--resync` *and* from Check 9's byte-compare — both correct in isolation, but
 together they mean the file every new authoring feature ships in is the one file an upgrade
 cannot deliver, and the in-project agents read that file rather than the plugin. Measured on a
-real `0.2.0` → HEAD upgrade: after a clean, green, exit-0 `/qa:init --resync` the stamped
+real `0.2.0` → HEAD upgrade: after a clean, green, exit-0 `/qa-warden:init --resync` the stamped
 `CLAUDE.md` carried zero mentions of `fault:`, `clock:`, `lock:` or `verifier`, and doctor said
 nothing.
 
@@ -197,7 +197,7 @@ anywhere in the file satisfies it — rewording and user additions are free, onl
 reported — and it **WARNs**, because alone among Check 9's findings the repair is a hand-merge
 rather than a command. Not the oracle keys: those are Check 2's, and `lock:` must never be added
 to `oracle-keys.txt` (it is a `TestDetails` field, and that manifest also feeds Check 9b and
-`/qa:coverage`). Shipping a feature documented in `CLAUDE.md` is a one-line edit here.
+`/qa-warden:coverage`). Shipping a feature documented in `CLAUDE.md` is a one-line edit here.
 
 ## `prod-guard-rails.txt` — the prod-guard rail manifest
 
@@ -235,9 +235,9 @@ QA_RUN_OF_RECORD=1 npx playwright test --grep @smoke
 npx playwright test --grep-invert @smoke --reporter=json > reports/regression.json
 ```
 
-`/qa:report` turns the JSON into `reports/summary.md`
+`/qa-warden:report` turns the JSON into `reports/summary.md`
 for a PR comment or Slack post. Triage is a separate, human-initiated action:
-`/qa:heal <failing-test-id>` in an interactive Claude Code session, respecting
+`/qa-warden:heal <failing-test-id>` in an interactive Claude Code session, respecting
 CLAUDE.md's 5-turn healer budget.
 
 ### Tagging contract

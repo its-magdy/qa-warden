@@ -6,7 +6,7 @@
 # Steps:
 #   1. Verify prerequisites (Node >=22, Claude Code installed)
 #   2. Create runtime directories — read from scripts/runtime-dirs.txt, the same manifest
-#      bin/qa-scaffold reads, so `npm run init` and /qa:init produce the same tree.
+#      bin/qa-scaffold reads, so `npm run init` and /qa-warden:init produce the same tree.
 #   3. Copy .env.example -> .env if missing, prompt to edit
 #   4. npm install
 #   5. npx playwright install chromium (always — idempotent)
@@ -46,7 +46,7 @@ command -v jq >/dev/null 2>&1 || warn "jq not found — recommended for parsing 
 
 # --- 2. Directories -----------------------------------------------------------
 info "Creating directories..."
-# SINGLE-SOURCED in scripts/runtime-dirs.txt, which bin/qa-scaffold reads too (the /qa:init
+# SINGLE-SOURCED in scripts/runtime-dirs.txt, which bin/qa-scaffold reads too (the /qa-warden:init
 # path) — so the two entry points provably produce the same tree instead of relying on a pair
 # of "keep this list IDENTICAL" comments no code enforced. A missing dir here means the first
 # write into it after `npm run init` hits an approval wall.
@@ -55,7 +55,7 @@ if [ -f scripts/runtime-dirs.txt ]; then
   ok "dirs ready"
 else
   # No hand-copied fallback list on purpose — that is the duplication this manifest removed.
-  fail "scripts/runtime-dirs.txt missing — this clone predates the runtime-dir manifest; re-run /qa:init --resync to stamp it, then re-run npm run init"
+  fail "scripts/runtime-dirs.txt missing — this clone predates the runtime-dir manifest; re-run /qa-warden:init --resync to stamp it, then re-run npm run init"
 fi
 
 # --- 3. .env ------------------------------------------------------------------
@@ -68,7 +68,7 @@ else
     ok ".env created from template"
     warn "Edit .env: set BASE_URL_APP (or BASE_URL) + QA_USER_EMAIL/QA_USER_PASSWORD before running tests"
   else
-    warn ".env.example missing — no .env created. Restore it (re-run /qa:init) or write .env by hand before running tests"
+    warn ".env.example missing — no .env created. Restore it (re-run /qa-warden:init) or write .env by hand before running tests"
   fi
 fi
 
@@ -108,17 +108,17 @@ Next steps:
      a `prod`/`production` marker at a word boundary) and QA_USER_* creds.
   2. Run `claude` to start an interactive session.
   3. Inside Claude Code (same chain bin/qa-scaffold prints — keep the two in step):
-       /qa:explore                          # build app context (site/auth map)
-       /qa:explore mode=area site=app area=auth
+       /qa-warden:explore                          # build app context (site/auth map)
+       /qa-warden:explore mode=area site=app area=auth
                                             # area context — REQUIRED before intake
-       /qa:intake auth/login                # interview -> basis.md (pins the oracle)
-       /qa:ideate auth/login                # SFDIPOT checklist -> cases.md
-       /qa:approve auth/login               # record approve/prune — REQUIRED before new-spec
-       /qa:new-spec auth/login              # draft your first spec
-       /qa:gen specs/auth/login.md          # compile spec -> .spec.ts
-       /qa:review                           # reviewer gates the assertion contract
-       /qa:run mode=smoke                        # run the @smoke suite
-     New to these terms (oracle, basis, SFDIPOT, assertion contract)? Run /qa:help.
+       /qa-warden:intake auth/login                # interview -> basis.md (pins the oracle)
+       /qa-warden:ideate auth/login                # SFDIPOT checklist -> cases.md
+       /qa-warden:approve auth/login               # record approve/prune — REQUIRED before new-spec
+       /qa-warden:new-spec auth/login              # draft your first spec
+       /qa-warden:gen specs/auth/login.md          # compile spec -> .spec.ts
+       /qa-warden:review                           # reviewer gates the assertion contract
+       /qa-warden:run mode=smoke                        # run the @smoke suite
+     New to these terms (oracle, basis, SFDIPOT, assertion contract)? Run /qa-warden:help.
   4. Run the suite: `npx playwright test` (plain Playwright, no LLM cost).
 
 Read CLAUDE.md for policy.

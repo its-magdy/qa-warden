@@ -22,13 +22,13 @@ gate is the easiest one to forget — invoke it on **every PR that touches
 `$BASE...HEAD` commit diff **unioned with the working tree and untracked files**,
 with the fresh-repo / non-`main` / diverged-branch fallbacks in
 `agents/reviewer.md` §Inputs — it never reviews an empty scope as PASS. The union
-is what makes the local `/qa:gen` → `/qa:review` path work at all: the generator
+is what makes the local `/qa-warden:gen` → `/qa-warden:review` path work at all: the generator
 never self-commits, so a just-authored spec+test are **untracked** and a
 commit-range diff alone cannot see them. Pass `$ARGUMENTS` to narrow the review to
 a single spec/test or an explicit path:
 
 ```bash
-# Optional: normalize a bare <area>/<feature> to its spec path (same resolver as /qa:gen).
+# Optional: normalize a bare <area>/<feature> to its spec path (same resolver as /qa-warden:gen).
 [ -n "$ARGUMENTS" ] && TARGET=$(bash scripts/resolve-spec-path.sh spec "$ARGUMENTS" 2>/dev/null || echo "$ARGUMENTS")
 ```
 
@@ -58,8 +58,8 @@ then PASS summary. It fixes nothing; on a FAIL, kick the spec back to the
 the twins and hits no network.
 
 **CI wiring (optional — the local gate is the `.reviewed` marker below + doctor Check 15).** The reviewer's competence is not the gap — its
-*triggering* is. Run it on every PR that touches the QA suite. A FRESH `/qa:init` stamps this
-workflow as `.github/workflows/qa-review.yml.example` — rename it to enable. (`/qa:init --resync`
+*triggering* is. Run it on every PR that touches the QA suite. A FRESH `/qa-warden:init` stamps this
+workflow as `.github/workflows/qa-review.yml.example` — rename it to enable. (`/qa-warden:init --resync`
 deliberately does NOT deliver it — it is optional, so it is kept out of the resync set; on a
 project scaffolded before it existed, copy it from
 `${CLAUDE_PLUGIN_ROOT}/templates/.github/workflows/qa-review.yml.example`.) **The runner
@@ -84,7 +84,7 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           plugin_marketplaces: "https://github.com/<your-org>/<marketplace-repo>.git"
-          plugins: "qa@qa-toolkit"
+          plugins: "qa-warden@qa-toolkit"
           prompt: "Use the reviewer subagent to review the PR diff and its imported page objects. Fail the job on any reviewer FAIL, and also fail the job if the reviewer's report contains no explicit verdict line (a report cut off before a verdict is written is not a PASS)."
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
@@ -96,7 +96,7 @@ attestation an agent cannot forge. Non-GitHub CI: install the CLI on the runner
 in the job env. The load-bearing part is that a PR touching `tests/`/`specs/`
 cannot merge without the reviewer having run.
 
-**Attestation marker (feeds `/qa:doctor` Check 15).** After the reviewer returns,
+**Attestation marker (feeds `/qa-warden:doctor` Check 15).** After the reviewer returns,
 **first check that its report contains an explicit verdict line** (`PASS`, or
 `FAIL` in any form including `FAIL (inconclusive-partial)`) for the reviewed pair.
 **If it does not — a `maxTurns` cutoff, a crash, or any output with no verdict —
@@ -124,12 +124,12 @@ so those prompt, and are denied headless):
 bash scripts/review-marker.sh specs/<area>/<feature>.md tests/<area>/<feature>.spec.ts PASS|FAIL
 ```
 
-It computes the digests with the same `sha256sum` → `shasum -a 256` fallback `/qa:doctor`
+It computes the digests with the same `sha256sum` → `shasum -a 256` fallback `/qa-warden:doctor`
 Check 15 reads them with (T-05). If the script is missing (project scaffolded before it
-shipped), say so and point at `/qa:init --resync` rather than hand-rolling the file.
+shipped), say so and point at `/qa-warden:init --resync` rather than hand-rolling the file.
 
 Commit the markers with the reviewed change; they are agent-writable convenience
-for `/qa:doctor` Check 15 (which WARNs when a pair changed since its marker) — the
+for `/qa-warden:doctor` Check 15 (which WARNs when a pair changed since its marker) — the
 anti-forgery layer is the CI required-status above.
 
 ## URL-audit mode
@@ -167,7 +167,7 @@ serializing it behind two live browser scans wastes the whole audit's wall-clock
    run mid-audit. Exploration has only `mode=hot` / `mode=area`,
    each of which *writes* a context file; it has no non-clobbering "scratch"
    mode, and this audit must not overwrite hot-tier or specialist context (for a
-   context refresh use `/qa:explore`). Keep the snapshot inline for steps 2–4;
+   context refresh use `/qa-warden:explore`). Keep the snapshot inline for steps 2–4;
    write nothing under `specs/_context/**`.
 
    **Auth-gated URLs — authenticate BEFORE the snapshot, or the audit false-cleans.**
@@ -205,7 +205,7 @@ serializing it behind two live browser scans wastes the whole audit's wall-clock
    pin the runner OS or keep per-OS baselines before committing any real baseline.
    **If NO managed spec covers this URL and you must author a throwaway spec to host the
    `toHaveScreenshot()` call, name it `tests/_audit-<slug>.spec.ts` (underscore-prefixed)**
-   so the nightly (`testIgnore: '**/_*.spec.ts'`) and `/qa:doctor` Check 3 both skip it
+   so the nightly (`testIgnore: '**/_*.spec.ts'`) and `/qa-warden:doctor` Check 3 both skip it
    (P-03/P-05). **Never** leave a committed, un-prefixed, nightly-running visual spec with an
    OS-locked baseline — that turns a read-only probe into a permanent Linux-CI red. Prefer
    `artifacts/visual/` (gitignored) for a one-off baseline you don't intend to keep.

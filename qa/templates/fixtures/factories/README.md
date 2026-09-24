@@ -43,7 +43,7 @@ await request.post("/api/v1/users", { data: alice });
 1. Edit `schemas/<entity>.ts`.
 2. TypeScript compile breaks every call site that no longer matches.
 3. Update each call site (often: just rename a field; sometimes: add an override).
-4. Run `/qa:impact field=<new-field>` to find any specs that reference the field via route-manifest only.
+4. Run `/qa-warden:impact field=<new-field>` to find any specs that reference the field via route-manifest only.
 5. Regenerate affected `.spec.ts` files.
 
-The 5 steps above **are** the change-cascade playbook: schema edit → `tsc` breaks call sites → fix them → `/qa:impact` finds manifest-only refs → regenerate.
+The 5 steps above **are** the change-cascade playbook: schema edit → `tsc` breaks call sites → fix them → `/qa-warden:impact` finds manifest-only refs → regenerate.

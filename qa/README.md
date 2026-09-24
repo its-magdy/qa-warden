@@ -16,43 +16,43 @@ test end to end), and keep the **[glossary](reference/glossary.md)** open for an
 ## Your first test — four commands
 
 ```
-/qa:explore                  learn the app
-/qa:new-spec <area/feature>  write the spec (plain language + a YAML oracle you can read)
-/qa:gen      specs/<f>.md    compile it to a Playwright test and run it green
-/qa:review                   check the test can actually fail
+/qa-warden:explore                  learn the app
+/qa-warden:new-spec <area/feature>  write the spec (plain language + a YAML oracle you can read)
+/qa-warden:gen      specs/<f>.md    compile it to a Playwright test and run it green
+/qa-warden:review                   check the test can actually fail
 ```
 
-That is the **fast lane**, after a one-time `/qa:init`. It skips no FAIL-level gate. Everything
+That is the **fast lane**, after a one-time `/qa-warden:init`. It skips no FAIL-level gate. Everything
 below is the same path with the optional **rigor lane** added — reach for it on
 P1/money/compliance features, not on day one.
 
 ## The full authoring workflow
 
 ```
-/qa:init                     once per project — stamp the runtime substrate, then edit .env
+/qa-warden:init                     once per project — stamp the runtime substrate, then edit .env
    ↓
-/qa:explore                  build specs/_context/app.context.md (sites, auth, env, naming)
+/qa-warden:explore                  build specs/_context/app.context.md (sites, auth, env, naming)
    ↓   ── decide WHAT to test ──
-/qa:intake  <area/feature>   interview → the test basis (what "correct" means — the oracle)
-/qa:ideate  <area/feature>   SFDIPOT checklist of candidate cases  ← a HUMAN approves/prunes
-/qa:approve <area/feature>   record the human verdict (approve/prune/defer; mints row ids)
+/qa-warden:intake  <area/feature>   interview → the test basis (what "correct" means — the oracle)
+/qa-warden:ideate  <area/feature>   SFDIPOT checklist of candidate cases  ← a HUMAN approves/prunes
+/qa-warden:approve <area/feature>   record the human verdict (approve/prune/defer; mints row ids)
    ↓   ── build the tests ──
-/qa:new-spec <area/feature>  draft one Markdown spec + closed-vocab YAML oracle
-/qa:gen      specs/<f>.md    compile the spec → tests/<f>.spec.ts, run it green
+/qa-warden:new-spec <area/feature>  draft one Markdown spec + closed-vocab YAML oracle
+/qa-warden:gen      specs/<f>.md    compile the spec → tests/<f>.spec.ts, run it green
    ↓
-/qa:review   [spec-or-diff]  reviewer gates the assertion contract (run on every PR)
+/qa-warden:review   [spec-or-diff]  reviewer gates the assertion contract (run on every PR)
    ↓
-/qa:run mode=smoke           run the @smoke suite (no LLM)
+/qa-warden:run mode=smoke           run the @smoke suite (no LLM)
    ↓   on failure
-/qa:heal <test-id>           triage from the trace; patch selectors/waits, never assertions
+/qa-warden:heal <test-id>           triage from the trace; patch selectors/waits, never assertions
 ```
 
 The intake → ideate → approve stretch is the **rigor lane** (P1/money/compliance — it pins
 what correct means before anything is generated); the **fast lane** goes straight from
 explore to new-spec and skips no FAIL-level gate.
 
-`/qa:report` aggregates a run into a PR/Slack-ready summary. The full command catalog and a
-"where am I / what's next" read of your project are always available from **`/qa:help`**.
+`/qa-warden:report` aggregates a run into a PR/Slack-ready summary. The full command catalog and a
+"where am I / what's next" read of your project are always available from **`/qa-warden:help`**.
 
 ## How this differs from Playwright's own test agents
 
@@ -103,7 +103,7 @@ is not "accessible," and self-hosted visual diffs need a specialist for the long
 - **[`reference/glossary.md`](reference/glossary.md)** — every term this plugin uses, defined once.
 - **[`reference/reviewing-without-code.md`](reference/reviewing-without-code.md)** — for the non-coder who signs off: judge AI-written tests by their oracle + video, and the gates that stop for a human.
 - **[`reference/how-to.md`](reference/how-to.md)** — goal-titled recipes: import manual cases, fix a failing test, brownfield adoption, nightly CI, add rigor to a P1 flow.
-- **`/qa:help`** — everything else: what each command/agent/skill does, and what to run next.
+- **`/qa-warden:help`** — everything else: what each command/agent/skill does, and what to run next.
 - **`DOCUMENTATION.md` (marketplace repo root)** — the single canonical written reference for
   humans and agents. Lives beside the plugin in the repo it
   installs from — installed plugins can't reference files outside their own directory, so

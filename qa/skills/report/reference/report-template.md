@@ -1,4 +1,4 @@
-# `/qa:report` output template — the report's output contract
+# `/qa-warden:report` output template — the report's output contract
 
 This is the **sole owner** of the PR/Slack summary shape (totals, failures table, signature
 grouping, value ledger). `skills/report/SKILL.md` §Inputs renders everything below the SCOPE
@@ -26,7 +26,7 @@ non-empty (F-19), an audit reported violations, or SCOPE is NOT ESTABLISHED.>
 **Totals:** <N> specs · <P> passed · <FAILED> failed · <S> skipped · <RETRIED> retried · <FLAKY> flaky · wall-clock <hh:mm:ss>
 <Map each to `stats` in `last-run.json`: passed=`expected`, failed=`unexpected`, skipped=`skipped`,
 flaky=`flaky` (retried-then-passed). `<RETRIED>` counts retry ATTEMPTS and is NOT `<FLAKY>`.>
-**Flake budget:** <FLAKY>/<N> this run (this run ONLY — no history is kept, so this is not a trend. CLAUDE.md §"Escalation rules": confirm a suspect with `/qa:run mode=repeat`; worst per-test pass rate <95% → a human tags it `@quarantine`)
+**Flake budget:** <FLAKY>/<N> this run (this run ONLY — no history is kept, so this is not a trend. CLAUDE.md §"Escalation rules": confirm a suspect with `/qa-warden:run mode=repeat`; worst per-test pass rate <95% → a human tags it `@quarantine`)
 **Durations:** p50 <s>s · p95 <s>s · vs prior run <±N%> · slowest 5: <spec> (<s>s), <spec> (<s>s), … (healer candidates if ALSO flaky)
 <Omit the `vs prior run` clause entirely when no prior local `reports/summary.md` exists — never
 render 0% from comparing the run to itself. Flag >20% regression explicitly.>
@@ -65,7 +65,7 @@ enforces against this table. Omit the section only when <FLAKY> is genuinely 0.>
 </details>
 
 ## Audit findings (a11y / visual)
-<Headline numbers from any `reports/audit-*.md` written by `/qa:review url=<url>` — WCAG violation
+<Headline numbers from any `reports/audit-*.md` written by `/qa-warden:review url=<url>` — WCAG violation
 counts by impact, and visual-diff count. Omit the section when no audit report exists. This is the
 one place a reviewer looks, so an audit that ran and found violations must not be invisible here.>
 

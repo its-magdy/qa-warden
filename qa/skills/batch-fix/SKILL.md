@@ -5,7 +5,7 @@ disable-model-invocation: true
 ---
 
 Apply a single healer pattern fix across every test matching `$ARGUMENTS`
-(e.g. `/qa:batch-fix tests/checkout` — a path prefix or substring Playwright
+(e.g. `/qa-warden:batch-fix tests/checkout` — a path prefix or substring Playwright
 filters on, **not** a shell glob; see the note below).
 
 **Session boundary (F-38):** this command runs in the **main session** and owns the
@@ -28,20 +28,20 @@ Workflow:
 
 1. Establish the **current** failing set by RE-RUNNING the filter, not by trusting
    `artifacts/last-run.json`. `last-run.json` records only the last run — it can
-   be stale (a `/qa:run mode=single` or `/qa:run mode=repeat` since, or an edit after the last smoke)
+   be stale (a `/qa-warden:run mode=single` or `/qa-warden:run mode=repeat` since, or an edit after the last smoke)
    and may not include these specs at all, so aborting on "zero matches in last-run" can
    skip a genuinely-red batch. Run the filter fresh, then work from THAT result:
    ```bash
    # zsh (this host's default Bash-tool shell) doesn't word-split unquoted vars and
    # doesn't glob-expand `**` in a variable — Playwright's filter is a path
    # substring/regex, NOT a shell glob, so prefer a directory or substring
-   # (`/qa:batch-fix tests/checkout`). Force word-splitting; no-op in bash.
+   # (`/qa-warden:batch-fix tests/checkout`). Force word-splitting; no-op in bash.
    [ -n "${ZSH_VERSION:-}" ] && setopt shwordsplit 2>/dev/null
    set -- $ARGUMENTS
-   ARG="${1:?usage: /qa:batch-fix <path-or-substring>}"  # required; fail loudly — an empty
+   ARG="${1:?usage: /qa-warden:batch-fix <path-or-substring>}"  # required; fail loudly — an empty
    # invocation would run the WHOLE suite and step 2 would "diagnose a pattern" across
    # every unrelated failure in the project (maximum blast radius for a batch tool).
-   mkdir -p artifacts  # guard: the redirect target dir MUST exist first (F-S05) — sibling /qa:run mode=repeat
+   mkdir -p artifacts  # guard: the redirect target dir MUST exist first (F-S05) — sibling /qa-warden:run mode=repeat
    # does the same. Without it, on a fresh project the `> artifacts/…json` write fails, `2>/dev/null` eats
    # the error, jq reads an absent file → MATCHED=0 → a FALSE "nothing matched" abort on a genuinely-red batch.
    npx playwright test "$ARG" --retries=0 --reporter=json > artifacts/batch-fix-precheck.json 2>/dev/null || true
@@ -76,7 +76,7 @@ Workflow:
    say the pattern resolved to nothing and stop. **Do NOT gate this on `stats.expected == 0`** — an
    all-failing batch (every matched test red) has `expected == 0` but `unexpected > 0`, and gating on
    `expected` would abort on the exact all-red batch this command exists to fix (F-39), which bites
-   hardest at the recommended narrow scope (`/qa:batch-fix tests/<area>`). If it matched tests but
+   hardest at the recommended narrow scope (`/qa-warden:batch-fix tests/<area>`). If it matched tests but
    **none are failing** (`FAILED == 0 && MATCHED > 0`), report "nothing to fix" — do not invent a
    patch. Only proceed to step 2 when `FAILED > 0` (≥1 real current failure).
 2. **Delegate to the `healer` subagent** to triage ONE representative failure
@@ -85,7 +85,7 @@ Workflow:
    sentinel instead of a patch** (`artifacts/.healer-needs-*` — the representative
    failure classified as stale-context / auth-stale / data-drift / contract-change),
    close the loop per the sentinel→action table in `${CLAUDE_PLUGIN_ROOT}/reference/sentinel-actions.md` before
-   re-invoking — never leave the sentinel orphaned (`/qa:doctor` check 4 flags it).
+   re-invoking — never leave the sentinel orphaned (`/qa-warden:doctor` check 4 flags it).
 3. Propose the pattern (before/after snippet) to the user IN CHAT and wait
    for explicit confirmation before editing N files — batch fixes are
    high-blast-radius.
@@ -100,7 +100,7 @@ Workflow:
      **batch-eligible**.
    - only a presence/state check on or beside the patched element → green would be
      unconfirmed; **exclude it from the batch** and list it for an individual
-     `/qa:heal <test-id>`, where HEAL02 actually runs.
+     `/qa-warden:heal <test-id>`, where HEAL02 actually runs.
    Show both lists in the proposal. A wait-only pattern (no locator change) cannot land on a
    lookalike — skip the split.
 4. Once confirmed, apply the patch across every **batch-eligible** spec (never touch
@@ -109,18 +109,18 @@ Workflow:
    ```bash
    [ -n "${ZSH_VERSION:-}" ] && setopt shwordsplit 2>/dev/null
    set -- $ARGUMENTS
-   ARG="${1:?usage: /qa:batch-fix <path-or-substring>}"   # re-derive; fail loudly rather than run everything
+   ARG="${1:?usage: /qa-warden:batch-fix <path-or-substring>}"   # re-derive; fail loudly rather than run everything
    npx playwright test "$ARG" --retries=0 --reporter=line
    ```
    **The `--reporter=line` override is load-bearing:** in a run-of-record context (CI, or
    `QA_RUN_OF_RECORD=1` in the environment) a bare re-run fires the config's gated
    `json` reporter, rewriting `artifacts/last-run.json` with ONLY this batch's
-   subset — a later `/qa:report` then reads the subset as the whole suite and hides real
+   subset — a later `/qa-warden:report` then reads the subset as the whole suite and hides real
    failures elsewhere. An inline `--reporter` replaces the config array, so `last-run.json`
    (the run-of-record) is left intact. You care only about exit code / red-green here.
 6. Report: how many went green, how many still red, bugs filed for any that
    don't respond to the pattern (those are likely independent product bugs), **and the
-   specs step 3 excluded**, each with its ready-to-paste `/qa:heal <test-id>` — an excluded
+   specs step 3 excluded**, each with its ready-to-paste `/qa-warden:heal <test-id>` — an excluded
    spec is still red, and one left off the report reads as fixed.
 
 **Hard turn budget: 5** for the representative triage, then pure mechanical

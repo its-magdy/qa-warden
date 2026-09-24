@@ -25,7 +25,7 @@ human-readable test — and you'll have seen the plugin do the thing that makes 
 ## Before you start
 
 You need, once:
-- the plugin installed (`/plugin install qa@qa-toolkit`),
+- the plugin installed (`/plugin install qa-warden@qa-toolkit`),
 - **your app running and reachable** on a **non-production** URL (localhost or staging),
 - a **test account** that already exists in that app (an email + password you can use).
 
@@ -36,7 +36,7 @@ No Playwright knowledge required.
 ## Step 1 — stamp the project
 
 ```
-/qa:init
+/qa-warden:init
 ```
 Run this **once** per project. It drops the runtime files in (config, scripts, a policy file,
 and a `.env.example`) and installs dependencies. You'll see a list of created files ending in ✅.
@@ -48,12 +48,12 @@ BASE_URL_APP=http://localhost:3000        # your localhost or staging (a URL, no
 QA_USER_EMAIL=member@example.test          # your existing test account
 QA_USER_PASSWORD=your-test-password
 ```
-Check it worked: run `/qa:doctor` — a healthy setup prints a short summary with **no ❌ blockers**. Doctor is read-only and **offline**: it confirms your config files, scripts, and the stock `.env` variables (including `BASE_URL_APP`) are in place — it does **not** reach `BASE_URL_APP` over the network. The next step (`/qa:explore`) is what actually opens your app in a browser and confirms the URL really works.
+Check it worked: run `/qa-warden:doctor` — a healthy setup prints a short summary with **no ❌ blockers**. Doctor is read-only and **offline**: it confirms your config files, scripts, and the stock `.env` variables (including `BASE_URL_APP`) are in place — it does **not** reach `BASE_URL_APP` over the network. The next step (`/qa-warden:explore`) is what actually opens your app in a browser and confirms the URL really works.
 
 ## Step 2 — let the AI look at your app
 
 ```
-/qa:explore
+/qa-warden:explore
 ```
 The exploration agent opens your app in a real browser and writes a short **[context](glossary.md)**
 file (`specs/_context/app.context.md`) describing what it found — the sites, how login works,
@@ -61,13 +61,13 @@ the naming. The **first** run writes it as a `draft:` — open that file, fix an
 remove the `draft:` line to confirm it.
 
 > You're teaching the AI the lay of the land once. **Heads-up:** the first time you run
-> `/qa:new-spec` for a new area (next step), it will *also* do a one-time deeper exploration of
+> `/qa-warden:new-spec` for a new area (next step), it will *also* do a one-time deeper exploration of
 > just that area — so Step 3 may open the browser again for a moment. That's expected.
 
 ## Step 3 — draft the spec
 
 ```
-/qa:new-spec auth/login
+/qa-warden:new-spec auth/login
 ```
 `auth/login` is the **[area](glossary.md)/feature** you're testing — a real value you type, not a
 placeholder. The planner opens the sign-in screen and writes a human-readable **[spec](glossary.md)**
@@ -100,9 +100,9 @@ it comes from `QA_USER_PASSWORD` in your `.env`.)
 ## Step 4 — compile it and run it green
 
 ```
-/qa:gen specs/auth/login.md
+/qa-warden:gen specs/auth/login.md
 ```
-`/qa:gen` runs **two** AIs in a row. First the *generator* turns the spec into a real
+`/qa-warden:gen` runs **two** AIs in a row. First the *generator* turns the spec into a real
 [test](glossary.md) at `tests/auth/login.spec.ts`, runs it once, and leaves it **green**. Then a
 second AI — the *verifier*, which did not write the test — checks that the green means something:
 it deliberately breaks the app's behaviour behind the scenes and confirms your test actually turns
@@ -117,7 +117,7 @@ real sign-in flow. *That video is your proof it tested the real thing* — you n
 ## Step 5 — let the gatekeeper check it
 
 ```
-/qa:review
+/qa-warden:review
 ```
 The **[reviewer](glossary.md)** confirms every step is actually asserted, every assertion is in the
 closed vocabulary, and nothing is green-but-empty. You'll get a short **PASS** report. (On a real
@@ -126,7 +126,7 @@ pull request — a "PR", the change you ask a teammate to merge — a FAIL here 
 ## Step 6 — run the smoke gate
 
 ```
-/qa:run mode=smoke
+/qa-warden:run mode=smoke
 ```
 Runs the `@smoke`-tagged tests with **no AI in the loop** — exactly what your nightly does, at
 ~$0. You'll see `1 passed`. The test passes — **but passing isn't the point yet.** A green test
@@ -142,18 +142,18 @@ by making the check *false* and watching it refuse to stay green:
 1. Open `specs/auth/login.md`.
 2. In the `oracle:`, change `text_visible: "My tasks"` to something the app never shows, e.g.
    `text_visible: "Totally wrong text"`.
-3. Recompile: `/qa:gen specs/auth/login.md`. Because the oracle is now deliberately false, the test
-   **can't pass** — `/qa:gen` runs it once and reports it **red ❌ right there** (the generator never
-   parks a failing test as green). `/qa:run mode=smoke` then shows it red too.
+3. Recompile: `/qa-warden:gen specs/auth/login.md`. Because the oracle is now deliberately false, the test
+   **can't pass** — `/qa-warden:gen` runs it once and reports it **red ❌ right there** (the generator never
+   parks a failing test as green). `/qa-warden:run mode=smoke` then shows it red too.
 
 It goes **red ❌**, with the failing step and a link to a **[trace](glossary.md)** — open it at
 [trace.playwright.dev](https://trace.playwright.dev) (no install) and *see* every step and where
 it stopped. **This is the whole point:** the oracle said "Totally wrong text" must be visible, the
 app didn't show it, so the test refused to pass. Now change the oracle back to `"My tasks"`,
-re-run step 3 (`/qa:gen` again), and it's green again.
+re-run step 3 (`/qa-warden:gen` again), and it's green again.
 
 > **What happens in real life when a test goes red.** You won't hand-break tests — the nightly
-> does it for you. When a run fails, you run `/qa:heal <test-id>` (the `<test-id>` is printed in
+> does it for you. When a run fails, you run `/qa-warden:heal <test-id>` (the `<test-id>` is printed in
 > the red output). The **[healer](glossary.md)** reads the trace and:
 > - if a button just moved or was renamed (**locator drift**), it patches the [locator](glossary.md)
 >   and the test goes green — *it never changes what you asserted*;
@@ -180,10 +180,10 @@ unsure, that's the signal to ask a developer.
 
 ## Where to go next
 
-- **Test your own feature:** `/qa:new-spec <your-area>/<your-feature>`, then repeat steps 3–6.
+- **Test your own feature:** `/qa-warden:new-spec <your-area>/<your-feature>`, then repeat steps 3–6.
 - **Not a coder, but you're the one signing off?** Read **[reviewing-without-code.md](reviewing-without-code.md)** — how to judge a test by its oracle + video (never the code), and the moments the plugin stops for your decision.
-- **You already have manual test cases?** Run `/qa:import-cases <area/feature>` with your export — see **[how-to-import-manual-cases.md](how-to-import-manual-cases.md)** for the full walkthrough.
-- **A P1 / money / compliance flow?** Use the **[rigor lane](glossary.md)**: `/qa:intake` →
-  `/qa:ideate` → `/qa:approve` before `/qa:new-spec` — it pins *what correct means* first.
-- **Stuck / what's next?** Ask `/qa:help` from inside your project.
-- **Every command, in full:** the repo's `DOCUMENTATION.md` — or, from inside a project, ask `/qa:help <command>` (every command self-documents; use this if you only have the installed plugin and not the repo checkout). **Why it works this way:** `DESIGN.md` (beside this file).
+- **You already have manual test cases?** Run `/qa-warden:import-cases <area/feature>` with your export — see **[how-to-import-manual-cases.md](how-to-import-manual-cases.md)** for the full walkthrough.
+- **A P1 / money / compliance flow?** Use the **[rigor lane](glossary.md)**: `/qa-warden:intake` →
+  `/qa-warden:ideate` → `/qa-warden:approve` before `/qa-warden:new-spec` — it pins *what correct means* first.
+- **Stuck / what's next?** Ask `/qa-warden:help` from inside your project.
+- **Every command, in full:** the repo's `DOCUMENTATION.md` — or, from inside a project, ask `/qa-warden:help <command>` (every command self-documents; use this if you only have the installed plugin and not the repo checkout). **Why it works this way:** `DESIGN.md` (beside this file).

@@ -6,14 +6,14 @@ disable-model-invocation: true
 
 Import an existing manual test-case export into the plugin's checklist format.
 This runs **in the main session** (it is interactive — `AskUserQuestion`, with the
-same plain-prose fallback as `/qa:intake`); it does NOT delegate to a subagent.
+same plain-prose fallback as `/qa-warden:intake`); it does NOT delegate to a subagent.
 
 ## What to do
 
 1. **Parse args.** `<area/feature>` (validate `<area>` against `naming.area_dirs` in
    `specs/_context/app.context.md` — mirror intake's F-18 rule: on a mismatch, list the
    valid `area_dirs` and stop), optional `site=` (default `app`; must match a `sites[].id` in
-   `app.context.md` — same rule as `/qa:intake`), optional `source=` (name for provenance stamps, e.g.
+   `app.context.md` — same rule as `/qa-warden:intake`), optional `source=` (name for provenance stamps, e.g.
    `testrail`), optional file path. No file given → ask the user to paste the export.
 2. **Recognize the export shape.** The big-3:
    - **TestRail** — ID `C####`, Title, Section, Preconditions, Steps, Expected Result,
@@ -35,10 +35,10 @@ same plain-prose fallback as `/qa:intake`); it does NOT delegate to a subagent.
    ☐ [imported/<source> <ext-id>] <title> → oracle: <key(s)>  risk: <lvl>  @smoke|@regression
    ```
    The external id IS the row id.
-4. **Write to `specs/_context/<site>/<area>/<feature>.cases.md`** — the same path `/qa:ideate`
-   writes and `/qa:approve` reads. A NEW file starts from
+4. **Write to `specs/_context/<site>/<area>/<feature>.cases.md`** — the same path `/qa-warden:ideate`
+   writes and `/qa-warden:approve` reads. A NEW file starts from
    `specs/_context/_templates/cases.md` and MUST keep its `# cases: <area>/<feature>` H1:
-   `/qa:approve` anchors its banner under it, and `/qa:coverage` silently skips a cases file
+   `/qa-warden:approve` anchors its banner under it, and `/qa-warden:coverage` silently skips a cases file
    without it. **Dedupe:** if the file already exists, a row asserting the same behavior on the
    same surface gets the external id APPENDED to the existing row
    (`… [also: <source> <id>]`), not a duplicate row.
@@ -58,8 +58,8 @@ same plain-prose fallback as `/qa:intake`); it does NOT delegate to a subagent.
 
    Advisory, not a stop — approval still proceeds. This is the single most common blocker between an
    imported case and a passing test for the "I already have test cases" persona, so surface it here
-   (at import) rather than letting the QA discover it only when `/qa:gen` has nothing to seed.
-7. **Close:** `→ run /qa:approve <area/feature>` — the human gate; import ≠ approval.
+   (at import) rather than letting the QA discover it only when `/qa-warden:gen` has nothing to seed.
+7. **Close:** `→ run /qa-warden:approve <area/feature>` — the human gate; import ≠ approval.
 
 ## Edge cases
 - **>~40 cases** → split by Section→area with a confirmation round.

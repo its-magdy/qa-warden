@@ -1,12 +1,12 @@
 # QA-Toolkit — Design rationale (the *why*)
 
-This is the small, durable "why" behind the `qa` plugin. It deliberately does **not**
+This is the small, durable "why" behind the QA Warden plugin. It deliberately does **not**
 restate operational facts — the oracle vocabulary, the reviewer's checks, the command
 catalog, the argument shapes, the page-object rules. Those live in exactly one home each
 (see [Where the operational facts live](#where-the-operational-facts-live)) and change as
 the agents change. Everything here is meant to survive those mechanics changing.
 
-If you want to *use* the plugin, read `README.md` and run `/qa:help`. This doc is for
+If you want to *use* the plugin, read `README.md` and run `/qa-warden:help`. This doc is for
 maintainers deciding whether a design decision still holds.
 
 ## Contents
@@ -120,7 +120,7 @@ arrangement worse than it looks:
    whether an assertion is real.
 2. **The output is durable and trusted, not transient.** The `// verified: must_fail_when
    "…" → CATCHES` annotation persists in the test file. Reviewer **Check 2b** reads it as
-   evidence; `/qa:doctor` Check 15b re-checks it — but only against the *spec's* invariant
+   evidence; `/qa-warden:doctor` Check 15b re-checks it — but only against the *spec's* invariant
    text, never against any record that a probe actually ran. **Nothing in the toolkit can
    detect a fabricated stamp.** A self-serving verdict therefore does not decay; it hardens
    into the record.
@@ -139,7 +139,7 @@ grading is not a verifier.
 
 This is the one place the toolkit buys an epistemic improvement rather than another check:
 the other defenses add *more* judgments, while this one changes *who makes* an existing one.
-The cost is a second subagent call per `/qa:gen` at authoring time only. Nightly replay is
+The cost is a second subagent call per `/qa-warden:gen` at authoring time only. Nightly replay is
 still agent-free, so the "~$0 nightly" claim is untouched.
 
 ---
@@ -310,7 +310,7 @@ delete them to make the toolkit sound more complete than it is.
   *silently missing* finding — an unenforced assertion contract, an unenumerated case — cannot.
   **The `verifier` is on the silent side and is pinned to opus for the same reason the planner
   is.** Its output is a CATCHES/BLIND verdict, and a wrong CATCHES produces no red test: it
-  produces a `// verified:` comment that reviewer Check 2b trusts and that `/qa:doctor` Check 15b
+  produces a `// verified:` comment that reviewer Check 2b trusts and that `/qa-warden:doctor` Check 15b
   only re-checks against the *spec*, never against any record that a probe ran. Nothing
   downstream can detect a fabricated stamp — which is also why the verifier must be a different
   agent from the one that wrote the assertion (see §"The generator does not grade itself").
@@ -375,7 +375,7 @@ delete them to make the toolkit sound more complete than it is.
   parks a known defect **conditioned on the observed defective value** (`test.fail(<observed>
   ===<buggy>, 'bugs/…')`, the Playwright analogue of pytest's `xfail(raises=…)`) with the
   correct-value oracle asserted below it, so a *different* failure surfaces as unexpected.
-  Reviewer Check 3 + `/qa:doctor` Check 11c cross-check that a parked marker's bug stays
+  Reviewer Check 3 + `/qa-warden:doctor` Check 11c cross-check that a parked marker's bug stays
   `Status: open`, recovering the cleanup signal the conditional form gives up (it
   self-neutralizes silently on fix).
 - **No relational / exact-equality oracle key.** The closed 16-key vocab cannot directly
@@ -409,8 +409,8 @@ delete them to make the toolkit sound more complete than it is.
   file corrects every *new* project but leaves every *existing* one on the old copy — and the
   project deny-list (correctly) forbids agents from patching those files in place, so there
   is no silent auto-repair. The remedy is deliberately **human-invoked, not automatic**:
-  `/qa:doctor` *detects* substrate drift (compares each stamped file against the shipped
-  template) and `/qa:init --resync` *repairs* it (force-refresh toolkit-owned files, backing
+  `/qa-warden:doctor` *detects* substrate drift (compares each stamped file against the shipped
+  template) and `/qa-warden:init --resync` *repairs* it (force-refresh toolkit-owned files, backing
   each up to `.qa-bak`, preserving `.env`/`CLAUDE.md`/user files). Automatic propagation is
   intentionally not offered — force-rewriting a project's build config on every plugin
   upgrade is more dangerous than a flagged, backed-up, opt-in resync.
@@ -446,7 +446,7 @@ delete them to make the toolkit sound more complete than it is.
   scenario `covers:` field (see §"Traceability" in `test-case-ideation.md`). A waiver that *fans* a
   case to a sibling spec (`# waived: … → specs/x.md`) only counts as descoping if that spec **exists** —
   otherwise the case is unbuilt AND its stated home is a phantom, so Check 14 keeps the WARN and
-  `/qa:coverage` dim-5b lists the dead destination (the case reads as "handled" in both tools while
+  `/qa-warden:coverage` dim-5b lists the dead destination (the case reads as "handled" in both tools while
   nothing tests it). This does NOT close the wrong-spec gap below — it makes the approval gate
   load-bearing, not the completeness of the plan.
 - **The un-closeable gap: a wrong spec is un-automatable.** Every defense above guards
@@ -470,7 +470,7 @@ delete them to make the toolkit sound more complete than it is.
     downgrades to a non-blocking WARN — so softening the title wording ships the same dishonesty green.
     Broadening 2c to parse prose is deferred deliberately: it trades a concrete title-gaming path for added
     false-positive risk on a load-bearing gate.
-- **`/qa:init` silently RE-ADDS a permission rule you deliberately deleted.** The
+- **`/qa-warden:init` silently RE-ADDS a permission rule you deliberately deleted.** The
   `.claude/settings.json` merge in `bin/qa-scaffold` is an additive union — the project's
   `permissions.allow`/`deny` arrays are unioned with the shipped template's on every stamp and every
   `--resync`. It cannot distinguish "the user removed this rule on purpose" from "this project predates
@@ -486,7 +486,7 @@ delete them to make the toolkit sound more complete than it is.
   tombstone the union must subtract. That discriminates exactly where a template gate cannot — a rule
   absent-and-previously-delivered is a deletion, a rule absent-and-never-delivered is a gap — and unlike
   a doctor check it ships with the **plugin** (`bin/qa-scaffold` is not in `resync-set.txt`), so it is
-  present on the first `/qa:init` after an upgrade rather than one repair behind.
+  present on the first `/qa-warden:init` after an upgrade rather than one repair behind.
   Two properties any implementation has to accept, both established before writing one:
   **(a) it is blind for exactly one upgrade** — every project today has no receipt, so the first run can
   only record what it delivers and start honouring deletions from the run after; and **(b) `allow` and
@@ -516,7 +516,7 @@ A multi-site suite has to send `admin` specs at the admin baseURL. The obvious m
 Playwright project with a `testMatch` on `tests/admin/**` — routing by directory. This toolkit
 routes by the **`@site:<id>` tag** the generator always emits instead, so `site=admin` alone sends
 a spec to the admin baseURL wherever its area folder lives. Area directories stay a pure
-organization choice, and `/qa:new-spec refund-partial site=admin` routes correctly without an
+organization choice, and `/qa-warden:new-spec refund-partial site=admin` routes correctly without an
 `admin/` folder.
 
 **The trap in re-introducing a path-routed project:** Playwright **ANDs** a project's `testMatch`
@@ -532,28 +532,28 @@ Every fact below has exactly one authoritative home. Do not copy them here — p
 
 | Fact | Authoritative home |
 |---|---|
-| Oracle vocabulary (the 16 keys) + per-key argument shapes | `templates/CLAUDE.md` (stamped SoT). The **authoritative mirror list** is CLAUDE.md §"Test case format contract" — keys are ENUMERATED (an actual editable list) in `agents/planner.md`, `agents/generator.md`, reviewer Check 4, `scripts/oracle-keys.txt`, and `/qa:coverage`'s `KEYS_RE` grep — **those** are the sites to change in the same commit when adding/removing a key. `/qa:new-spec` and `/qa:review url=<url>` **defer** to CLAUDE.md and hold **no key list** (defer-only — nothing to edit there; F-03). The arg-shape table lives in CLAUDE.md + `planner.md`/`generator.md` (reviewer defers to CLAUDE.md for the arg-shape *contract*, though Check 4 does state shapes inline as counter-examples — so treat reviewer as a fifth, unguarded mirror). **The CLAUDE.md <-> planner.md pair is now guarded by doctor Check 9bb**, which compares shape EXPRESSIONS only (trailing prose deliberately differs and is not compared). generator.md's Oracle->expect mapping and DOCUMENTATION.md's numbered table are NOT comparable with that extractor — generator states shapes as INSTANTIATED examples (`{ locator: ..., n: 3 }`), DOCUMENTATION.md as a numbered table with shortened notes — so **`bin/qa-selfcheck` Check 9be** guards those two on the one thing that survives every format: the set of ARGUMENT NAMES, which is precisely what a mis-compile gets wrong (`{ count }` for `{ locator, n }` → the generator reads `.n` and drops the assertion). Normalising to arg names is also what keeps it quiet: `{ cookies?, localStorage? }` and `{ cookies?: [...], localStorage?: { key: value } }` compare equal. generator legitimately pins only 13 of 16 (attribute_equals / element_state / network_response_status are grouped as "straightforward one-line expect mappings"), so absence there is silent and only a pinned shape is compared. **reviewer Check 4 remains hand-kept** — it states shapes inline as prose counter-examples, deliberately quoting WRONG shapes (`count_equals: { count: 1 }`) beside right ones, so an arg-name extractor cannot tell a counter-example from a claim without reading the sentence. Change all ENUMERATING copies in one commit. |
+| Oracle vocabulary (the 16 keys) + per-key argument shapes | `templates/CLAUDE.md` (stamped SoT). The **authoritative mirror list** is CLAUDE.md §"Test case format contract" — keys are ENUMERATED (an actual editable list) in `agents/planner.md`, `agents/generator.md`, reviewer Check 4, `scripts/oracle-keys.txt`, and `/qa-warden:coverage`'s `KEYS_RE` grep — **those** are the sites to change in the same commit when adding/removing a key. `/qa-warden:new-spec` and `/qa-warden:review url=<url>` **defer** to CLAUDE.md and hold **no key list** (defer-only — nothing to edit there; F-03). The arg-shape table lives in CLAUDE.md + `planner.md`/`generator.md` (reviewer defers to CLAUDE.md for the arg-shape *contract*, though Check 4 does state shapes inline as counter-examples — so treat reviewer as a fifth, unguarded mirror). **The CLAUDE.md <-> planner.md pair is now guarded by doctor Check 9bb**, which compares shape EXPRESSIONS only (trailing prose deliberately differs and is not compared). generator.md's Oracle->expect mapping and DOCUMENTATION.md's numbered table are NOT comparable with that extractor — generator states shapes as INSTANTIATED examples (`{ locator: ..., n: 3 }`), DOCUMENTATION.md as a numbered table with shortened notes — so **`bin/qa-selfcheck` Check 9be** guards those two on the one thing that survives every format: the set of ARGUMENT NAMES, which is precisely what a mis-compile gets wrong (`{ count }` for `{ locator, n }` → the generator reads `.n` and drops the assertion). Normalising to arg names is also what keeps it quiet: `{ cookies?, localStorage? }` and `{ cookies?: [...], localStorage?: { key: value } }` compare equal. generator legitimately pins only 13 of 16 (attribute_equals / element_state / network_response_status are grouped as "straightforward one-line expect mappings"), so absence there is silent and only a pinned shape is compared. **reviewer Check 4 remains hand-kept** — it states shapes inline as prose counter-examples, deliberately quoting WRONG shapes (`count_equals: { count: 1 }`) beside right ones, so an arg-name extractor cannot tell a counter-example from a claim without reading the sentence. Change all ENUMERATING copies in one commit. |
 | Reviewer checks (the full check suite) | `agents/reviewer.md` |
-| Command catalog + workflow order | skill frontmatter under `skills/**`; `skills/help/SKILL.md` (or run `/qa:help`) |
-| Skill invocation policy (who may invoke each `/qa:*`) | The `disable-model-invocation:` / `context:` frontmatter of each `skills/*/SKILL.md`, plus §"Why the invocation policy is what it is" below for the reasoning. Every skill is one of three shapes — see that section before adding a new one. |
+| Command catalog + workflow order | skill frontmatter under `skills/**`; `skills/help/SKILL.md` (or run `/qa-warden:help`) |
+| Skill invocation policy (who may invoke each `/qa-warden:*`) | The `disable-model-invocation:` / `context:` frontmatter of each `skills/*/SKILL.md`, plus §"Why the invocation policy is what it is" below for the reasoning. Every skill is one of three shapes — see that section before adding a new one. |
 | Page-object reuse rules | `templates/CLAUDE.md` §"Page-object reuse layer" |
 | Subagent roster (models, tools, who-writes-what) | `templates/CLAUDE.md` §"Subagent roster" + `agents/**` |
 | Prod-guard, env-loading, writable-path policy | `templates/CLAUDE.md` (policy). The shell guard implementation is `templates/scripts/prod-guard.sh`; the enforced `globalSetup` layer is `templates/scripts/prod-guard.ts` — their marker regexes must stay in lockstep. |
 | Test-case ideation — operational mechanics (lens definitions, per-kind processes, artifact shapes) | `skills/intake/SKILL.md` + `agents/ideation.md` + the templates under `templates/specs/_context/_templates/`. The rationale + research grounding live in `reference/test-case-ideation.md` (which, per the maintenance rule below, must not restate the mechanics). |
-| PR/Slack summary shape (totals, failures table, signature grouping, value ledger) | `skills/report/reference/report-template.md` — sole owner (moved out of `skills/report/SKILL.md` §"Template", which now points at it, to keep the skill under the ~5k-token ceiling), alongside the SCOPE line it derives from `--grep` in `.config.argv`. The shape used to live in a separate `report-summarizer` skill that `/qa:report` pointed at; the two carried divergent copies (report said "top 5 failing tests" vs. the summarizer's top-3-by-signature) and needed doctor Check 22 to police the split. Both that second file and that check are now retired — one file owns the shape, so there is no pointer to dangle. |
+| PR/Slack summary shape (totals, failures table, signature grouping, value ledger) | `skills/report/reference/report-template.md` — sole owner (moved out of `skills/report/SKILL.md` §"Template", which now points at it, to keep the skill under the ~5k-token ceiling), alongside the SCOPE line it derives from `--grep` in `.config.argv`. The shape used to live in a separate `report-summarizer` skill that `/qa-warden:report` pointed at; the two carried divergent copies (report said "top 5 failing tests" vs. the summarizer's top-3-by-signature) and needed doctor Check 22 to police the split. Both that second file and that check are now retired — one file owns the shape, so there is no pointer to dangle. |
 
 ### Why the invocation policy is what it is
 
 Custom commands were merged into skills upstream, so `commands/x.md` and `skills/x/SKILL.md`
-both produce `/qa:x`. This plugin uses `skills/` exclusively (`bin/qa-selfcheck` Check 9d fails if a
+both produce `/qa-warden:x`. This plugin uses `skills/` exclusively (`bin/qa-selfcheck` Check 9d fails if a
 `commands/` directory reappears) — the command side supports neither `context: fork` nor
-`allowed-tools` nor bundled files. Three shapes, and a new `/qa:*` must pick one deliberately:
+`allowed-tools` nor bundled files. Three shapes, and a new `/qa-warden:*` must pick one deliberately:
 
 - **`disable-model-invocation: true`** — a user types it, Claude never reaches for it. Every
   skill with side effects: writes source or specs, deletes, drives a browser, or records a
-  human decision. `/qa:approve` is the load-bearing case — it stamps the HUMAN APPROVAL banner
+  human decision. `/qa-warden:approve` is the load-bearing case — it stamps the HUMAN APPROVAL banner
   that reviewer Check 14 reads, so a model able to invoke it could rubber-stamp its own test
-  plan and the gate becomes fiction. `/qa:retire` and `/qa:init` are the destructive cases.
+  plan and the gate becomes fiction. `/qa-warden:retire` and `/qa-warden:init` are the destructive cases.
 - **`context: fork` + `background: false`** — read-only analysis whose working output is bulky
   and whose *conclusion* is small. The fork keeps the walk out of the caller's context.
   **Constraint: the caller sees ONLY what a forked skill returns**, so every forked skill must
@@ -561,8 +561,8 @@ both produce `/qa:x`. This plugin uses `skills/` exclusively (`bin/qa-selfcheck`
   user, or that already delegates to a subagent, must NOT be forked — a fork cannot pause for
   an answer, and forking a delegator just double-nests.
 - **default (neither)** — read-only, cheap, and safe for Claude to reach for on its own.
-  `/qa:explore` MUST stay here: `agents/planner.md` and `agents/healer.md` both STOP on stale
-  context and rely on the orchestrator re-running `/qa:explore` and re-invoking them.
+  `/qa-warden:explore` MUST stay here: `agents/planner.md` and `agents/healer.md` both STOP on stale
+  context and rely on the orchestrator re-running `/qa-warden:explore` and re-invoking them.
   `disable-model-invocation` there silently converts a documented-automatic handoff into a
   manual step. This was found and reverted during the migration; do not re-add it.
 

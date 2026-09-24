@@ -26,12 +26,12 @@ about whether an oracle looks sound — the verifier's verdict has to come from 
 verbatim and stop, so the user has a concrete command to copy:
 
 ```
-Usage:  /qa:gen <spec-path or area/feature> [site=<id>] [keep-video]
+Usage:  /qa-warden:gen <spec-path or area/feature> [site=<id>] [keep-video]
 Compile ONE spec into a runnable test. For example:
 
-  /qa:gen specs/auth/login.md      compile the spec you just drafted
-  /qa:gen auth/login               the same spec, by area/feature
-  /qa:gen tasks/update-task        compile the update-task spec
+  /qa-warden:gen specs/auth/login.md      compile the spec you just drafted
+  /qa-warden:gen auth/login               the same spec, by area/feature
+  /qa-warden:gen tasks/update-task        compile the update-task spec
 
 First time? Follow ${CLAUDE_PLUGIN_ROOT}/reference/tutorial-first-test.md.
 ```
@@ -39,19 +39,19 @@ First time? Follow ${CLAUDE_PLUGIN_ROOT}/reference/tutorial-first-test.md.
 **Safety rail (CLAUDE.md §Environment):** run `bash scripts/prod-guard.sh` first — STOP and ask the user to confirm in-chat if it exits non-zero. The subagent's live-snapshot steps drive `playwright-cli` against `$BASE_URL_<SITE>` — only the `npx playwright test` half is covered by the enforced `globalSetup` guard; the CLI-driving half has no backstop but this check.
 
 **Normalize the spec argument first.** Accept the bare `<area>/<feature>` form
-(what users learn from `/qa:new-spec`, `/qa:intake`, `/qa:ideate`) as well as a
+(what users learn from `/qa-warden:new-spec`, `/qa-warden:intake`, `/qa-warden:ideate`) as well as a
 full `specs/<area>/<feature>.md` path, resolved via the canonical resolver
-(missing script → re-run `/qa:init` to stamp it):
+(missing script → re-run `/qa-warden:init` to stamp it):
 
 ```bash
 SPEC=$(bash scripts/resolve-spec-path.sh spec "$ARGUMENTS")
 ```
 
-So `/qa:gen checkout/coupon` maps to `specs/checkout/coupon.md`, while a full
-`specs/checkout/coupon.md` path is used as-is. `/qa:gen` reads `site:` from the
+So `/qa-warden:gen checkout/coupon` maps to `specs/checkout/coupon.md`, while a full
+`specs/checkout/coupon.md` path is used as-is. `/qa-warden:gen` reads `site:` from the
 spec's own YAML, so a stray inline `site=…` flag (users carry it over from
-`/qa:new-spec`) is not needed here — the resolver strips any `key=val` token and
-resolves on the bare path token, so `/qa:gen checkout/coupon site=app` still
+`/qa-warden:new-spec`) is not needed here — the resolver strips any `key=val` token and
+resolves on the bare path token, so `/qa-warden:gen checkout/coupon site=app` still
 maps to `specs/checkout/coupon.md` instead of a broken `…coupon site=app.md`.
 Compile the resolved `$SPEC`.
 
@@ -79,7 +79,7 @@ manifest exists. If you ever DO need a manual run (e.g. the generator
 returned without a run log), use
 `npx playwright test tests/<area>/<feature>.spec.ts --retries=0 --reporter=line`
 — the **compiled test path**, not `$SPEC`, and `--reporter=line` is load-bearing
-(same clobber-guard as `/qa:heal` / `/qa:batch-fix`; why: CLAUDE.md §Reporting
+(same clobber-guard as `/qa-warden:heal` / `/qa-warden:batch-fix`; why: CLAUDE.md §Reporting
 pipeline). If the generator reports red, do **not** invoke the verifier and do not
 hand it off as "done" — the verifier refuses an unverified spec, so that round trip
 is pure waste; route to the healer or back to the planner instead. Neither agent
@@ -90,7 +90,7 @@ so each comes back to you):
 - **BLIND oracle** — the compiled oracle stayed green under injection and the oracle
   as *declared* cannot catch the defect. The verifier has already filed
   `bugs/<date>-…-blind-<slug>.md` and `test.fixme`'d the scenario. Hand the spec back
-  to the **planner** to strengthen the oracle; re-run `/qa:gen` after.
+  to the **planner** to strengthen the oracle; re-run `/qa-warden:gen` after.
 - **Mis-compiled oracle** — the oracle key is right but the compiled `expect` reads
   the wrong locator/value, quoted as `<file>:<line>`. Re-invoke the **generator** on
   that spec, then the **verifier** again. The verifier is forbidden from editing
@@ -99,11 +99,11 @@ so each comes back to you):
 - **Twin disagreement / no manifest** — the spec did not ship. Do not commit it and
   do not paper over the missing manifest by writing one yourself.
 
-On green *and verified*, `/qa:gen` also emits (a) metamorphic twins at
+On green *and verified*, `/qa-warden:gen` also emits (a) metamorphic twins at
 `tests/<area>/<feature>.metamorphic.spec.ts` (new specs only) and (b) a **route
 manifest** at `artifacts/route-manifests/<area>/<feature>.json` — the data source
-`/qa:impact` intersects for requirement-change-cascade analysis. So a spec is not
-fully "generated" until its manifest exists; without any manifests, `/qa:impact`
+`/qa-warden:impact` intersects for requirement-change-cascade analysis. So a spec is not
+fully "generated" until its manifest exists; without any manifests, `/qa-warden:impact`
 cannot run — it exits with a "NO MANIFESTS FOUND" error (there is no grep fallback),
 so generate specs (which writes their manifests) before running impact analysis.
 
@@ -122,7 +122,7 @@ promise is untouched.
 
 **Force a video on a re-run: `keep-video`.** 8d fires only on a spec's *first*
 green. To get a fresh confirmation video for an **existing** spec (e.g. after an
-edit), pass the `keep-video` token — `/qa:gen checkout/coupon keep-video`. Detect it
+edit), pass the `keep-video` token — `/qa-warden:gen checkout/coupon keep-video`. Detect it
 in `$ARGUMENTS` (`case "$ARGUMENTS" in *keep-video*) …`) and pass it through to the
 verifier, which honours it as the explicit request 8d's re-run carve-out names. If
 you need the video after the fact (the verifier already returned), run the compiled

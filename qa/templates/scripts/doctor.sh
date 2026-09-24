@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# /qa:doctor — the deterministic self-check pass (checks 0–21 + rollup).
+# /qa-warden:doctor — the deterministic self-check pass (checks 0–21 + rollup).
 # Read-only: reruns no tests, heals nothing, hits no network, writes nothing.
 # Run from the QA project root (the dir with playwright.config.ts + CLAUDE.md):
 #   bash scripts/doctor.sh
@@ -13,15 +13,15 @@ fail=0; warn=0
 #    broken run-of-record — a false-green inside the anti-false-green tool.
 command -v jq >/dev/null || { echo "❌ jq not installed — cannot validate last-run.json"; fail=$((fail+1)); }
 
-# 0b. ripgrep (rg) is an undeclared but plugin-wide dependency — /qa:retire's consumer-checks
-#     and the healer/reviewer/planner greps all use it. A MISSING rg makes /qa:retire's "is this
+# 0b. ripgrep (rg) is an undeclared but plugin-wide dependency — /qa-warden:retire's consumer-checks
+#     and the healer/reviewer/planner greps all use it. A MISSING rg makes /qa-warden:retire's "is this
 #     shared?" query return empty, which false-reads as "unused ⇒ DELETE" (D-4) — a destructive
 #     fail-open. WARN (not FAIL): most commands still work, and retire's SKILL.md now falls back to
 #     grep -rl, but a QA should know rg is absent before running a consumer-checked deletion.
-command -v rg >/dev/null || { echo "⚠️  ripgrep (rg) not installed — /qa:retire consumer-checks fall back to grep -rl; install rg (brew install ripgrep) so a missing tool can never false-read as 'safe to delete'"; warn=$((warn+1)); }
+command -v rg >/dev/null || { echo "⚠️  ripgrep (rg) not installed — /qa-warden:retire consumer-checks fall back to grep -rl; install rg (brew install ripgrep) so a missing tool can never false-read as 'safe to delete'"; warn=$((warn+1)); }
 
 # 1. last-run.json freshness + zero-test guard (the F04/F07/F15 class) — single-sourced
-#    in scripts/check-last-run.sh (also called by /qa:report's pre-aggregation check; the
+#    in scripts/check-last-run.sh (also called by /qa-warden:report's pre-aggregation check; the
 #    two used to mirror this logic in prose and drifted). total = expected+unexpected+
 #    skipped+flaky, NOT expected alone (that counts only PASSED tests — an all-red run
 #    has expected=0 and must read as a real, fresh run, not as zero-test).
@@ -40,7 +40,7 @@ if [ -f scripts/check-last-run.sh ]; then
     *) echo "⚠️  check-last-run.sh returned unexpected exit $lr_rc"; warn=$((warn+1)) ;;
   esac
 else
-  echo "⚠️  scripts/check-last-run.sh missing — project scaffolded before it shipped; re-run /qa:init --resync"; warn=$((warn+1))
+  echo "⚠️  scripts/check-last-run.sh missing — project scaffolded before it shipped; re-run /qa-warden:init --resync"; warn=$((warn+1))
 fi
 
 # 2. Closed-vocab drift — the oracle keys MUST be byte-identical across the SoT (CLAUDE.md)
@@ -53,7 +53,7 @@ fi
 #    Same manifest pattern as resync-set.txt / runtime-dirs.txt: one source, N consumers.
 KEYS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' scripts/oracle-keys.txt 2>/dev/null | grep -v '^$')
 if [ -z "$KEYS" ]; then
-  echo "❌ scripts/oracle-keys.txt missing or empty — the oracle vocabulary is UNVERIFIED (run /qa:init --resync)"; fail=$((fail+1))
+  echo "❌ scripts/oracle-keys.txt missing or empty — the oracle vocabulary is UNVERIFIED (run /qa-warden:init --resync)"; fail=$((fail+1))
 fi
 # missing_keys <file> — prints the keys ABSENT from <file>, one per line. `bin/qa-selfcheck` Check 9b (plugin-side) runs the
 # same scan over four plugin files; one helper instead of two copies of the loop, and one pass over
@@ -79,7 +79,7 @@ done < <(missing_keys CLAUDE.md)
 # `! -name '_*'` AND `! -path '*/_*/*'` — BOTH forms, in lockstep with playwright.config.ts's
 # `testIgnore: ['**/_*.spec.ts','**/_*/**']`. `-path '*/_*/*'` alone catches only a `_`-prefixed
 # DIRECTORY (tests/_probe/x.spec.ts); a `_`-prefixed BASENAME at the tests/ root
-# (tests/_audit-visual.spec.ts, the sanctioned /qa:review url=<url> throwaway) has just ONE slash and so never
+# (tests/_audit-visual.spec.ts, the sanctioned /qa-warden:review url=<url> throwaway) has just ONE slash and so never
 # matches it — it survived that filter and drew a false "unmanaged test" WARN on a spec Playwright
 # provably never collects (verified: `--list` on the shipped testIgnore reports it dropped).
 # A scratch spec carries no verified-stamp / review-attestation contract either.
@@ -93,7 +93,7 @@ CTX_FILES=$(find specs/_context -type f -name '*.md' 2>/dev/null)
 # (grep -H). Checks 13 and 18 each used to re-run a full `grep -r … specs` walk PER feature — an
 # O(features × tree) sweep for a relation that is one grep to harvest. Both the harvest and the
 # trailing-comment-tolerant match anchor now live in scripts/spec-links.sh (`index` / `match`),
-# which /qa:coverage and /qa:impact call too — that anchor had already needed one lockstep fix
+# which /qa-warden:coverage and /qa-warden:impact call too — that anchor had already needed one lockstep fix
 # applied by hand in three places.
 BASIS_LINKS=$(bash scripts/spec-links.sh index 2>/dev/null)
 # The spec↔test naming rule (specs/<p>.md ↔ tests/<p>.spec.ts, twins add .metamorphic) is applied
@@ -110,18 +110,18 @@ SMOKE_SPECS_LIST=$(grep -rlE '^[[:space:]]*tags:[[:space:]]*\[[^]]*\bsmoke\b' sp
 # 3. Vacuous smoke gate — `--grep @smoke` must select ≥1 test, so count @smoke ON ITS OWN.
 #    A combined '@smoke\|@regression' count is blind to the exact failure this check exists
 #    for: a suite tagged only @regression (metamorphic twins are deliberately @regression,
-#    never @smoke) makes the combined count >0 while /qa:run mode=smoke still selects 0 tests (F07).
+#    never @smoke) makes the combined count >0 while /qa-warden:run mode=smoke still selects 0 tests (F07).
 #    Match `@smoke` INSIDE A STRING LITERAL (a quote/double-quote/backtick opened earlier on
 #    the line), excluding `//`-comment lines — this counts BOTH official tag forms that
 #    `--grep @smoke` selects: the `tag: ['@smoke']` array AND a title-embedded
 #    `test('... @smoke', ...)` (the old quote-ADJACENT match missed title-embedded tags →
 #    false ❌ on a working smoke lane). A bare `// NOT @smoke` comment still doesn't count
 #    (RUN-19). No trailing boundary after @smoke on purpose: --grep is a substring match, so
-#    a `@smoke-fast` title IS selected by /qa:run mode=smoke and must count here too. Residual: a
+#    a `@smoke-fast` title IS selected by /qa-warden:run mode=smoke and must count here too. Residual: a
 #    block-comment line mentioning '@smoke' still false-counts (fails toward noise, not
 #    toward the false-green this check exists to prevent).
 # Exclude `_`-prefixed SCRATCH specs from every count (P-05), in LOCKSTEP with
-# playwright.config.ts's `testIgnore: ['**/_*.spec.ts', '**/_*/**']`: a `/qa:review url=<url>` throwaway
+# playwright.config.ts's `testIgnore: ['**/_*.spec.ts', '**/_*/**']`: a `/qa-warden:review url=<url>` throwaway
 # like `tests/_audit-visual.spec.ts` OR a whole `tests/_probe/` dir is a probe byproduct the
 # nightly does NOT run, so counting it here made a pristine scaffold that ran one audit hard-FAIL
 # "1 spec, 0 @smoke → vacuous gate" on day one. Drop any path with a `_`-prefixed SEGMENT —
@@ -138,10 +138,10 @@ TAGGED_SPECS=$(count_tagged '.')
 # a bare `wc -l` on the single blank line printf emits would report as 1).
 TOTAL_SPECS=$(printf '%s\n' "$TEST_FILES" | grep -c . | tr -d ' ')
 echo "smoke-tagged spec files: $SMOKE_SPECS / $TOTAL_SPECS (smoke-or-regression: $TAGGED_SPECS)"
-[ "$TOTAL_SPECS" -gt 0 ] && [ "$SMOKE_SPECS" -eq 0 ] && { echo "❌ no test carries @smoke — /qa:run mode=smoke's --grep @smoke selects 0 tests and passes vacuously"; fail=$((fail+1)); }
+[ "$TOTAL_SPECS" -gt 0 ] && [ "$SMOKE_SPECS" -eq 0 ] && { echo "❌ no test carries @smoke — /qa-warden:run mode=smoke's --grep @smoke selects 0 tests and passes vacuously"; fail=$((fail+1)); }
 
 # 4 + 14. Orphaned heal sentinels and unmanaged tests — both single-sourced in
-#    scripts/post-run-checks.sh, which /qa:run mode=smoke, /qa:report and /qa:run mode=single also call.
+#    scripts/post-run-checks.sh, which /qa-warden:run mode=smoke, /qa-warden:report and /qa-warden:run mode=single also call.
 #    Each of those three used to carry its own copy of both scans (the sentinel one-liner was
 #    BYTE-identical in two of them), and the stray-spec `_`-prefix filter existed in four copies
 #    that must stay in lockstep with playwright.config.ts's `testIgnore`. Doctor asks for the two
@@ -205,7 +205,7 @@ if [ -f "$CTX" ]; then
     area_id=$(printf '%s' "$f" | sed -nE 's|^specs/_context/[^/]+/([^/]+)\.md$|\1|p')
     if [ -n "$site_id" ] && [ -n "$area_id" ]; then expl="mode=area site=$site_id area=$area_id"
     else expl="mode=area site=<id> area=<name>"; fi
-    [ "$age_days" -gt "$budget" ] && { echo "⚠️  stale context: $f (volatility=${vol:-reference}, last_verified $lv = ${age_days}d old > ${budget}d tier budget) — re-run /qa:explore $expl"; warn=$((warn+1)); }
+    [ "$age_days" -gt "$budget" ] && { echo "⚠️  stale context: $f (volatility=${vol:-reference}, last_verified $lv = ${age_days}d old > ${budget}d tier budget) — re-run /qa-warden:explore $expl"; warn=$((warn+1)); }
   done < <(ctx_grep_l '^volatility:')
 fi
 
@@ -311,7 +311,7 @@ fi
 
 # 8. Canonical scripts present + prod-guard lockstep. scripts/prod-guard.sh and
 #    scripts/resolve-spec-path.sh are what every command's safety rail / path
-#    resolution calls — a project scaffolded before they shipped needs a /qa:init
+#    resolution calls — a project scaffolded before they shipped needs a /qa-warden:init
 #    refresh. And the two prod-guard layers must carry the SAME word-boundary marker
 #    (sh spells it [0-9]*, ts spells it \d* — same semantics); a drifted pair means
 #    the advisory layer and the enforced layer disagree on what "prod" means.
@@ -331,7 +331,7 @@ fi
 #    because the layers legitimately spell them in different languages (JS regex vs shell
 #    `case` glob) — exactly like the marker regex above.
 for f in scripts/prod-guard.sh scripts/resolve-spec-path.sh scripts/spec-links.sh scripts/post-run-checks.sh scripts/oracle-keys.txt; do
-  [ -f "$f" ] || { echo "⚠️  $f missing — project scaffolded before it shipped; re-run /qa:init"; warn=$((warn+1)); }
+  [ -f "$f" ] || { echo "⚠️  $f missing — project scaffolded before it shipped; re-run /qa-warden:init"; warn=$((warn+1)); }
 done
 if [ -f scripts/prod-guard.sh ]; then
   grep -qF '(^|[.-])(prod|production)[0-9]*($|[.-])' scripts/prod-guard.sh \
@@ -463,13 +463,13 @@ fi
 #      (c) Inside a Write/Edit ALLOW glob — the resync-set members under specs/** and
 #          fixtures/**. These were once silently auto-writable (no deny, no prompt): an agent
 #          could clobber specs/_context/_templates/basis.md with a real feature's basis and
-#          every later /qa:intake would read the corrupted file as its template. Now denied by
+#          every later /qa-warden:intake would read the corrupted file as its template. Now denied by
 #          path, but keep this tier in mind when ADDING a resync-set entry under an allowed
 #          tree — the deny is per-path and does not follow automatically.
-#    /qa:init is skip-if-exists, so a plugin fix to any of these does NOT reach a project
+#    /qa-warden:init is skip-if-exists, so a plugin fix to any of these does NOT reach a project
 #    scaffolded before the fix — a shipped fix silently strands every existing project
 #    (F-015/F-016). Detect the drift here (read-only) against the shipped templates and name
-#    the repair: /qa:init --resync. Skips cleanly when the plugin root isn't resolvable (doctor
+#    the repair: /qa-warden:init --resync. Skips cleanly when the plugin root isn't resolvable (doctor
 #    run standalone). Also covers scripts/init.sh (F-03: toolkit-owned, scaffold-copied,
 #    force-overwritten by --resync — so drift there must be DETECTED, not silently reset).
 #    Excludes user-authored files (.env, CLAUDE.md, settings.json, fixtures/test.ts) — those
@@ -482,7 +482,7 @@ fi
 #    test-data-seed) — excluded like CLAUDE.md; the stock-var containment sub-check below
 #    still catches a stock variable being DELETED from it.
 # Resolve the plugin templates dir: prefer $CLAUDE_PLUGIN_ROOT (inline-substituted when run via
-# /qa:doctor — the env var is NOT exported to bash subprocesses, F-069), else the ACTIVE install
+# /qa-warden:doctor — the env var is NOT exported to bash subprocesses, F-069), else the ACTIVE install
 # recorded in ~/.claude/plugins/installed_plugins.json (this project's entry, else the user-scope
 # entry, else the most recently updated), else — last resort — newest cached qa/*/templates by
 # mtime. Side-by-side version dirs are EXPECTED in the cache (an orphaned version lingers ~7 days
@@ -494,11 +494,17 @@ if [ -z "$TMPL" ] || [ ! -d "$TMPL" ]; then
   TMPL=""
   IPJ="$HOME/.claude/plugins/installed_plugins.json"
   if command -v jq >/dev/null && [ -f "$IPJ" ]; then
+    # The plugin id was `qa` before 0.4.0 and is `qa-warden` since. A project mid-upgrade can
+    # still have the old record, so accept both, and rank EVERY qa-warden install ahead of any
+    # old qa one: after a reinstall the old record is the stale one.
     TMPL="$(jq -r --arg pwd "$PWD" '
-      [ .plugins // {} | to_entries[] | select(.key | startswith("qa@")) | .value[] ]
-      | ( map(select(.scope=="local" and .projectPath==$pwd))
-          + map(select(.scope=="user"))
-          + (sort_by(.lastUpdated) | reverse) )
+      def installs($prefix):
+        [ .plugins // {} | to_entries[] | select(.key | startswith($prefix)) | .value[] ];
+      def ranked:
+        map(select(.scope=="local" and .projectPath==$pwd))
+        + map(select(.scope=="user"))
+        + (sort_by(.lastUpdated) | reverse);
+      (installs("qa-warden@") | ranked) + (installs("qa@") | ranked)
       | first | .installPath // empty' "$IPJ" 2>/dev/null)"
     [ -n "$TMPL" ] && TMPL="$TMPL/templates"
     if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
@@ -509,9 +515,12 @@ if [ -z "$TMPL" ] || [ ! -d "$TMPL" ]; then
   fi
 fi
 if [ -z "$TMPL" ]; then
-  TMPL="$(ls -dt "$HOME"/.claude/plugins/cache/*/qa/*/templates 2>/dev/null | head -1)"
+  TMPL="$(ls -dt "$HOME"/.claude/plugins/cache/*/qa-warden/*/templates 2>/dev/null | head -1)"
+  # Pre-0.4.0 cache dirs are named after the old `qa` id; fall back to them only if no
+  # qa-warden install is cached at all.
+  [ -n "$TMPL" ] || TMPL="$(ls -dt "$HOME"/.claude/plugins/cache/*/qa/*/templates 2>/dev/null | head -1)"
   if [ -n "$TMPL" ]; then
-    echo "⚠️  substrate-drift baseline GUESSED by newest mtime: $TMPL — orphaned plugin versions linger ~7 days beside the active one, so this may be STALE; run via /qa:doctor (resolves CLAUDE_PLUGIN_ROOT) to be sure"; warn=$((warn+1))
+    echo "⚠️  substrate-drift baseline GUESSED by newest mtime: $TMPL — orphaned plugin versions linger ~7 days beside the active one, so this may be STALE; run via /qa-warden:doctor (resolves CLAUDE_PLUGIN_ROOT) to be sure"; warn=$((warn+1))
   fi
 fi
 if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
@@ -526,15 +535,15 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   for rel in $OWNED; do
     [ -f "$TMPL/$rel" ] || continue
     if [ ! -f "$rel" ]; then
-      echo "❌ substrate missing: $rel absent from project — run /qa:init --resync"; fail=$((fail+1))
+      echo "❌ substrate missing: $rel absent from project — run /qa-warden:init --resync"; fail=$((fail+1))
     elif ! cmp -s "$TMPL/$rel" "$rel"; then
-      echo "⚠️  substrate drift: $rel differs from the shipped template — run /qa:init --resync (backs up to $rel.qa-bak)"; warn=$((warn+1))
+      echo "⚠️  substrate drift: $rel differs from the shipped template — run /qa-warden:init --resync (backs up to $rel.qa-bak)"; warn=$((warn+1))
     fi
   done
 else
   # A skipped drift check must be VISIBLE (WARN, counted), not a silent green INFO — this check
   # guards the highest-value propagation class (F-015/F-027); a quiet skip hides exactly that drift.
-  echo "⚠️  substrate-drift check SKIPPED — plugin templates not found (set CLAUDE_PLUGIN_ROOT or run via /qa:doctor); drift to the shipped substrate is UNVERIFIED"; warn=$((warn+1))
+  echo "⚠️  substrate-drift check SKIPPED — plugin templates not found (set CLAUDE_PLUGIN_ROOT or run via /qa-warden:doctor); drift to the shipped substrate is UNVERIFIED"; warn=$((warn+1))
 fi
 # Stock-var containment — .env.example is shared-ownership (excluded from the byte-compare
 # above), but the STOCK variables must survive user extension: a deleted stock var silently
@@ -569,7 +578,7 @@ fi
 # hole in the upgrade path, because CLAUDE.md is where every new AUTHORING feature is documented
 # and the in-PROJECT agents read that file rather than the plugin.
 # MEASURED, not reasoned — a real 0.2.0 -> HEAD upgrade on a scratch install: after a clean,
-# green, exit-0 `/qa:init --resync` the stamped CLAUDE.md carried ZERO mentions of `fault:`,
+# green, exit-0 `/qa-warden:init --resync` the stamped CLAUDE.md carried ZERO mentions of `fault:`,
 # `clock:`, `lock:` or `verifier`. The runtime was current and the vocabulary was a whole release
 # behind, and doctor said nothing. The shipping vehicle for every new feature was the one file
 # the upgrade could not deliver.
@@ -584,7 +593,7 @@ fi
 # anywhere satisfies it, so rewording and user additions are free and only a DELETION is
 # reported. Not the oracle keys — Check 2 already greps those against this same file from
 # scripts/oracle-keys.txt, and `lock:` must never be added there (it is a TestDetails field, not
-# an oracle key, and that manifest also feeds Check 9b and /qa:coverage's KEYS_RE).
+# an oracle key, and that manifest also feeds Check 9b and /qa-warden:coverage's KEYS_RE).
 # WARN, never FAIL: alone among Check 9's findings the repair is not a command but a hand-merge,
 # and a repair the toolkit cannot perform must not be louder than the ones it can (substrate
 # drift and 9f arm 2 are both WARNs with a one-command fix). A FAIL would red every upgrading
@@ -592,7 +601,7 @@ fi
 if [ -n "$TMPL" ] && [ -f "$TMPL/CLAUDE.md" ] && [ -f CLAUDE.md ]; then
   VOCAB="$TMPL/scripts/claude-md-vocab.txt"
   if [ ! -f "$VOCAB" ]; then
-    echo "⚠️  scripts/claude-md-vocab.txt not found in $TMPL — CLAUDE.md vocabulary DELIVERY is UNVERIFIED (this clone predates the manifest; run /qa:init --resync to stamp it)"; warn=$((warn+1))
+    echo "⚠️  scripts/claude-md-vocab.txt not found in $TMPL — CLAUDE.md vocabulary DELIVERY is UNVERIFIED (this clone predates the manifest; run /qa-warden:init --resync to stamp it)"; warn=$((warn+1))
   else
     # Strip FULL-LINE comments only — unlike the sibling manifests, a row here carries prose in
     # its why-field, so the usual `s/#.*$//` would truncate it mid-sentence.
@@ -606,8 +615,20 @@ if [ -n "$TMPL" ] && [ -f "$TMPL/CLAUDE.md" ] && [ -f CLAUDE.md ]; then
         echo "⚠️  claude-md-vocab.txt requires \`$sym\` but the SHIPPED templates/CLAUDE.md no longer mentions it — the manifest is stale (drop the line) or the symbol was dropped from the template by mistake"; warn=$((warn+1)); continue
       fi
       grep -qE "(^|[^a-zA-Z_])$sym" CLAUDE.md \
-        || { echo "⚠️  CLAUDE.md never mentions \`$sym\` — $swhy. /qa:init --resync does NOT refresh CLAUDE.md (shared ownership), so this is a HAND-MERGE, not a command: diff yours against $TMPL/CLAUDE.md and copy the missing prose across."; warn=$((warn+1)); }
+        || { echo "⚠️  CLAUDE.md never mentions \`$sym\` — $swhy. /qa-warden:init --resync does NOT refresh CLAUDE.md (shared ownership), so this is a HAND-MERGE, not a command: diff yours against $TMPL/CLAUDE.md and copy the missing prose across."; warn=$((warn+1)); }
     done < <(grep -v '^[[:space:]]*#' "$VOCAB" | sed 's/[[:space:]]*$//' | grep -v '^$')
+  fi
+fi
+
+# Pre-0.4.0 command names in CLAUDE.md. The plugin id changed from `qa` to `qa-warden` in 0.4.0,
+# so every `/qa:<cmd>` became `/qa-warden:<cmd>`. CLAUDE.md is shared-ownership and never
+# resynced, so an upgraded project keeps telling agents to run commands that no longer exist.
+# WARN, for the same reason as the vocabulary check above: the repair is a hand-edit.
+if [ -f CLAUDE.md ]; then
+  old_cmds=$(grep -cE '/qa:[a-z]' CLAUDE.md || true)
+  if [ "${old_cmds:-0}" -gt 0 ]; then
+    echo "⚠️  CLAUDE.md still uses the pre-0.4.0 command prefix /qa: on $old_cmds line(s) — those commands are now /qa-warden:<cmd>. Replace /qa: with /qa-warden: in CLAUDE.md (/qa-warden:init --resync does not rewrite it)."
+    warn=$((warn+1))
   fi
 fi
 
@@ -645,7 +666,7 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   arg_shapes() { sed -nE 's/^\| `([a-z0-9_]+)` \| `([^`]*)`.*/\1\t\2/p' "$1" 2>/dev/null; }
   sot_tbl="$TMPL/CLAUDE.md"; pln_tbl="$TMPL/../agents/planner.md"
   if [ ! -f "$sot_tbl" ] || [ ! -f "$pln_tbl" ]; then
-    echo "⚠️  arg-shape mirrors not both found ($sot_tbl / $pln_tbl) — argument-shape drift is UNVERIFIED (run /qa:init --resync)"; warn=$((warn+1))
+    echo "⚠️  arg-shape mirrors not both found ($sot_tbl / $pln_tbl) — argument-shape drift is UNVERIFIED (run /qa-warden:init --resync)"; warn=$((warn+1))
   else
     sot_shapes=$(arg_shapes "$sot_tbl"); pln_shapes=$(arg_shapes "$pln_tbl")
     # A table that fails to parse must not read as "no drift" — an empty side means the format
@@ -755,9 +776,9 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   RAILS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$TMPL/scripts/prod-guard-rails.txt" 2>/dev/null | grep -v '^$')
   skills_dir="$TMPL/../skills"
   if [ -z "$RAILS" ]; then
-    echo "❌ scripts/prod-guard-rails.txt missing or empty — prod-guard rail coverage is UNVERIFIED (run /qa:init --resync)"; fail=$((fail+1))
+    echo "❌ scripts/prod-guard-rails.txt missing or empty — prod-guard rail coverage is UNVERIFIED (run /qa-warden:init --resync)"; fail=$((fail+1))
   elif [ ! -d "$skills_dir" ]; then
-    echo "⚠️  plugin skills/ not found at $skills_dir — prod-guard rail coverage is UNVERIFIED (run /qa:init --resync)"; warn=$((warn+1))
+    echo "⚠️  plugin skills/ not found at $skills_dir — prod-guard rail coverage is UNVERIFIED (run /qa-warden:init --resync)"; warn=$((warn+1))
   else
     rail_seen=0
     while read -r sk; do
@@ -894,12 +915,12 @@ if [ -n "$TMPL" ] && [ -f "$TMPL/settings.json" ] && [ -f "$TMPL/../agents/heale
       echo "❌ MCP mirror drift — allowed in templates/settings.json but NOT declared in agents/healer.md 'tools:': $(printf '%s\n' "$only_s" | tr '\n' ' ')— a standing pre-approval no agent can use (an explicit tools: list is a restriction). Add it to the healer or drop the rule."; fail=$((fail+1)); }
   fi
   # Arm 2 — did the shipped grants actually REACH this project? The scaffold's jq merge is an
-  # additive union, so the repair is a plain re-run of /qa:init (no hand edit, unlike 9c).
+  # additive union, so the repair is a plain re-run of /qa-warden:init (no hand edit, unlike 9c).
   if [ -f .claude/settings.json ]; then
     p_mcp=$(jq -r '.permissions.allow[]? | select(startswith("mcp__"))' .claude/settings.json 2>/dev/null | sort -u)
     unstamped=$(comm -23 <(printf '%s\n' "$s_mcp") <(printf '%s\n' "$p_mcp") | grep . || true)
     [ -n "$unstamped" ] && {
-      echo "⚠️  .claude/settings.json is missing MCP grants the plugin now ships: $(printf '%s\n' "$unstamped" | tr '\n' ' ')— this project was scaffolded before they were added. Re-run /qa:init (the permission merge is additive and runs on every init, so this needs no hand edit)."; warn=$((warn+1)); }
+      echo "⚠️  .claude/settings.json is missing MCP grants the plugin now ships: $(printf '%s\n' "$unstamped" | tr '\n' ' ')— this project was scaffolded before they were added. Re-run /qa-warden:init (the permission merge is additive and runs on every init, so this needs no hand edit)."; warn=$((warn+1)); }
   fi
 fi
 
@@ -929,19 +950,19 @@ if [ -f .claude/settings.qa-suggested.json ]; then
     echo "⚠️  .claude/settings.qa-suggested.json is STALE — every rule in it is already present in .claude/settings.json. Delete it; while it sits there it reads as an outstanding manual merge."; warn=$((warn+1))
   else
     n_txt="its rules"; [ "$counted" = "1" ] && n_txt="$(printf '%s\n' "$unmerged" | wc -l | tr -d ' ') of its rules"
-    echo "⚠️  .claude/settings.qa-suggested.json exists — qa-scaffold could not merge permissions (jq missing, or an unparseable settings.json) and left them here instead, so $n_txt never reached .claude/settings.json. Agents will PROMPT on tool calls the toolkit means to pre-approve, and the Write/Edit denies guarding the substrate are absent. Install jq and re-run /qa:init (the merge is additive and deletes this file), or hand-merge the arrays and delete it."; warn=$((warn+1))
+    echo "⚠️  .claude/settings.qa-suggested.json exists — qa-scaffold could not merge permissions (jq missing, or an unparseable settings.json) and left them here instead, so $n_txt never reached .claude/settings.json. Agents will PROMPT on tool calls the toolkit means to pre-approve, and the Write/Edit denies guarding the substrate are absent. Install jq and re-run /qa-warden:init (the merge is additive and deletes this file), or hand-merge the arrays and delete it."; warn=$((warn+1))
   fi
 fi
 
-# 9g. The /qa:gen compiler -> verifier chain, and the manifest gate that rides on it. The
+# 9g. The /qa-warden:gen compiler -> verifier chain, and the manifest gate that rides on it. The
 #     generator and the verifier are TWO agents by design: until the split, the same agent that
 #     wrote an expect() also decided at steps 8b/8c whether that expect catches an injected
 #     defect, its cheapest path was to claim CATCHES, and the resulting `// verified:` comment is
 #     durable evidence reviewer Check 2b trusts. Nothing enforces that separation at runtime —
 #     no subagent can spawn another, so the chain exists ONLY as prose in skills/gen/SKILL.md,
-#     which is an active trim candidate. A trim that drops the second call leaves /qa:gen green
+#     which is an active trim candidate. A trim that drops the second call leaves /qa-warden:gen green
 #     and every spec unverified. Same unchecked-prose-contract shape as 9bd.
-#     Arm 3 is the one that actually matters. The route manifest is the SHIP signal (/qa:impact
+#     Arm 3 is the one that actually matters. The route manifest is the SHIP signal (/qa-warden:impact
 #     reads a spec as live coverage only once its manifest exists), and it is gated on
 #     verification passing, so it must be written by the agent that RAN the verification. If the
 #     generator ever reclaims the manifest write, the gate detaches from the gated thing and a
@@ -950,7 +971,7 @@ fi
 if [ -n "$TMPL" ] && [ -d "$TMPL/.." ]; then
   gen_a="$TMPL/../agents/generator.md"; ver_a="$TMPL/../agents/verifier.md"; gen_s="$TMPL/../skills/gen/SKILL.md"
   if [ ! -f "$ver_a" ]; then
-    echo "❌ agents/verifier.md is MISSING — /qa:gen's second half (metamorphic twins, step-8b fault injection, the route manifest) has no agent to run it, and the generator would be grading its own expect() again"; fail=$((fail+1))
+    echo "❌ agents/verifier.md is MISSING — /qa-warden:gen's second half (metamorphic twins, step-8b fault injection, the route manifest) has no agent to run it, and the generator would be grading its own expect() again"; fail=$((fail+1))
   elif [ -f "$gen_s" ]; then
     # Arm 1+2: the orchestration prose must still name BOTH agents. Presence, not wording.
     grep -q 'generator' "$gen_s" || { echo "❌ skills/gen/SKILL.md no longer names the \`generator\` subagent — nothing compiles the spec"; fail=$((fail+1)); }
@@ -966,8 +987,8 @@ if [ -n "$TMPL" ] && [ -d "$TMPL/.." ]; then
     mf_owners=$(printf '%s' "$mf_owners" | sed 's/^ //')
     case " $mf_owners " in
       " verifier ") : ;;
-      "  "|" ") echo "❌ no agent declares Write(artifacts/route-manifests/**) — /qa:impact exits NO MANIFESTS FOUND for every spec"; fail=$((fail+1)) ;;
-      *) echo "❌ route-manifest write is claimed by: $mf_owners — it must be the VERIFIER alone. The manifest is the ship signal and is gated on verification passing; an agent that writes it without running the verification detaches the gate from the gated thing, and a never-verified spec reads to /qa:impact as live coverage"; fail=$((fail+1)) ;;
+      "  "|" ") echo "❌ no agent declares Write(artifacts/route-manifests/**) — /qa-warden:impact exits NO MANIFESTS FOUND for every spec"; fail=$((fail+1)) ;;
+      *) echo "❌ route-manifest write is claimed by: $mf_owners — it must be the VERIFIER alone. The manifest is the ship signal and is gated on verification passing; an agent that writes it without running the verification detaches the gate from the gated thing, and a never-verified spec reads to /qa-warden:impact as live coverage"; fail=$((fail+1)) ;;
     esac
   fi
 fi
@@ -1051,9 +1072,9 @@ EOF
 fi
 
 # 9k. UNMANIFESTED-walk OWNERSHIP. "which compiled tests have no route manifest" is one rule
-#     with two consumers that must never disagree: /qa:impact prints it as ### BLIND SPOTS (a
+#     with two consumers that must never disagree: /qa-warden:impact prints it as ### BLIND SPOTS (a
 #     zero-match there is only honest if the caller is told which specs were invisible), and
-#     /qa:coverage dim 0 needs it to avoid the false label it used to print — an unmanifested
+#     /qa-warden:coverage dim 0 needs it to avoid the false label it used to print — an unmanifested
 #     test contributes no routes, so every route it touches landed under "touched by NO compiled
 #     test (planned, untested)", which is FALSE for a test that is on disk and compiled and
 #     sends the reader to author a second spec when the real remedy is to clear the blocker the
@@ -1091,10 +1112,10 @@ fi
 if [ -f scripts/spec-links.sh ]; then
   sl_arm=$(awk '/^[[:space:]]*unmanifested\)/{f=1} f{print} f&&/^[[:space:]]*;;/{exit}' scripts/spec-links.sh)
   if [ -z "$sl_arm" ]; then
-    echo "❌ scripts/spec-links.sh has no \`unmanifested)\` arm — /qa:impact's ### BLIND SPOTS and /qa:coverage dim 0 both call it; without it impact reports a zero-match as if it were exhaustive and coverage re-labels every unmanifested test's routes as 'planned, untested'"
+    echo "❌ scripts/spec-links.sh has no \`unmanifested)\` arm — /qa-warden:impact's ### BLIND SPOTS and /qa-warden:coverage dim 0 both call it; without it impact reports a zero-match as if it were exhaustive and coverage re-labels every unmanifested test's routes as 'planned, untested'"
     fail=$((fail+1))
   elif ! printf '%s\n' "$sl_arm" | grep -q 'metamorphic'; then
-    echo "❌ scripts/spec-links.sh \`unmanifested\` no longer excludes *.metamorphic.spec.ts — a twin never carries a manifest by design (verifier V4 emits one per SPEC), so every twin now reports as a blind spot in /qa:impact and as an UNMANIFESTED warning in /qa:coverage dim 0"
+    echo "❌ scripts/spec-links.sh \`unmanifested\` no longer excludes *.metamorphic.spec.ts — a twin never carries a manifest by design (verifier V4 emits one per SPEC), so every twin now reports as a blind spot in /qa-warden:impact and as an UNMANIFESTED warning in /qa-warden:coverage dim 0"
     fail=$((fail+1))
   fi
 fi
@@ -1118,7 +1139,7 @@ umw_bad=0
 for f in $umw_files; do
   case "$f" in */spec-links.sh) continue ;; esac
   sed '/^[[:space:]]*#/d' "$f" 2>/dev/null | grep -qE -e "$umw_re" || continue
-  echo "❌ ${f#"${UMW_PLUG%/*}/"} builds a route-manifest path from a variable — the unmanifested walk is owned by \`scripts/spec-links.sh unmanifested\` (see its header rule 3). A second copy drifts silently: the twin exclusion is the half that is invisible when it is wrong, and /qa:impact and /qa:coverage must report the SAME invisible-spec set or one of them is quietly claiming a complete answer"
+  echo "❌ ${f#"${UMW_PLUG%/*}/"} builds a route-manifest path from a variable — the unmanifested walk is owned by \`scripts/spec-links.sh unmanifested\` (see its header rule 3). A second copy drifts silently: the twin exclusion is the half that is invisible when it is wrong, and /qa-warden:impact and /qa-warden:coverage must report the SAME invisible-spec set or one of them is quietly claiming a complete answer"
   umw_bad=$((umw_bad+1))
 done
 fail=$((fail+umw_bad))
@@ -1190,7 +1211,7 @@ fi
 #     project names it declares. A hot-tier sites[].id with NO matching config project → its specs
 #     match no project → run in ZERO project = silently green-but-empty (a whole site never tested,
 #     every gate green). Template defaults (app/admin) match the config, so the happy path is safe —
-#     but `/qa:explore` can pick a descriptive id (`shop`), and only the agent's honesty catches it.
+#     but `/qa-warden:explore` can pick a descriptive id (`shop`), and only the agent's honesty catches it.
 #     Assert every sites[].id has a `name: '<id>'` project (setup is not a site).
 CTXH=specs/_context/app.context.md
 if [ -f "$CTXH" ] && [ -f playwright.config.ts ]; then
@@ -1261,22 +1282,22 @@ if [ -d bugs ] && [ -d tests ]; then
   done < <(grep -rnE 'test\.(fail|fixme)' tests/ 2>/dev/null | grep 'bugs/')
 fi
 
-# 12. Manifest staleness (F-08) — /qa:impact trusts artifacts/route-manifests/<area>/<feature>.json
+# 12. Manifest staleness (F-08) — /qa-warden:impact trusts artifacts/route-manifests/<area>/<feature>.json
 #     as its SOLE input; a spec edited AFTER its manifest was generated silently yields a stale
 #     change→test map (the guards are all-or-nothing — zero manifests, or a compiled test with none
 #     — never present-but-stale). WARN when a spec .md is newer than its manifest (regenerate via
-#     /qa:gen). Mirrors the safe-fallback: impact is an optimization, never the gate.
+#     /qa-warden:gen). Mirrors the safe-fallback: impact is an optimization, never the gate.
 if [ -d artifacts/route-manifests ]; then
   while read -r mf; do
     rel=${mf#artifacts/route-manifests/}; spec="specs/${rel%.json}.md"
     [ -f "$spec" ] || continue
-    [ "$spec" -nt "$mf" ] && { echo "⚠️  stale manifest: $spec is newer than $mf — /qa:impact may miss its routes; re-run /qa:gen"; warn=$((warn+1)); }
+    [ "$spec" -nt "$mf" ] && { echo "⚠️  stale manifest: $spec is newer than $mf — /qa-warden:impact may miss its routes; re-run /qa-warden:gen"; warn=$((warn+1)); }
   done < <(find artifacts/route-manifests -name '*.json' -type f 2>/dev/null)
 fi
 
 # 13. Declared-mutating features must isolate (wires the basis test_data: block). WARN — the
 #     reviewer's code-level Check 13 remains the enforcing gate; this catches the
-#     declared-then-ignored gap. Test resolution mirrors /qa:coverage dim 1 (LOCKSTEP): the
+#     declared-then-ignored gap. Test resolution mirrors /qa-warden:coverage dim 1 (LOCKSTEP): the
 #     direct path tests/<feat>.spec.ts PLUS every fanned spec linking back via a top-level
 #     `basis: <area>/<feature>` key, mapped spec→test by the Check-14 naming rule
 #     (specs/<p>.md ↔ tests/<p>.spec.ts, twins add .metamorphic). A mutating feature that
@@ -1291,7 +1312,7 @@ while read -r basis; do
     [ "$b" = "$feat" ] && continue                 # self-link → already in the list
     bases="$bases $b"
     # Match against the hoisted $BASIS_LINKS index rather than re-walking specs/ once per mutating
-    # feature, and let scripts/spec-links.sh own the anchor — Check 18 and /qa:coverage dims 1/5/6
+    # feature, and let scripts/spec-links.sh own the anchor — Check 18 and /qa-warden:coverage dims 1/5/6
     # need the identical trailing-comment tolerance, which has already needed one hand-applied
     # lockstep fix across those three sites.
   done < <(printf '%s\n' "$BASIS_LINKS" | bash scripts/spec-links.sh match "$feat")
@@ -1340,7 +1361,7 @@ while read -r spec; do
     t_rec=$(grep -m1 '^test_sha256:' "$marker" | awk '{print $2}')
     { [ "$s_now" != "$s_rec" ] || [ "$t_now" != "$t_rec" ]; } && stale_review=1
   fi
-  [ "$stale_review" -eq 1 ] && { echo "⚠️  ${base}: changed since last review (or never reviewed) — re-run /qa:review"; warn=$((warn+1)); }
+  [ "$stale_review" -eq 1 ] && { echo "⚠️  ${base}: changed since last review (or never reviewed) — re-run /qa-warden:review"; warn=$((warn+1)); }
 done < <(printf '%s\n' "$SPEC_FILES")
 # 15b. Stale verified-comment — a `// verified: must_fail_when "<text>"` stamp in a test whose
 #      captured text no longer appears in the paired spec means the invariant was edited/removed
@@ -1372,7 +1393,7 @@ while read -r spec; do
   # fanned: a sibling spec may own the compiled test via a `basis: <area>/<feature>` back-link
   feat=$(grep -m1 -E '^basis:[[:space:]]*' "$spec" 2>/dev/null | sed -E 's/^basis:[[:space:]]*//; s/[[:space:]#].*$//')
   [ -n "$feat" ] && [ -f "tests/${feat}.spec.ts" ] && continue
-  echo "⚠️  smoke-tagged spec with no compiled test: $spec declares 'tags: [… smoke …]' but tests/${base}.spec.ts does not exist — /qa:run mode=smoke's --grep @smoke is BLIND to this P1 flow; compile it with /qa:gen or drop the smoke tag"; warn=$((warn+1))
+  echo "⚠️  smoke-tagged spec with no compiled test: $spec declares 'tags: [… smoke …]' but tests/${base}.spec.ts does not exist — /qa-warden:run mode=smoke's --grep @smoke is BLIND to this P1 flow; compile it with /qa-warden:gen or drop the smoke tag"; warn=$((warn+1))
 done < <(printf '%s\n' "$SMOKE_SPECS_LIST" | grep -v '^$')
 
 # 17. Spec authored but NEVER compiled (ANY tag) — the complement to Check 16 (F-026). Check 16
@@ -1397,11 +1418,11 @@ $SMOKE_SPECS_LIST
 " in *"
 $spec
 "*) continue ;; esac
-  echo "⚠️  spec with no compiled test: $spec has no tests/${base}.spec.ts (any tag) — authored but never generated, so it is outside the assertion contract and no run exercises it. Run /qa:gen on it; or if its scenarios are intentionally folded into a sibling spec, /qa:retire it or add a '# waived:' note"; warn=$((warn+1))
+  echo "⚠️  spec with no compiled test: $spec has no tests/${base}.spec.ts (any tag) — authored but never generated, so it is outside the assertion contract and no run exercises it. Run /qa-warden:gen on it; or if its scenarios are intentionally folded into a sibling spec, /qa-warden:retire it or add a '# waived:' note"; warn=$((warn+1))
 done < <(printf '%s\n' "$SPEC_FILES")
 
 # 18. Abandoned authoring chain — a `.cases.md` (the human-approval artifact) with NO downstream
-#     spec (F-026). The intake→ideate→approve chain ran (a checklist exists) but /qa:new-spec/gen
+#     spec (F-026). The intake→ideate→approve chain ran (a checklist exists) but /qa-warden:new-spec/gen
 #     never produced a spec, so the intended coverage silently never shipped and nothing else in
 #     doctor sees it. Feature key = the path minus the `_context/<site>/` prefix and `.cases.md`
 #     suffix — the same `<area>/<feature>` a fanned spec's `basis:` back-link uses.
@@ -1409,7 +1430,7 @@ while read -r cases; do
   feat=$(printf '%s' "$cases" | sed -E 's#^specs/_context/[^/]+/##; s#\.cases\.md$##')
   [ -f "specs/${feat}.md" ] && continue                                          # spec exists → chain completed
   [ -n "$(printf '%s\n' "$BASIS_LINKS" | bash scripts/spec-links.sh match "$feat")" ] && continue   # a fanned spec back-links it (hoisted index, canonical anchor — same call as Check 13)
-  echo "⚠️  abandoned authoring chain: ${cases} has no downstream spec (specs/${feat}.md absent, no spec back-links 'basis: ${feat}') — the approved checklist never became a spec; run /qa:new-spec ${feat} or /qa:retire the chain"; warn=$((warn+1))
+  echo "⚠️  abandoned authoring chain: ${cases} has no downstream spec (specs/${feat}.md absent, no spec back-links 'basis: ${feat}') — the approved checklist never became a spec; run /qa-warden:new-spec ${feat} or /qa-warden:retire the chain"; warn=$((warn+1))
 done < <(printf %s\\n "$CTX_FILES" | grep -e "\\.cases\\.md$")
 
 # 19. Unattested interview (F-016) — a `.basis.md` whose oracle carries `[human-answered]` rules
@@ -1423,7 +1444,7 @@ while read -r basis; do
   iv=$(grep -m1 -E '^[[:space:]]*interview:[[:space:]]*' "$basis" 2>/dev/null | sed -E 's/^[[:space:]]*interview:[[:space:]]*//; s/[[:space:]]*#.*$//')
   case "$iv" in
     ''|none|None|NONE|'<'*)   # absent, "none", or the unfilled `<n questions…>` placeholder
-      echo "⚠️  unattested interview: $basis has [human-answered] oracle rules but interview: '${iv:-<absent>}' — the human grounding is unattested (a fabricated basis looks identical); /qa:intake should stamp the real question count"; warn=$((warn+1)) ;;
+      echo "⚠️  unattested interview: $basis has [human-answered] oracle rules but interview: '${iv:-<absent>}' — the human grounding is unattested (a fabricated basis looks identical); /qa-warden:intake should stamp the real question count"; warn=$((warn+1)) ;;
   esac
 done < <(printf %s\\n "$CTX_FILES" | grep -e "\\.basis\\.md$")
 
@@ -1448,7 +1469,7 @@ fi
 #     reads as "something's wrong" when the honest state is "expected at this stage". Name it and
 #     point at the next step so a newcomer knows setup is healthy.
 if [ ! -f specs/_context/app.context.md ] && [ "$fail" -eq 0 ]; then
-  echo "ℹ️  fresh project — no app.context.md / specs yet, so the context/spec/interview checks are n/a at this stage (not failures). Setup looks healthy — next run /qa:explore to build the context layer."
+  echo "ℹ️  fresh project — no app.context.md / specs yet, so the context/spec/interview checks are n/a at this stage (not failures). Setup looks healthy — next run /qa-warden:explore to build the context layer."
 fi
 
 # Rollup reflects EVERY ❌/⚠️ above. `fail`/`warn` are real counts (incremented,

@@ -1,12 +1,12 @@
 #!/bin/sh
-# review-marker.sh — write the /qa:review attestation marker for ONE reviewed spec/test pair.
+# review-marker.sh — write the /qa-warden:review attestation marker for ONE reviewed spec/test pair.
 #
-# WHY THIS EXISTS (Test-35, 2026-09-21): /qa:review described the marker's five fields in prose
+# WHY THIS EXISTS (Test-35, 2026-09-21): /qa-warden:review described the marker's five fields in prose
 # and left the agent to improvise the shell — `git rev-parse HEAD && shasum … && date`, a
 # `mkdir -p … && printf …` with an inline function. None of those compound forms matches an
 # allow rule (a rule must match every subcommand), so each one prompted, and was denied headless:
 # 4 denied calls in a single review. One allow-listed call, and the digest fallback that
-# /qa:doctor Check 15 depends on lives in one place instead of being re-typed per run.
+# /qa-warden:doctor Check 15 depends on lives in one place instead of being re-typed per run.
 #
 # Usage:  bash scripts/review-marker.sh <spec.md> <test.spec.ts> PASS|FAIL
 # Writes: reports/review/<area>/<feature>.reviewed   (path derived from the spec path)
@@ -27,7 +27,7 @@ case "$SPEC$TEST" in *..*) echo "review-marker: '..' is not allowed in a path" >
 [ -f "$TEST" ] || { echo "review-marker: $TEST not found" >&2; exit 2; }
 
 # sha256sum (coreutils; minimal Linux/CI) first, shasum -a 256 (macOS/BSD) as the fallback — the
-# same order /qa:doctor Check 15 reads them with (T-05). The digest is identical either way.
+# same order /qa-warden:doctor Check 15 reads them with (T-05). The digest is identical either way.
 digest() { (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | awk '{print $1}'; }
 
 rel="${SPEC#specs/}"; rel="${rel%.md}"

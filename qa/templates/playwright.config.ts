@@ -10,20 +10,20 @@ import * as dotenv from 'dotenv';
 // `{ quiet: true }` is LOAD-BEARING: dotenv v17+ prints an "injected env (N)"
 // banner to STDOUT by default, which prepends non-JSON to every reporter that
 // writes/streams JSON — corrupting `artifacts/last-run.json` and any `jq` in
-// /qa:report, /qa:run mode=single, /qa:run mode=repeat. Suppress it at the source; do NOT
+// /qa-warden:report, /qa-warden:run mode=single, /qa-warden:run mode=repeat. Suppress it at the source; do NOT
 // try to strip it downstream (it's on stdout, not stderr). See dotenv#876.
 dotenv.config({ quiet: true });
 
 const isCI = !!process.env.CI;
 
 // Run-of-record gate for the json reporter (see the reporter comment below).
-// CI (the nightly) and /qa:run mode=smoke (which sets QA_RUN_OF_RECORD=1) write
+// CI (the nightly) and /qa-warden:run mode=smoke (which sets QA_RUN_OF_RECORD=1) write
 // artifacts/last-run.json; every other run leaves the run-of-record untouched.
 const isRunOfRecord = isCI || process.env.QA_RUN_OF_RECORD === '1';
 
 // Reporting sinks (see CLAUDE.md §Reporting pipeline):
 //  1. json → artifacts/last-run.json — the SINGLE machine-readable source of
-//     truth /qa:report reads. GATED to run-of-record runs (isRunOfRecord above):
+//     truth /qa-warden:report reads. GATED to run-of-record runs (isRunOfRecord above):
 //     agent-side verification runs (heal/gen/twin/doctor re-runs) and local
 //     ad-hoc runs can therefore NEVER clobber it — previously this was guarded
 //     only by "--reporter=line on every side run" prose across seven files (the
@@ -55,7 +55,7 @@ const APP_BASE_URL = process.env.BASE_URL_APP ?? process.env.BASE_URL ?? 'http:/
 //
 // - `**/*.setup.ts`: setup files run ONLY in the `setup` project — never in a site project
 //   (F-018). Without this the app project's untagged-match grep would also run them here.
-// - `**/_*.spec.ts` + `**/_*/**`: ignore `_`-prefixed SCRATCH specs (e.g. a `/qa:review url=`
+// - `**/_*.spec.ts` + `**/_*/**`: ignore `_`-prefixed SCRATCH specs (e.g. a `/qa-warden:review url=`
 //   throwaway visual spec with an OS-locked baseline) — probe byproducts, not managed suite
 //   members, so the nightly must not run them (P-03). BOTH globs are required: the first
 //   ignores a `_`-prefixed BASENAME, the second any file under a `_`-prefixed DIRECTORY
@@ -124,7 +124,7 @@ export default defineConfig({
   reporter: reporters,
   outputDir: './artifacts/test-results',
   // Quarantine lane (CLAUDE.md §Escalation rules): tests tagged @quarantine are
-  // excluded from EVERY default run — the bare nightly, /qa:run mode=smoke, and the
+  // excluded from EVERY default run — the bare nightly, /qa-warden:run mode=smoke, and the
   // package.json grep scripts — so a flaky test can't keep failing the gate while
   // it waits for a fix. Gated on an env var because CLI `--grep-invert` does NOT
   // override a config-level grepInvert (verified: with a static grepInvert here,

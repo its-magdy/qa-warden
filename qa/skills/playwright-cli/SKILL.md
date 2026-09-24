@@ -7,7 +7,7 @@ disable-model-invocation: false
 
 # playwright-cli
 
-**This file is NOT the official Playwright skill — it is a thin project companion.** Microsoft ships an official `@playwright/cli` agent skill *inside the npm package*; `/qa:init` installs it via `npx playwright-cli install --skills`, and it is the **authoritative, auto-updating** reference for the CLI's command surface (tracing, storage-state, request-mocking, test-generation, …). This companion exists ONLY to pin the toolkit-specific decision rules (CLI vs MCP), the healer/generator recipe shape, and session hygiene — the parts Microsoft's generic skill does not cover.
+**This file is NOT the official Playwright skill — it is a thin project companion.** Microsoft ships an official `@playwright/cli` agent skill *inside the npm package*; `/qa-warden:init` installs it via `npx playwright-cli install --skills`, and it is the **authoritative, auto-updating** reference for the CLI's command surface (tracing, storage-state, request-mocking, test-generation, …). This companion exists ONLY to pin the toolkit-specific decision rules (CLI vs MCP), the healer/generator recipe shape, and session hygiene — the parts Microsoft's generic skill does not cover.
 
 **Do NOT treat the command list below as the source of truth, and do not re-copy Microsoft's tool list into this file** — that is what goes stale between `@playwright/cli` releases. For the current command surface always defer to `npx playwright-cli --help` and the installed official skill at `node_modules/@playwright/cli/skills/playwright-cli/SKILL.md` (also printed by `--help` as "Agent skill: …"). When this companion and the installed binary/skill disagree, **the binary + its bundled skill win.**
 
@@ -20,7 +20,7 @@ disable-model-invocation: false
 **Skip this skill and use Playwright MCP (`npx playwright mcp`, bundled since Playwright 1.62; the standalone `@playwright/mcp` package is legacy) when:** first-contact exploration of an unknown app (planner drafting selectors against a live AX tree), or fuzz-style adversarial runs where the live DOM is the point.
 
 ## Install & invocation
-`/qa:init` installs `@playwright/cli` as a **local devDependency** (see `templates/package.json`) — it does NOT install globally. So the binary lives at `node_modules/.bin/playwright-cli`, which is **not on an agent Bash shell's PATH**.
+`/qa-warden:init` installs `@playwright/cli` as a **local devDependency** (see `templates/package.json`) — it does NOT install globally. So the binary lives at `node_modules/.bin/playwright-cli`, which is **not on an agent Bash shell's PATH**.
 
 **Invoke the CLI as `npx playwright-cli …` everywhere — never bare `playwright-cli`.** `npx` resolves the local `node_modules/.bin` copy from the project root; bare `playwright-cli` fails with `command not found (exit 127)` unless the operator separately ran a global install. Every recipe, agent, and command in this toolkit uses the `npx` form for this reason.
 

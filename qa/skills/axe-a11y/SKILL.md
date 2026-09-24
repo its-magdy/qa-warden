@@ -1,6 +1,6 @@
 ---
 name: axe-a11y
-description: Compile an `a11y_violations_below` oracle into a settled, full-page @axe-core/playwright WCAG scan, or run the a11y half of a `/qa:review url=` live-page audit. Use when a spec's oracle declares that key (the planner declares it per meaningful UI state — post-login, cart-with-items, error dialog open — not per page), when auditing a live page, or when adding an adversarial-pair spec to prove the detector is live. Not for specs whose oracle does not declare it — an axe scan with no oracle item is an orphan assert. Catches ~30-40% of WCAG violations by success-criterion count, ~57% by issue volume; the rest needs a human.
+description: Compile an `a11y_violations_below` oracle into a settled, full-page @axe-core/playwright WCAG scan, or run the a11y half of a `/qa-warden:review url=` live-page audit. Use when a spec's oracle declares that key (the planner declares it per meaningful UI state — post-login, cart-with-items, error dialog open — not per page), when auditing a live page, or when adding an adversarial-pair spec to prove the detector is live. Not for specs whose oracle does not declare it — an axe scan with no oracle item is an orphan assert. Catches ~30-40% of WCAG violations by success-criterion count, ~57% by issue volume; the rest needs a human.
 user-invocable: false
 disable-model-invocation: false
 ---
@@ -12,10 +12,10 @@ Drop-in accessibility scanner using `@axe-core/playwright`. `getByRole`/`getByLa
 ## When to use
 - On **every meaningful UI state**, not every page. "Every state transition of a page" is the rule — e.g. cart empty, cart with items, cart at error. A single scan per page misses state-specific violations.
 - When a spec's oracle declares `a11y_violations_below` — the generator compiles that key through this skill. An axe scan with no backing oracle item is an orphan assert (reviewer Check 2).
-- When auditing an existing app (the `/qa:review url=<url>` command delegates here).
+- When auditing an existing app (the `/qa-warden:review url=<url>` command delegates here).
 
 ## How
-No install needed — `@axe-core/playwright` already ships in the scaffolded `templates/package.json` (`/qa:init` installs it). Just import and use it.
+No install needed — `@axe-core/playwright` already ships in the scaffolded `templates/package.json` (`/qa-warden:init` installs it). Just import and use it.
 Authoritative package: https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright
 
 Drop-in snippet (the whole skill in one test):

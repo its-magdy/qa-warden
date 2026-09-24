@@ -1,11 +1,12 @@
 # Changelog
 
-All notable consumer-facing changes to the `qa` plugin.
+All notable consumer-facing changes to QA Warden (plugin id `qa-warden`; `qa` before 0.4.0).
 
-The **last published build was `0.2.0` (2026-07-24)**. Everything below landed in the
-repository since then and is released as **`0.3.0`**: a feature release on the published
-`0.1.0 → 0.2.0` line, with no breaking change to the spec format or the `/qa:*` surface.
-`.claude-plugin/plugin.json` reads `0.3.0`; tag the build with `claude plugin tag ./qa`.
+The **last published build was `0.2.0` (2026-07-24)**. The `[Unreleased]` section below landed in
+the repository since then as **`0.3.0`**: a feature release on the published `0.1.0 → 0.2.0`
+line, with no breaking change to the spec format or the `/qa:*` surface. **`0.4.0`** adds only
+the rename on top of it, and that one IS breaking (see its section).
+`.claude-plugin/plugin.json` reads `0.4.0`; tag the build with `claude plugin tag ./qa`.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/). Versions are the
 number in `plugin.json`, which is also the key the installer caches under
@@ -13,6 +14,26 @@ number in `plugin.json`, which is also the key the installer caches under
 never carry the same number**, or the second one has no way to announce itself.
 
 ---
+
+## 0.4.0 — renamed to QA Warden (2026-09-24)
+
+**BREAKING:** the plugin id is now `qa-warden`, so every command moves from `/qa:<cmd>` to
+`/qa-warden:<cmd>` and the install string from `qa@qa-toolkit` to `qa-warden@qa-toolkit`.
+Nothing else changes: the `QA_*` env vars, the `specs/` and `tests/` layout, the spec format,
+the `bin/qa-*` scripts and the `qa-toolkit` marketplace name all stay as they were.
+
+**Upgrading a project:**
+1. `/plugin uninstall qa@qa-toolkit`, then `/plugin install qa-warden@qa-toolkit --scope project`.
+   The old `qa@qa-toolkit` entry in `.claude/settings.json` `enabledPlugins` is now stale; remove it.
+2. `/qa-warden:init --resync`. Until you run it, `/qa-warden:doctor` reports substrate drift,
+   because the resynced scripts mention the new command names.
+3. Replace `/qa:` with `/qa-warden:` in your project `CLAUDE.md`. `--resync` never rewrites that
+   file, and doctor warns while any `/qa:` remains.
+
+- `scripts/doctor.sh` finds the installed plugin under either id and prefers `qa-warden`, so the
+  substrate-drift baseline resolves during the transition.
+- The assertion-contract hook already stripped the plugin namespace from `agent_type`;
+  `bin/qa-hooktest` now covers `qa-warden:healer` and `qa-warden:verifier` explicitly.
 
 ## [Unreleased]
 

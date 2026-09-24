@@ -28,10 +28,10 @@ QA Warden is a Claude Code plugin that turns a Markdown spec into a Playwright `
 ## Prerequisites
 
 - **Claude Code** with plugin support (`/plugin` commands)
-- **Node.js `>=22`** and `npm` (for the Playwright project `/qa:init` stamps)
+- **Node.js `>=22`** and `npm` (for the Playwright project `/qa-warden:init` stamps)
 - **`git`**
-- **`jq`**: required. Without it, `/qa:doctor` reports a ❌ and `.claude/settings.json` cannot be auto-merged.
-- **`ripgrep` (`rg`)**: recommended. Without it, `/qa:retire` consumer checks fall back to `grep`.
+- **`jq`**: required. Without it, `/qa-warden:doctor` reports a ❌ and `.claude/settings.json` cannot be auto-merged.
+- **`ripgrep` (`rg`)**: recommended. Without it, `/qa-warden:retire` consumer checks fall back to `grep`.
 - A **staging or local** instance of the app under test, plus a test account that already exists in it. Never use production.
 
 ---
@@ -46,13 +46,13 @@ Run these inside Claude Code, from the project that will hold the tests:
 
 # 2. Install at project scope. This records the plugin in .claude/settings.json,
 #    so teammates who clone and trust the repo are prompted to install it too.
-/plugin install qa@qa-toolkit --scope project
+/plugin install qa-warden@qa-toolkit --scope project
 
 # 3. Stamp the runtime substrate into this project and install dependencies
-/qa:init
+/qa-warden:init
 ```
 
-`/qa:init` writes `package.json` (with `@playwright/test` pinned to `1.63.0`), `playwright.config.ts`, `tsconfig.json`, `CLAUDE.md`, `.claude/settings.json` permission rules, `.mcp.json`, `scripts/`, `fixtures/`, `page-objects/` and `.env.example`. Then it runs `npm install` and installs the Playwright browsers.
+`/qa-warden:init` writes `package.json` (with `@playwright/test` pinned to `1.63.0`), `playwright.config.ts`, `tsconfig.json`, `CLAUDE.md`, `.claude/settings.json` permission rules, `.mcp.json`, `scripts/`, `fixtures/`, `page-objects/` and `.env.example`. Then it runs `npm install` and installs the Playwright browsers.
 
 | Flag | Effect |
 |---|---|
@@ -84,7 +84,7 @@ QA_ADMIN_PASSWORD=
 Confirm the setup (read-only and offline; it never contacts `BASE_URL_APP`):
 
 ```bash
-/qa:doctor
+/qa-warden:doctor
 ```
 
 A healthy project prints a summary with no ❌ blockers.
@@ -96,15 +96,15 @@ A healthy project prints a summary with no ❌ blockers.
 ### Fast lane: your first test
 
 ```bash
-/qa:explore                   # learn the app → specs/_context/app.context.md
-/qa:new-spec auth/login       # draft specs/auth/login.md (plain language + YAML oracle)
-/qa:gen specs/auth/login.md   # compile → tests/auth/login.spec.ts, run it green, verify it can fail
-/qa:review                    # reviewer gates the assertion contract; any FAIL blocks the PR
-/qa:run mode=smoke            # run the @smoke suite (no LLM)
+/qa-warden:explore                   # learn the app → specs/_context/app.context.md
+/qa-warden:new-spec auth/login       # draft specs/auth/login.md (plain language + YAML oracle)
+/qa-warden:gen specs/auth/login.md   # compile → tests/auth/login.spec.ts, run it green, verify it can fail
+/qa-warden:review                    # reviewer gates the assertion contract; any FAIL blocks the PR
+/qa-warden:run mode=smoke            # run the @smoke suite (no LLM)
 ```
 
-- The first `/qa:explore` writes `app.context.md` as a **draft**. Open it, correct it, and delete the `draft:` line to confirm it.
-- The spec is the only file you review. Here is the oracle `/qa:new-spec` produces:
+- The first `/qa-warden:explore` writes `app.context.md` as a **draft**. Open it, correct it, and delete the `draft:` line to confirm it.
+- The spec is the only file you review. Here is the oracle `/qa-warden:new-spec` produces:
 
 ```yaml
 oracle:
@@ -112,7 +112,7 @@ oracle:
   text_visible: "My tasks"   # and the page actually rendered
 ```
 
-- `/qa:gen` also keeps a `.webm` video of the run. It shows the real flow the test drove, so you don't need to read the TypeScript.
+- `/qa-warden:gen` also keeps a `.webm` video of the run. It shows the real flow the test drove, so you don't need to read the TypeScript.
 
 The step-by-step version, including what you should see at each step, is in the [first-test tutorial](qa/reference/tutorial-first-test.md).
 
@@ -121,27 +121,27 @@ The step-by-step version, including what you should see at each step, is in the 
 Add three steps between `explore` and `new-spec`. They pin down what "correct" means before any test is generated:
 
 ```bash
-/qa:intake  checkout/coupon   # interview → .basis.md (the intended behaviour)
-/qa:ideate  checkout/coupon   # SFDIPOT checklist of candidate cases → .cases.md
-/qa:approve checkout/coupon   # a human approves/prunes/defers each row; mints stable row ids
-/qa:new-spec checkout/coupon
+/qa-warden:intake  checkout/coupon   # interview → .basis.md (the intended behaviour)
+/qa-warden:ideate  checkout/coupon   # SFDIPOT checklist of candidate cases → .cases.md
+/qa-warden:approve checkout/coupon   # a human approves/prunes/defers each row; mints stable row ids
+/qa-warden:new-spec checkout/coupon
 ```
 
 The fast lane skips no FAIL-level gate. It does skip reviewer Check 14 (approved-case traceability), which needs a `.cases.md` to read. On the fast lane, **completeness** is not checked.
 
-Existing manual test cases (TestRail, Zephyr or Xray CSV, Markdown, or a pasted table) can replace `/qa:ideate`:
+Existing manual test cases (TestRail, Zephyr or Xray CSV, Markdown, or a pasted table) can replace `/qa-warden:ideate`:
 
 ```bash
-/qa:import-cases checkout/coupon source=testrail exports/coupon.csv
+/qa-warden:import-cases checkout/coupon source=testrail exports/coupon.csv
 ```
 
 ### Running tests
 
 ```bash
-/qa:run mode=smoke                          # @smoke suite; refreshes artifacts/last-run.json
-/qa:run mode=single tests/auth/login.spec.ts   # one spec, CI-shaped → reports/headless-login.json
-/qa:run mode=repeat tests/auth/login.spec.ts 20  # flakiness probe (default N=10)
-/qa:run mode=changed origin/main            # only tests touched since a git ref
+/qa-warden:run mode=smoke                          # @smoke suite; refreshes artifacts/last-run.json
+/qa-warden:run mode=single tests/auth/login.spec.ts   # one spec, CI-shaped → reports/headless-login.json
+/qa-warden:run mode=repeat tests/auth/login.spec.ts 20  # flakiness probe (default N=10)
+/qa-warden:run mode=changed origin/main            # only tests touched since a git ref
 npx playwright test                         # the full suite: plain Playwright, no Claude
 ```
 
@@ -149,8 +149,8 @@ npx playwright test                         # the full suite: plain Playwright, 
 
 ```bash
 ls artifacts/test-results/          # a failing test's id is its results directory name
-/qa:heal <test-results-dir-name>    # triage from the trace; patch selectors/waits or file bugs/*.md
-/qa:batch-fix tests/checkout        # apply one healer fix to every matching failure (asks first)
+/qa-warden:heal <test-results-dir-name>    # triage from the trace; patch selectors/waits or file bugs/*.md
+/qa-warden:batch-fix tests/checkout        # apply one healer fix to every matching failure (asks first)
 ```
 
 If product copy changed, the healer does not absorb it. It routes the question ("intentional, or a bug?") back to the planner.
@@ -158,47 +158,47 @@ If product copy changed, the healer does not absorb it. It routes the question (
 ### Reporting and analysis
 
 ```bash
-/qa:report                      # PR/Slack summary → reports/summary.md
-/qa:coverage area=checkout      # requirement/assertion/lens/flow coverage gaps (not line coverage)
-/qa:impact route=/api/orders    # every spec affected by a change to that route
-/qa:review url=https://staging.example.com/cart   # a11y + visual + closed-vocab audit of a live page
+/qa-warden:report                      # PR/Slack summary → reports/summary.md
+/qa-warden:coverage area=checkout      # requirement/assertion/lens/flow coverage gaps (not line coverage)
+/qa-warden:impact route=/api/orders    # every spec affected by a change to that route
+/qa-warden:review url=https://staging.example.com/cart   # a11y + visual + closed-vocab audit of a live page
 ```
 
 ### Not sure what to run next
 
 ```bash
-/qa:help                          # reads project state, names the next command
-/qa:help checkout/coupon          # scoped to one feature
-/qa:help "how do I add a test"
+/qa-warden:help                          # reads project state, names the next command
+/qa-warden:help checkout/coupon          # scoped to one feature
+/qa-warden:help "how do I add a test"
 ```
 
 ---
 
 ## Commands reference
 
-**You only** means Claude will never run the command on its own, because it has side effects. `/qa:approve` is the key case: a model able to invoke it could approve its own test plan.
+**You only** means Claude will never run the command on its own, because it has side effects. `/qa-warden:approve` is the key case: a model able to invoke it could approve its own test plan.
 
 | Command | Description | Invoked by |
 |---|---|---|
-| `/qa:init [--no-install \| --resync]` | Stamp the runtime substrate and install deps | You only |
-| `/qa:explore [mode=hot \| mode=area site=<id> area=<name>]` | Build or refresh the app/area context files | You or Claude |
-| `/qa:intake <area/feature>` | Interview for the test basis → `.basis.md` | You only |
-| `/qa:ideate <area/feature>` | Enumerate candidate cases → `.cases.md` | You only |
-| `/qa:approve <area/feature>` | Record the human verdict on a `.cases.md` | You only |
-| `/qa:import-cases <area/feature> [source=] [<file>]` | Import manual cases as `.cases.md` rows | You only |
-| `/qa:new-spec <area/feature>` | Draft a Markdown spec with a YAML oracle | You only |
-| `/qa:gen <spec-path>` | Compile a spec to a `.spec.ts`, run it green, verify it can fail | You only |
-| `/qa:review [path \| url=<url>]` | Reviewer gate over the diff, or a live-URL audit | You or Claude |
-| `/qa:run mode=single\|smoke\|repeat\|changed` | Run tests (no LLM) | You only |
-| `/qa:heal <failing-test-id>` | Triage one failure; fix selectors/waits or file a bug | You only |
-| `/qa:batch-fix <path-or-filter>` | Apply one healer fix across matching failures | You only |
-| `/qa:retire <area/feature>` | Retire a feature and every linked artifact (dry-run first) | You only |
-| `/qa:metamorphic-relations <spec>` | Generate 2–3 metamorphic "twin" specs of a passing test | You or Claude |
-| `/qa:report` | Aggregate the last run into a PR/Slack summary | You or Claude |
-| `/qa:coverage [area=] [site=]` | Static coverage report across 9 dimensions | You or Claude |
-| `/qa:impact route=\|field=\|factory=\|area=\|operation=\|source=` | List specs affected by a change | You or Claude |
-| `/qa:doctor [--verify-invariants <spec>]` | Read-only health check of the project | You or Claude |
-| `/qa:help [question \| area/feature]` | Situated help and "what's next" | You or Claude |
+| `/qa-warden:init [--no-install \| --resync]` | Stamp the runtime substrate and install deps | You only |
+| `/qa-warden:explore [mode=hot \| mode=area site=<id> area=<name>]` | Build or refresh the app/area context files | You or Claude |
+| `/qa-warden:intake <area/feature>` | Interview for the test basis → `.basis.md` | You only |
+| `/qa-warden:ideate <area/feature>` | Enumerate candidate cases → `.cases.md` | You only |
+| `/qa-warden:approve <area/feature>` | Record the human verdict on a `.cases.md` | You only |
+| `/qa-warden:import-cases <area/feature> [source=] [<file>]` | Import manual cases as `.cases.md` rows | You only |
+| `/qa-warden:new-spec <area/feature>` | Draft a Markdown spec with a YAML oracle | You only |
+| `/qa-warden:gen <spec-path>` | Compile a spec to a `.spec.ts`, run it green, verify it can fail | You only |
+| `/qa-warden:review [path \| url=<url>]` | Reviewer gate over the diff, or a live-URL audit | You or Claude |
+| `/qa-warden:run mode=single\|smoke\|repeat\|changed` | Run tests (no LLM) | You only |
+| `/qa-warden:heal <failing-test-id>` | Triage one failure; fix selectors/waits or file a bug | You only |
+| `/qa-warden:batch-fix <path-or-filter>` | Apply one healer fix across matching failures | You only |
+| `/qa-warden:retire <area/feature>` | Retire a feature and every linked artifact (dry-run first) | You only |
+| `/qa-warden:metamorphic-relations <spec>` | Generate 2–3 metamorphic "twin" specs of a passing test | You or Claude |
+| `/qa-warden:report` | Aggregate the last run into a PR/Slack summary | You or Claude |
+| `/qa-warden:coverage [area=] [site=]` | Static coverage report across 9 dimensions | You or Claude |
+| `/qa-warden:impact route=\|field=\|factory=\|area=\|operation=\|source=` | List specs affected by a change | You or Claude |
+| `/qa-warden:doctor [--verify-invariants <spec>]` | Read-only health check of the project | You or Claude |
+| `/qa-warden:help [question \| area/feature]` | Situated help and "what's next" | You or Claude |
 
 Most commands also take `site=<id>` to target a site other than the default `app`.
 
@@ -218,7 +218,7 @@ Playwright 1.56+ ships its own planner, generator and healer agents (`npx playwr
 |---|---|---|
 | Healer may change assertions / expected values | Yes (listed in its instructions, 1.63.0) | No. A `PreToolUse` hook denies the edit |
 | Oracle format | Free-form TypeScript | Closed 16-key YAML a non-coder can review |
-| Human approval before code exists | No | `/qa:intake` → `/qa:ideate` → `/qa:approve` |
+| Human approval before code exists | No | `/qa-warden:intake` → `/qa-warden:ideate` → `/qa-warden:approve` |
 | Proof each assertion can fail | No | The verifier fault-injects each `must_fail_when` defect |
 | PR gate on spec↔test drift | No | The reviewer blocks the merge |
 | Nightly LLM cost | None | None |
@@ -253,23 +253,23 @@ Why it matters: a 2026 study of autonomous test repair documented "assertion wea
 ### Repository layout
 
 ```
-.claude-plugin/marketplace.json   the marketplace catalog (lists the qa plugin)
+.claude-plugin/marketplace.json   the marketplace catalog (lists the QA Warden plugin)
 qa/                               the plugin
 ├── .claude-plugin/plugin.json    manifest; pinned `version`
 ├── agents/     planner, generator, verifier, healer, reviewer, exploration, ideation
-├── skills/     23 skills: the 19 /qa:* commands + 4 model-only helpers
+├── skills/     23 skills: the 19 /qa-warden:* commands + 4 model-only helpers
 │               (playwright-cli, axe-a11y, visual-regression, test-data-seed)
 ├── hooks/      2 PreToolUse gates: lexical reviewer FAILs, and the healer/verifier
 │               assertion prohibition (see qa/hooks/README.md)
 ├── reference/  DESIGN.md, tutorial, how-to, glossary, ideation and sentinel references
-├── templates/  the runtime substrate /qa:init stamps into each project
-├── bin/qa-scaffold    deterministic substrate installer (used by /qa:init)
+├── templates/  the runtime substrate /qa-warden:init stamps into each project
+├── bin/qa-scaffold    deterministic substrate installer (used by /qa-warden:init)
 ├── bin/qa-selfcheck   plugin consistency checks (not shipped to projects)
 ├── bin/qa-hooktest    hook regression tests (not shipped to projects)
 └── evals/             behavioural evals for the reviewer (`claude plugin eval`)
 ```
 
-The plugin itself (agents, skills, hooks, `reference/`) updates automatically with the plugin. Everything under `templates/` is copied into a project once. A template fix reaches an existing project only through `/qa:init --resync`, and `/qa:doctor` reports when a project needs it.
+The plugin itself (agents, skills, hooks, `reference/`) updates automatically with the plugin. Everything under `templates/` is copied into a project once. A template fix reaches an existing project only through `/qa-warden:init --resync`, and `/qa-warden:doctor` reports when a project needs it.
 
 ### Running the checks
 
@@ -285,7 +285,7 @@ Expected tail:
 
 ```
 qa-selfcheck: ✅ plugin is self-consistent — all 7 checks passed
-qa-hooktest: ✅ all 20 cases passed
+qa-hooktest: ✅ all 22 cases passed
 ```
 
 When you change `qa/agents/reviewer.md`, also run the behavioural evals. They make real model calls (about $1.6 and 6 minutes per case), so run them per change, not per commit. Details are in [`qa/evals/README.md`](qa/evals/README.md).
@@ -302,7 +302,7 @@ claude --plugin-dir ./qa
 
 ### Versioning and releasing
 
-The plugin ships in **versioned mode**: `qa/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.3.0`. Users receive an update only when that string changes.
+The plugin ships in **versioned mode**: `qa/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.4.0`. Users receive an update only when that string changes.
 
 > **Bump `version` in the same commit as every user-visible change.** If you push without a bump, nothing ships, and `/plugin update` tells users they are already current. No error warns you.
 

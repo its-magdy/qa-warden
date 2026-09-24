@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Canonical last-run.json gate — single source for /qa:doctor Check 1 and /qa:report's
+# Canonical last-run.json gate — single source for /qa-warden:doctor Check 1 and /qa-warden:report's
 # pre-aggregation check (they used to mirror this in prose and drifted).
 # total = expected+unexpected+skipped+flaky (NOT expected alone — that counts only PASSED
 # tests; an all-red run has expected=0).
@@ -25,8 +25,8 @@ fi
 
 # Canonical TOTAL formula — every RESOLVED test, whatever its outcome. A missing/broken
 # .stats (or a jq failure) yields -1, never 0: corrupt must not read as zero-test.
-# ONE jq pass for both fields: this script is on the hot path of doctor Check 1, /qa:report (×2),
-# /qa:run mode=smoke, /qa:run mode=single and /qa:batch-fix, and two invocations meant every one of them paid
+# ONE jq pass for both fields: this script is on the hot path of doctor Check 1, /qa-warden:report (×2),
+# /qa-warden:run mode=smoke, /qa-warden:run mode=single and /qa-warden:batch-fix, and two invocations meant every one of them paid
 # to parse the same JSON twice. `// "?"` covers a null startTime; the `||` fallback covers a jq
 # failure, so both halves of the read are always non-empty.
 read -r TOTAL START <<EOF

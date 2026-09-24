@@ -18,8 +18,8 @@ it is marked as such — see §9.
 2. [Why test-case generation is hard (and why a human stays in the loop)](#2-why-test-case-generation-is-hard)
 3. [Architecture: two new commands, two artifacts](#3-architecture)
 4. [The `kind:` router](#4-the-kind-router)
-5. [`/qa:intake` — capture the test basis](#5-qaintake)
-6. [`/qa:ideate` — enumerate candidate cases](#6-qaideate)
+5. [`/qa-warden:intake` — capture the test basis](#5-qaintake)
+6. [`/qa-warden:ideate` — enumerate candidate cases](#6-qaideate)
 7. [Artifacts: `.basis.md` and `.cases.md`](#7-artifacts)
 8. [Reuse of existing toolkit machinery](#8-reuse-of-existing-machinery)
 9. [Validated flows, refinements & honest open questions](#9-validated-flows)
@@ -34,18 +34,18 @@ The toolkit is strong on **run / heal / analyze / report** but has no step for
 `planner`→`generator`→`reviewer` do the rest. Nothing *enumerates the set of cases* a
 feature needs, and — critically — **no downstream gate can detect an omitted
 category** (a missing case is invisible to mutation testing, metamorphic twins, and
-the reviewer alike). This is the open risk the intake→ideate front-end (`/qa:intake` → `/qa:ideate`) exists to close.
+the reviewer alike). This is the open risk the intake→ideate front-end (`/qa-warden:intake` → `/qa-warden:ideate`) exists to close.
 
-**Two new commands close the gap, before `/qa:new-spec`:**
+**Two new commands close the gap, before `/qa-warden:new-spec`:**
 
 ```
-/qa:explore  mode=area site=app area=checkout  → app-observed area context  (exists)
-/qa:intake   checkout/coupon → the "test basis" (understanding)       NEW
+/qa-warden:explore  mode=area site=app area=checkout  → app-observed area context  (exists)
+/qa-warden:intake   checkout/coupon → the "test basis" (understanding)       NEW
    ⟵ human reviews the basis (GIGO checkpoint)
-/qa:ideate   checkout/coupon → candidate-case CHECKLIST               NEW
+/qa-warden:ideate   checkout/coupon → candidate-case CHECKLIST               NEW
    ⟵ human approves / prunes
-/qa:new-spec checkout/<case> → one rule → one spec, examples → scenarios (exists)
-/qa:gen      …               → runnable .spec.ts                      (exists)
+/qa-warden:new-spec checkout/<case> → one rule → one spec, examples → scenarios (exists)
+/qa-warden:gen      …               → runnable .spec.ts                      (exists)
 ```
 
 `intake` writes *understanding*; `ideate` writes *a plan of what to test*; only
@@ -97,15 +97,15 @@ Two commands, two execution modes, two artifacts (`<feature>.basis.md`, `<featur
 
 | Command | Mode | Reads | Writes |
 |---|---|---|---|
-| `/qa:intake` | **interactive** (main session) | area context + live snapshot + (optional) docs | `<feature>.basis.md` |
-| `/qa:ideate` | **autonomous** (subagent fan-out / Workflow) | `<feature>.basis.md` | `<feature>.cases.md` |
+| `/qa-warden:intake` | **interactive** (main session) | area context + live snapshot + (optional) docs | `<feature>.basis.md` |
+| `/qa-warden:ideate` | **autonomous** (subagent fan-out / Workflow) | `<feature>.basis.md` | `<feature>.cases.md` |
 
 Why separate (not one command): intake is *interactive* (human-in-the-loop interview),
 ideate is *autonomous* (parallel lens agents). The two don't compose inside one
 background run, and the `.basis.md` deserves its own human review gate (the GIGO
 chokepoint). The split also matches the toolkit's grain — one command, one agent, one
 artifact — and the **guard-and-handoff** pattern already exists (`planner` tells you
-to run `/qa:explore` first when context is stale). `/qa:ideate` likewise refuses if
+to run `/qa-warden:explore` first when context is stale). `/qa-warden:ideate` likewise refuses if
 `.basis.md` is missing or has unresolved blocking questions.
 
 ---
@@ -127,7 +127,7 @@ offers all five), and `kind:` stays extensible for the rest.
 
 ---
 
-## 5. `/qa:intake`
+## 5. `/qa-warden:intake`
 
 > **Rationale only — not the runtime definition.** The operational process lives in
 > `skills/intake/SKILL.md`; the artifact shape in `templates/specs/_context/_templates/basis.md`.
@@ -141,7 +141,7 @@ rule; locators still come only from the live AX tree.)
 
 ### Process
 1. **Auto-gather observable context** — read `specs/_context/<site>/<area>.md`
-   (`/qa:explore` output) + a live `playwright-cli snapshot`. Pre-fill everything the
+   (`/qa-warden:explore` output) + a live `playwright-cli snapshot`. Pre-fill everything the
    agent can see (routes, fields, states, vocabulary). *Never ask what it can observe.*
 2. **(Optional) ingest docs** the human points at (ticket / Figma / API spec) — a
    pre-fill source, **not** a separate mode (a doc inherits whatever it omits).
@@ -175,7 +175,7 @@ rule; locators still come only from the live AX tree.)
    silently — the literature does not settle whether spec or as-built wins.
 7. **Write `<feature>.basis.md`** structured as an **Example Map** [Matt Wynne].
    Unresolved questions are logged as 🔴 red cards — *"turning an unknown unknown into
-   a known unknown."* Blocking red cards **gate** `/qa:ideate`.
+   a known unknown."* Blocking red cards **gate** `/qa-warden:ideate`.
 
 ### Per-kind intake
 - **feature** — full map from scratch.
@@ -187,7 +187,7 @@ rule; locators still come only from the live AX tree.)
 
 ---
 
-## 6. `/qa:ideate`
+## 6. `/qa-warden:ideate`
 
 > **Rationale only — not the runtime definition.** The operational lens definitions and
 > per-kind processes live in `agents/ideation.md`; the artifact shape in
@@ -230,7 +230,7 @@ rule; locators still come only from the live AX tree.)
   run); (b) **metamorphic twins + boundary siblings** via the
   `metamorphic-relations` skill; (c) a **bug-class scan** (WARN-level — see §9).
 - **enhancement** → two fronts: **new-behavior** cases + a **regression set** chosen
-  by `/qa:impact`. *Impact selection is an optimization on top of periodic full
+  by `/qa-warden:impact`. *Impact selection is an optimization on top of periodic full
   regression — never a replacement* (§9, safety caveat).
 - **refactor** → no new-behavior cases; regression + metamorphic "output unchanged."
 
@@ -238,12 +238,12 @@ rule; locators still come only from the live AX tree.)
 
 ## 7. Artifacts
 
-> The examples below are **illustrative**; the shipped templates under `templates/specs/_context/_templates/` are authoritative — they carry additional required slots (`must_not:`, `integrity_invariants:`, `test_data:`, and the `Lens coverage:` line that `/qa:coverage` greps) that these condensed examples omit.
+> The examples below are **illustrative**; the shipped templates under `templates/specs/_context/_templates/` are authoritative — they carry additional required slots (`must_not:`, `integrity_invariants:`, `test_data:`, and the `Lens coverage:` line that `/qa-warden:coverage` greps) that these condensed examples omit.
 
 ### `<feature>.basis.md` (Example Map)
 ```markdown
 # basis: checkout/coupon
-kind: feature                 # feature | enhancement | bug | refactor | characterization  (exploratory: roadmap only — §4 below; /qa:ideate returns "unsupported" for it today)
+kind: feature                 # feature | enhancement | bug | refactor | characterization  (exploratory: roadmap only — §4 below; /qa-warden:ideate returns "unsupported" for it today)
 site: app
 story: >                      # 🟡 yellow card
   A logged-in user applies a coupon to get a discount.
@@ -253,7 +253,7 @@ rules:                        # 🔵 blue cards = THE ORACLE ("what correct mean
   - expired coupon → rejected
 examples:                     # 🟢 green cards = test-case seeds
   - QA20 on a $50 cart → $40 total, "Coupon applied"
-open_questions:               # 🔴 red cards — blocking ones gate /qa:ideate
+open_questions:               # 🔴 red cards — blocking ones gate /qa-warden:ideate
   - "Can two coupons stack?"  # unresolved
 nonfunctional:                # the lenses LLMs drop — null = explicitly N/A, logged
   a11y: required
@@ -293,16 +293,16 @@ refinements turned out to be already-solvable with parts you have:
 
 | Need | Existing piece it reuses |
 |---|---|
-| Observable context for intake | `/qa:explore` + `playwright-cli snapshot` |
+| Observable context for intake | `/qa-warden:explore` + `playwright-cli snapshot` |
 | Bug regression "strong assertions" requirement | `must_fail_when:` (advisory intent record) |
 | Bug "stays dead via nearby paths" | `metamorphic-relations` skill |
-| Enhancement impact selection | `/qa:impact` (route/field/factory/area/operation/source) |
+| Enhancement impact selection | `/qa-warden:impact` (route/field/factory/area/operation/source) |
 | Enhancement **safe fallback** (full regression) | `npx playwright test` |
-| Spec compilation from approved cases | `/qa:new-spec` → `/qa:gen` |
+| Spec compilation from approved cases | `/qa-warden:new-spec` → `/qa-warden:gen` |
 | Checklist quality gate | the `reviewer` agent (WARN/FAIL tiers) |
-| Approved-case → test traceability | reviewer **Check 14** (WARN) + `/qa:coverage` dim-5 (coarse count) |
-| Existing manual cases | `/qa:import-cases` (see `reference/how-to-import-manual-cases.md`; import-once, `[imported:]` provenance, external id = row id) |
-| Stale-context handoff pattern | mirrors `planner` → `/qa:explore` |
+| Approved-case → test traceability | reviewer **Check 14** (WARN) + `/qa-warden:coverage` dim-5 (coarse count) |
+| Existing manual cases | `/qa-warden:import-cases` (see `reference/how-to-import-manual-cases.md`; import-once, `[imported:]` provenance, external id = row id) |
+| Stale-context handoff pattern | mirrors `planner` → `/qa-warden:explore` |
 
 ### Traceability (approved case → scenario)
 
@@ -314,7 +314,7 @@ test is *caught*. Two signals do this today:
   approved), and judges each against the spec's `scenarios:`. WARNs on any approved case with no
   covering scenario and no waiver. A conscious drop is waived by naming the case under
   "Deferred"/"pruned" in the banner, or a `# waived: <case> — <reason>` note in the spec.
-- **`/qa:coverage` dim-5 (coarse, suite-wide)** — the approved-case COUNT vs the scenario COUNT per
+- **`/qa-warden:coverage` dim-5 (coarse, suite-wide)** — the approved-case COUNT vs the scenario COUNT per
   feature; a dashboard prompt, not a per-case match.
 
 **Why WARN, not a deterministic FAIL (and the Phase-2 upgrade).** Approval is free-text prose today
@@ -322,14 +322,14 @@ test is *caught*. Two signals do this today:
 NOTE F-20), so Check 14 is an LLM prose→scenario judgment; a hard-FAIL built on a fuzzy "was this
 approved?" read would false-block merges. To make it a deterministic, CI-runnable FAIL:
 
-1. ~~`/qa:ideate` stamps each candidate row a **stable id**~~ **SHIPPED (differently): `/qa:approve` mints the stable ids** (`R1.a`, `NF.sql`, `C.<slug>`) at the human-approval step — the right owner, since the id set should freeze at approval, not at enumeration.
-2. The **planner** (`/qa:new-spec`) and **generator** carry a `covers: [<id>, …]` field on each
+1. ~~`/qa-warden:ideate` stamps each candidate row a **stable id**~~ **SHIPPED (differently): `/qa-warden:approve` mints the stable ids** (`R1.a`, `NF.sql`, `C.<slug>`) at the human-approval step — the right owner, since the id set should freeze at approval, not at enumeration.
+2. The **planner** (`/qa-warden:new-spec`) and **generator** carry a `covers: [<id>, …]` field on each
    `scenario:` it authors from an approved case.
 3. Check 14 becomes a mechanical **id set-diff**: `approved_ids − covered_ids − waived_ids == ∅` else
-   FAIL — deterministic enough to run in `/qa:doctor` / CI with no model in the loop.
+   FAIL — deterministic enough to run in `/qa-warden:doctor` / CI with no model in the loop.
 
 This is the same incremental path the `response_body_contains` oracle key took (proven as a WARN/soft
-signal first, then hardened). Step 1 shipped 2026-07-18 via `/qa:approve`; the remaining `covers:`
+signal first, then hardened). Step 1 shipped 2026-07-18 via `/qa-warden:approve`; the remaining `covers:`
 change touches two mirrors (planner, generator), so the FAIL flip is deferred until the WARN has
 demonstrated its value in practice.
 
@@ -356,7 +356,7 @@ demonstrated its value in practice.
    only under conditions that *often fail*; a change can break *unrelated* areas; the
    problem is *"largely open"* even at Google [Rothermel & Harrold; Google ICSE-SEIP
    2019]. Canonical mitigation: fall back to **full regression** for changes the
-   analyzer can't reason about [Microsoft TIA]. → `/qa:impact` per-change is an
+   analyzer can't reason about [Microsoft TIA]. → `/qa-warden:impact` per-change is an
    optimization *on top of* full regression (`npx playwright test`), never a replacement.
 
 ### Honest open questions / unvalidated assumptions

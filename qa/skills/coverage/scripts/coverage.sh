@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# coverage.sh — deterministic extraction for /qa:coverage (9 dimensions).
+# coverage.sh — deterministic extraction for /qa-warden:coverage (9 dimensions).
 #
-# Extracted from the former /qa:coverage prompt body: this is DATA COLLECTION only.
+# Extracted from the former /qa-warden:coverage prompt body: this is DATA COLLECTION only.
 # The skill (../SKILL.md) owns the design contract and the output format; this script owns
 # the shell recipes and must never format, paraphrase, or estimate. Run from the PROJECT
 # root (cwd), not from the plugin dir — every path below is project-relative.
@@ -58,7 +58,7 @@ fi
 # reads exactly like "no gaps". Refuse instead of emitting a partial report: an empty section
 # is this command's one unforgivable output.
 if [ ! -f scripts/spec-links.sh ]; then
-  echo "ERROR: scripts/spec-links.sh missing — dims 1, 5 and 6 cannot be computed and would print EMPTY (a false clean). Substrate predates it; run /qa:init --resync, then re-run. This is NOT a gap-free result."
+  echo "ERROR: scripts/spec-links.sh missing — dims 1, 5 and 6 cannot be computed and would print EMPTY (a false clean). Substrate predates it; run /qa-warden:init --resync, then re-run. This is NOT a gap-free result."
   exit 2
 fi
 # The closed oracle vocabulary — a REGISTERED mirror of CLAUDE.md §"Test case format
@@ -93,7 +93,7 @@ MANIFESTS=$(find artifacts/route-manifests -name '*.json' 2>/dev/null)
 # routes, so dim 0 printed its routes under "touched by NO compiled test, planned, untested" —
 # false for a test that is on disk and compiled, and it sends the reader to WRITE A SPEC when the
 # real remedy is to clear the blocker — and dim 4's footprint quietly under-counted with no note.
-# /qa:impact has enumerated exactly this set as "BLIND SPOTS" all along; the walk is now shared
+# /qa-warden:impact has enumerated exactly this set as "BLIND SPOTS" all along; the walk is now shared
 # (scripts/spec-links.sh unmanifested, doctor Check 9k) rather than re-derived, so the two
 # commands cannot disagree about which specs are invisible to a manifest-derived answer.
 UNMANIFESTED=$(bash scripts/spec-links.sh unmanifested 2>/dev/null)
@@ -121,7 +121,7 @@ if [ -n "$MANIFESTS" ]; then
   TESTED=$(printf '%s\n' "$MANIFESTS" | tr '\n' '\0' | xargs -0 jq -r '.routes[]?' 2>/dev/null | sort -u)
   echo "-- declared in an area file but touched by NO compiled test (planned, untested):"
   comm -23 <(printf '%s\n' "$DECL") <(printf '%s\n' "$TESTED") | sed '/^$/d; s/^/  ⚠ /'   # drop the blank line printf emits for an empty DECL/TESTED so it never prints a phantom "  ⚠ " gap (m-12)
-  echo "-- touched by tests but declared in NO area file (unplanned/undocumented — refresh /qa:explore mode=area site=<id> area=<name>, or an API/login route area files legitimately don't list — review prompt, not defect list):"
+  echo "-- touched by tests but declared in NO area file (unplanned/undocumented — refresh /qa-warden:explore mode=area site=<id> area=<name>, or an API/login route area files legitimately don't list — review prompt, not defect list):"
   comm -13 <(printf '%s\n' "$DECL") <(printf '%s\n' "$TESTED") | sed '/^$/d; s/^/  ⚠ /'   # drop the blank line printf emits for an empty DECL/TESTED (m-12)
   # Third arm — WHY the first arm may be lying. Print it only when non-empty, and name the
   # remedy that differs: an unmanifested spec is authored AND compiled, so "write a spec" is
@@ -129,7 +129,7 @@ if [ -n "$MANIFESTS" ]; then
   if [ -n "$UNMANIFESTED" ]; then
     echo "-- compiled but UNMANIFESTED — these tests exist on disk and contribute NO routes above, so any route they touch is mis-reported as 'planned, untested' (the verifier withholds a manifest on a red parent, a BLIND/INCONCLUSIVE invariant, a disagreeing twin or budget exhaustion — clear the blocker, do NOT author a second spec):"
     printf '%s\n' "$UNMANIFESTED" | while IFS=$'\t' read -r t base; do
-      echo "  ⚠ $t  (no artifacts/route-manifests/${base}.json — same set /qa:impact reports as BLIND SPOTS)"
+      echo "  ⚠ $t  (no artifacts/route-manifests/${base}.json — same set /qa-warden:impact reports as BLIND SPOTS)"
     done
   fi
 else echo "— (no route manifests; dim-0 unavailable)"; fi
@@ -182,7 +182,7 @@ echo "== 1b. Spec-without-test — an authored spec that never compiled to a .sp
 # Dim 1 above is basis-DRIVEN, so a spec authored without a basis (basis is optional — the
 # intake→ideate chain is optional) is never enumerated there, and an approved/@smoke spec that
 # was never generated is invisible to the smoke gate (--grep @smoke can't run a test that doesn't
-# exist), to doctor Check 15 (which `continue`s past test-less specs), and to /qa:impact. Enumerate
+# exist), to doctor Check 15 (which `continue`s past test-less specs), and to /qa-warden:impact. Enumerate
 # it directly and surface it as a NAMED gap: every authored spec whose paired test file is absent.
 gap1b=0
 # site= has no path component in authored specs/<area>/<feature>.md paths (same as dim 2 below), so
@@ -195,7 +195,7 @@ printf '%s\n' "$AUTHORED_SPECS" | grep -E "$AREA_FILTER" | while read -r spec; d
   smoke=""; grep -qE '@?smoke\b' "$spec" 2>/dev/null && smoke="  ← @smoke: the smoke GATE is blind to this un-compiled spec — a fully-broken feature hides behind 'no test to fail'"
   echo "  ⚠ GAP spec-without-test: $spec → no tests/${feat}.spec.ts${smoke}"
 done
-echo "  (none above = every authored spec has a compiled test; run /qa:gen on any listed spec)"
+echo "  (none above = every authored spec has a compiled test; run /qa-warden:gen on any listed spec)"
 
 echo "== 2. Assertion presence — density + the zero-assertion check =="
 # One assertion count per authored spec (exclude context + templates). site= has no
@@ -227,7 +227,7 @@ if [ -n "$MANIFESTS" ]; then
   # how much rather than printing a bare count that reads as the whole picture.
   nun=$(printf '%s' "$UNMANIFESTED" | grep -c . )
   [ "${nun:-0}" -gt 0 ] && echo "FLOOR, not the total: $nun compiled test(s) carry no manifest and contributed 0 routes here — see dim-0's 'compiled but UNMANIFESTED' list"
-else echo "no route manifests — flow footprint unavailable (run /qa:gen on a spec first)"; fi
+else echo "no route manifests — flow footprint unavailable (run /qa-warden:gen on a spec first)"; fi
 
 echo "== 5. Case coverage — approved cases (*.cases.md) vs authored scenarios (RUN-18 backstop) =="
 # Each ideate rule-group → one spec; its cases → that spec's scenarios. This dim is the COARSE,

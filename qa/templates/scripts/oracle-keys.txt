@@ -13,7 +13,7 @@
 #
 # ADDING OR REMOVING A KEY is a real vocab change and still means editing every ENUMERATING mirror
 # in the same commit — this file, CLAUDE.md's list + arg-shape table, agents/planner.md,
-# agents/generator.md, reviewer Check 4, and /qa:coverage's KEYS_RE. The prose mirrors cannot
+# agents/generator.md, reviewer Check 4, and /qa-warden:coverage's KEYS_RE. The prose mirrors cannot
 # `source` a file; what this manifest guarantees is that the CHECKER comparing them is not itself
 # one of the copies. Blank lines and `#` comments are ignored.
 text_visible

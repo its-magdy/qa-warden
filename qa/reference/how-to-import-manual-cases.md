@@ -5,12 +5,12 @@ spreadsheet — and you want them running as real Playwright tests without re-wr
 hand.
 
 This is the fastest on-ramp if you're **not** starting from scratch. It assumes you've done
-`/qa:init` and one `/qa:explore` (if not, do the **[tutorial](tutorial-first-test.md)** first).
+`/qa-warden:init` and one `/qa-warden:explore` (if not, do the **[tutorial](tutorial-first-test.md)** first).
 New terms link to the **[glossary](glossary.md)**.
 
 **This is a recipe, not a slash command.** Paste (or paraphrase) the "Import the export" section
 below to Claude along with your export file/paste, and it will follow the steps — there's no
-`/qa:import-cases` command; this is a one-time, per-onboarding task, not something worth a
+`/qa-warden:import-cases` command; this is a one-time, per-onboarding task, not something worth a
 standing command surface for.
 
 ---
@@ -19,7 +19,7 @@ standing command surface for.
 
 ```
 (paste your export + this recipe to Claude)   →   review the result   →
-/qa:approve <area/feature>   →   /qa:new-spec <area/feature>   →   /qa:gen …   →   /qa:run mode=smoke
+/qa-warden:approve <area/feature>   →   /qa-warden:new-spec <area/feature>   →   /qa-warden:gen …   →   /qa-warden:run mode=smoke
 ```
 
 ## 1. Import the export
@@ -29,7 +29,7 @@ Tell Claude the target `<area/feature>` (e.g. `tasks/update-task`), optionally t
 the export or point at the file. Ask Claude to follow these steps:
 
 1. **Validate the area.** Check `<area>` against `naming.area_dirs` in
-   `specs/_context/app.context.md` (same rule `/qa:intake` uses) — on a mismatch, list the
+   `specs/_context/app.context.md` (same rule `/qa-warden:intake` uses) — on a mismatch, list the
    valid `area_dirs` and stop rather than write under a typo'd path.
 2. **Recognize the export shape.** The big-3, but accept ANY CSV/markdown/pasted table with
    title + steps + expected result:
@@ -64,7 +64,7 @@ the export or point at the file. Ask Claude to follow these steps:
    naming the mutating case ids — they can't generate to a runnable green test until a
    seed/reset hook exists (see the `test-data-seed` skill). Advisory, not a stop; read-only
    cases are generate-ready now.
-7. **Close:** point back to `→ run /qa:approve <area/feature>` — import ≠ approval, that's still
+7. **Close:** point back to `→ run /qa-warden:approve <area/feature>` — import ≠ approval, that's still
    the human gate.
 
 **What this gets you:** multi-row exports grouped by case id, each expected result mapped to a
@@ -93,18 +93,18 @@ Open `<feature>.cases.md`. Two things to check honestly:
 ## 3. Approve — import is not approval
 
 ```
-/qa:approve tasks/update-task
+/qa-warden:approve tasks/update-task
 ```
-Importing cases doesn't mean they're accepted. `/qa:approve` is the human gate — you approve,
+Importing cases doesn't mean they're accepted. `/qa-warden:approve` is the human gate — you approve,
 prune, or defer each case (and it mints the stable ids the [reviewer](glossary.md) later checks
 against). Nothing gets built from an unapproved checklist.
 
 ## 4. Generate and run
 
 ```
-/qa:new-spec tasks/update-task     # draft the spec from the approved cases
-/qa:gen specs/tasks/update-task.md # compile it to a runnable test
-/qa:run mode=smoke                      # run the @smoke gate
+/qa-warden:new-spec tasks/update-task     # draft the spec from the approved cases
+/qa-warden:gen specs/tasks/update-task.md # compile it to a runnable test
+/qa-warden:run mode=smoke                      # run the @smoke gate
 ```
 From here it's the normal flow — see the **[tutorial](tutorial-first-test.md)** and
 **[reviewing-without-code](reviewing-without-code.md)** for reading the result.
@@ -114,7 +114,7 @@ From here it's the normal flow — see the **[tutorial](tutorial-first-test.md)*
 > task, like the `update-task` example above — cannot reach a stable green until your project has a
 > **seed/reset hook** so each run starts from known data (see the `test-data-seed` skill). Step 6 above
 > flags this at import time (it names the mutating case ids); if you see that warning, wire the seed
-> hook before `/qa:gen`, or start with the read-only cases which are ready now.
+> hook before `/qa-warden:gen`, or start with the read-only cases which are ready now.
 
 ---
 
@@ -131,7 +131,7 @@ npx playwright merge-reports --reporter junit ./blob-report > reports/junit-resu
 Then feed `reports/junit-results.xml` to your tracker's JUnit importer (TestRail, Xray, or Zephyr
 Scale). The exact per-tracker import commands live in **`DOCUMENTATION.md` §16.2** at the root of
 the toolkit's marketplace repo — kept there as the single source so they can't drift out of sync.
-No repo checkout (plugin-only)? Ask `/qa:help` from inside your project for the in-plugin
+No repo checkout (plugin-only)? Ask `/qa-warden:help` from inside your project for the in-plugin
 pointer, or open your tracker's own JUnit-import docs (F-012).
 (Read it on the repo, not via a `../` path: an installed plugin can't open a file outside its own
 directory — C-1.)

@@ -1,5 +1,5 @@
 ---
-description: Interactively capture the "test basis" for a feature/enhancement/bug — auto-gather observable context, then interview only for non-observable intent (the oracle) — and write specs/_context/<site>/<area>/<feature>.basis.md. First step of the authoring chain (intake → ideate → approve → new-spec); PRECONDITION — the area's context (app.context.md + <site>/<area>.md) MUST exist; intake hard-stops and tells you to run /qa:explore first if it doesn't.
+description: Interactively capture the "test basis" for a feature/enhancement/bug — auto-gather observable context, then interview only for non-observable intent (the oracle) — and write specs/_context/<site>/<area>/<feature>.basis.md. First step of the authoring chain (intake → ideate → approve → new-spec); PRECONDITION — the area's context (app.context.md + <site>/<area>.md) MUST exist; intake hard-stops and tells you to run /qa-warden:explore first if it doesn't.
 argument-hint: "<area/feature> [kind=feature|enhancement|bug|refactor|characterization] [site=<id>]"
 disable-model-invocation: true
 ---
@@ -13,14 +13,14 @@ file at `specs/_context/<site>/<area>/<feature>.basis.md`.
 verbatim and stop:
 
 ```
-Usage:  /qa:intake <area/feature> [kind=feature|enhancement|bug|refactor|characterization] [site=<id>]
+Usage:  /qa-warden:intake <area/feature> [kind=feature|enhancement|bug|refactor|characterization] [site=<id>]
 Capture what "correct" means for ONE feature (first step of the rigor lane). For example:
 
-  /qa:intake auth/login                 what should sign-in guarantee?
-  /qa:intake tasks/update-task          what should editing a task guarantee?
-  /qa:intake checkout/coupon kind=bug   pin a known bug's expected behavior
+  /qa-warden:intake auth/login                 what should sign-in guarantee?
+  /qa-warden:intake tasks/update-task          what should editing a task guarantee?
+  /qa-warden:intake checkout/coupon kind=bug   pin a known bug's expected behavior
 
-First time? Follow ${CLAUDE_PLUGIN_ROOT}/reference/tutorial-first-test.md — or skip to the fast lane: /qa:new-spec <area/feature>.
+First time? Follow ${CLAUDE_PLUGIN_ROOT}/reference/tutorial-first-test.md — or skip to the fast lane: /qa-warden:new-spec <area/feature>.
 ```
 
 **Interactivity contract (F-16).** The interview uses `AskUserQuestion`, which exists **only in the
@@ -41,7 +41,7 @@ round count (e.g. `interview: 7 questions across 2 rounds`) — without it, a fu
 invents rules and stamps them `[human-answered]` is indistinguishable from a real interview. A basis
 with `[human-answered]` rules and no declared business source must carry a non-`none` count;
 `interview: none` is legitimate only when every rule is `[grounded:]`/`[imported:]`/`[pinned:]`.
-`/qa:doctor` WARNs on `[human-answered]` rules with `interview: none`/absent.
+`/qa-warden:doctor` WARNs on `[human-answered]` rules with `interview: none`/absent.
 
 The method is defined inline below. Design rationale (maintainers, not required to run):
 the plugin's `reference/test-case-ideation.md` §5.
@@ -65,7 +65,7 @@ write a basis under an unrecognized area.
    - Read `specs/_context/app.context.md` (sites/auth) and
      `specs/_context/<site>/<area>.md` (area context). If the area file is missing or
      stale (past its `volatility:`-tier threshold in `staleness_tiers:`), tell the user to run
-     `/qa:explore mode=area site=<id> area=<area>` first, and stop.
+     `/qa-warden:explore mode=area site=<id> area=<area>` first, and stop.
    - Take a live snapshot of the feature's routes to pre-fill fields, states, and
      on-screen vocabulary — open the browser first, then navigate to each resolved route:
      ```bash
@@ -75,7 +75,7 @@ write a basis under an unrecognized area.
      # per CLAUDE.md §Environment (a split load in a separate Bash call is already gone).
      set -a; [ -f "${CLAUDE_PROJECT_DIR:-.}/.env" ] && . "${CLAUDE_PROJECT_DIR:-.}/.env"; set +a
      # <feature-slug> = the feature BASENAME only — a session id with a slash is treated as a path
-     # segment by many session stores, so `/qa:intake auth/login` uses -s=intake-login.
+     # segment by many session stores, so `/qa-warden:intake auth/login` uses -s=intake-login.
      # <SITE> = the resolved site: BASE_URL_<SITE> (BASE_URL_ADMIN for site=admin), never a
      # hardcoded BASE_URL_APP.
      npx playwright-cli -s=intake-<feature-slug> open
@@ -117,7 +117,7 @@ write a basis under an unrecognized area.
        3. **state-gate** — a publish/approval/permission/lifecycle state OWNED elsewhere gates behavior here.
        4. **cross-actor** — another actor's action (admin, a 2nd user, a background job) changes what this oracle asserts.
        5. **config-flag** — behavior toggled by config/feature-flags owned by another area.
-     Sources for the sweep: the area file's `couples_with:` (`/qa:explore mode=area …` step 9 records the
+     Sources for the sweep: the area file's `couples_with:` (`/qa-warden:explore mode=area …` step 9 records the
      ones it OBSERVED — the block is omitted when it saw none, so an absent block means "none observed",
      not "not yet swept"; it is the only cross-area source, the other two below being feature-scoped), the declared
      `business_sources:`, and the live app. Record each coupling found under `couples_with:` with its
@@ -164,7 +164,7 @@ write a basis under an unrecognized area.
 4. **Per kind:**
    - `feature` — full Example Map from scratch.
    - `enhancement` / `refactor` — load the existing `.basis.md`; ask ONLY the delta
-     (what changed); record the change so `/qa:ideate` can run `/qa:impact`.
+     (what changed); record the change so `/qa-warden:ideate` can run `/qa-warden:impact`.
    - `bug` — if a `bugs/<date>-<slug>.md` exists (often written by the healer), read it
      and structure it; otherwise capture repro / expected / actual / environment /
      regression_scope. No broad interview.
@@ -185,7 +185,7 @@ write a basis under an unrecognized area.
    `specs/_context/_templates/basis.md`. Log every unresolved item as a 🔴 open question
    (mark blocking ones) — capturing a question turns an unknown unknown into a known
    unknown. Print a one-line summary and the next step:
-   `→ review the basis, then run /qa:ideate <area/feature>`.
+   `→ review the basis, then run /qa-warden:ideate <area/feature>`.
 
 ## Hard rules
 - Write ONLY under `specs/_context/**`. Never write `tests/**` or `specs/<area>/<feature>.md`.
@@ -193,5 +193,5 @@ write a basis under an unrecognized area.
   literals** (e.g. `email: "customer@shopqa.test"`); only *secrets* (passwords, tokens, API keys)
   require `_env` (F-17). Do not `_env`-indirect a non-secret identifier — it just obscures the basis.
 - Never invent the oracle. If you cannot get "what correct means" from the human, log it
-  as a blocking red card and stop — `/qa:ideate` will refuse until it's resolved.
+  as a blocking red card and stop — `/qa-warden:ideate` will refuse until it's resolved.
 - The oracle (🔵 rules) is the one mandatory output; a basis without it is incomplete.

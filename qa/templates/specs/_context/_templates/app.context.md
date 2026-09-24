@@ -11,7 +11,7 @@ Target ~80 lines (a tunable default, not a hard cap). Delete this comment.
 -->
 
 ```yaml
-# Hot-tier app context. Hand-edit sites[] then re-run /qa:explore mode=hot.
+# Hot-tier app context. Hand-edit sites[] then re-run /qa-warden:explore mode=hot.
 sites:
   - id: app
     description: "<one line: what this site is, e.g. 'customer storefront'>"   # optional — orients the agent
@@ -67,7 +67,7 @@ naming:
 # and the test-data-seed skill keys off it. Declaring api_url_env + secret_env here (never a literal
 # secret — that lives in .env) stops every spec from re-discovering the seeding contract. Omit if the
 # app ships no test-support API (then transactional oracles cannot rely on a deterministic seed — see
-# CLAUDE.md relational-gap note). Add every var you name below to .env.example so /qa:doctor Check 6 sees it.
+# CLAUDE.md relational-gap note). Add every var you name below to .env.example so /qa-warden:doctor Check 6 sees it.
 test_support:                          # optional — omit if no seeding/reset hook exists
   api_url_env: "<e.g. API_URL>"        # base URL of the test-support API (env var name)
   secret_env: "<e.g. QA_TEST_SECRET>"  # env var holding the shared secret header, if the routes are guarded
@@ -75,7 +75,7 @@ test_support:                          # optional — omit if no seeding/reset h
   seed_route: "<e.g. /api/test/seed>"     # POST — optional targeted seed; omit if only reset exists
 
 # business_sources — OPTIONAL, source-agnostic "where the business rules live": the authority for what
-# "correct" MEANS, beyond what the live app happens to show. /qa:intake CONSULTS these to ground each 🔵
+# "correct" MEANS, beyond what the live app happens to show. /qa-warden:intake CONSULTS these to ground each 🔵
 # oracle rule and stamp its provenance; when a source is unreachable/gated/silent, or CONTRADICTS the
 # live app, intake ASKS the operator — it never guesses. Grounded in the RE "authoritative baseline"
 # (single-source-of-truth) + the oracle "source of authority" concept, and RAG-style grounding is the
@@ -105,5 +105,5 @@ staleness_tiers:
   reference: 30                      # default
   stable: 90                         # rarely-changing surfaces
 
-last_verified: 1970-01-01            # /qa:explore mode=hot bumps this to today
+last_verified: 1970-01-01            # /qa-warden:explore mode=hot bumps this to today
 ```

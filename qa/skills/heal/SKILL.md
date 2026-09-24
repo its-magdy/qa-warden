@@ -9,12 +9,12 @@ the whole `artifacts/test-results/` dir and the healer would pick a failure itse
 block below verbatim and stop:
 
 ```
-Usage:  /qa:heal <failing-test-id>
+Usage:  /qa-warden:heal <failing-test-id>
 Triage ONE failing test. The id is its results directory name — list them with:
 
   ls artifacts/test-results/
 
-Several tests red with the same root cause? Use /qa:batch-fix instead.
+Several tests red with the same root cause? Use /qa-warden:batch-fix instead.
 ```
 
 **Guard first (prod-safety).** Before delegating, run the canonical shell prod-guard —
@@ -22,7 +22,7 @@ Several tests red with the same root cause? Use /qa:batch-fix instead.
 browser (interactive MCP replay, step 3) *before* any `npx playwright test`, so the enforced
 `globalSetup` prod backstop has **not** engaged yet — a healer pointed at a prod-marked
 `BASE_URL` would otherwise open a live prod browser session with no STOP. (If the script is
-missing, re-run `/qa:init` to stamp it.) This is the one browser-driving command whose first
+missing, re-run `/qa-warden:init` to stamp it.) This is the one browser-driving command whose first
 action can be a live-browser step, so the guard cannot be left to `globalSetup`.
 
 Delegate to the `healer` subagent (pinned `model: sonnet` in its frontmatter, so it
@@ -60,7 +60,7 @@ The healer must:
 7. Re-run: `npx playwright test <spec> --retries=0 --reporter=line`. Green → write
    the diff as a PR comment. (`--reporter=line` is load-bearing: a bare re-run fires
    the config's `json` reporter and overwrites `artifacts/last-run.json` — the
-   run-of-record `/qa:report` reads; see `healer.md` step 6 / reviewer.md.)
+   run-of-record `/qa-warden:report` reads; see `healer.md` step 6 / reviewer.md.)
 
 **Hard turn budget: 14.** After 14 turns on the same failure, stop and signal that
 a stronger model is required (per the pin above, that signal is for the operator to
@@ -69,7 +69,7 @@ file a bug, and revert. Never silently retry past the budget (CLAUDE.md §Escala
 
 **Close the sentinel loop (YOU are the orchestrator the healer hands off to).**
 If the healer returns with a sentinel under `artifacts/`, perform its action and
-re-invoke the healer — never delete a sentinel without acting on it (`/qa:doctor`
+re-invoke the healer — never delete a sentinel without acting on it (`/qa-warden:doctor`
 check 4 flags orphans). The sentinel→action table is single-sourced in
 `${CLAUDE_PLUGIN_ROOT}/reference/sentinel-actions.md` — read it and follow the row
 matching the sentinel you got.

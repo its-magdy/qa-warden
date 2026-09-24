@@ -13,7 +13,7 @@ A metamorphic-relation oracle layer (the *why* is in `reference/DESIGN.md` §"Wh
 ## When to use
 - After a new `.spec.ts` first goes green — the **verifier** (Process step 8a) authors 2-3 twins directly, following these patterns, and writes `tests/<area>/<feature>.metamorphic.spec.ts`. The read-only **reviewer** (Check 6) then verifies the file exists and its twins agree with the parent. (Twin *generation* lives with the verifier because the reviewer has no Write tool.)
 - When a human is hand-hardening a critical flow ("I don't fully trust this oracle — what invariants should hold?").
-- As part of `/qa:review url=<url>` for compliance-critical specs.
+- As part of `/qa-warden:review url=<url>` for compliance-critical specs.
 
 **Do not use** as a replacement for the other oracle defenses. MRs **narrow** the wrong-specs gap but do not close it. The honest limit (see `reference/DESIGN.md` §"Honest limits"): if the human wrote a YAML that doesn't reflect the real business rule, no amount of MRs helps.
 

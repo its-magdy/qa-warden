@@ -69,9 +69,9 @@ at each. Everything in the right-hand column waits for your call:
 | The plugin does this on its own (you still see the diff at review) | It STOPS and waits for your decision when… |
 |---|---|
 | re-points a moved or renamed button ([locator](glossary.md) drift) — and shows you the one-line diff to approve | a target looks like **production** — it refuses outright |
-| adds a wait for a slow page | it would **delete or retire** a test/feature (`/qa:retire` lists everything and waits) |
-| retries a failed test a couple of times in CI, flagging it **flaky** if it only passes on a retry | a **batch fix** would edit many tests at once (`/qa:batch-fix` shows the one pattern and waits) |
-| replays the whole suite nightly, with no AI | it's deciding **what to test** — you approve the checklist (`/qa:approve`) |
+| adds a wait for a slow page | it would **delete or retire** a test/feature (`/qa-warden:retire` lists everything and waits) |
+| retries a failed test a couple of times in CI, flagging it **flaky** if it only passes on a retry | a **batch fix** would edit many tests at once (`/qa-warden:batch-fix` shows the one pattern and waits) |
+| replays the whole suite nightly, with no AI | it's deciding **what to test** — you approve the checklist (`/qa-warden:approve`) |
 | — | it hits a **real product bug** — it files a bug you'll see and marks the test as a known, tracked failure; it never quietly "fixes" the test to hide the bug |
 
 The **[healer](glossary.md)** is the clearest example: a teammate who fixes routine drift on its

@@ -15,12 +15,12 @@ playbook.
 ## Usage
 
 ```
-/qa:impact route=/signup
-/qa:impact field=full_name
-/qa:impact factory=user
-/qa:impact area=auth
-/qa:impact operation=CreateOrder
-/qa:impact source=pricing-wiki §3.2
+/qa-warden:impact route=/signup
+/qa-warden:impact field=full_name
+/qa-warden:impact factory=user
+/qa-warden:impact area=auth
+/qa-warden:impact operation=CreateOrder
+/qa-warden:impact source=pricing-wiki §3.2
 ```
 
 ## Run the query
@@ -43,7 +43,7 @@ slash-command, but when this skill is reached via the Skill tool / a subagent it
 (`bash ${CLAUDE_SKILL_DIR}/scripts/impact.sh route=/login`) — otherwise you get a usage
 error, not a result.
 
-**Exit codes:** `2` = usage error or a missing `scripts/spec-links.sh` (relay the ERROR line), `3` = no manifests on disk (run `/qa:gen` on a spec
+**Exit codes:** `2` = usage error or a missing `scripts/spec-links.sh` (relay the ERROR line), `3` = no manifests on disk (run `/qa-warden:gen` on a spec
 first). **Neither is a zero-match result** — never report either as "not impacted".
 
 For the five manifest-backed keys the script emits two sections. `### MATCHES` is
@@ -91,20 +91,20 @@ deliverable — "5 specs affected" tells the caller nothing they can act on.
 
 ## When to use
 
-- Before editing `fixtures/schemas/<entity>.ts`: `/qa:impact field=<old-field-name>` shows everything that will compile-break.
-- After a product RFC lands: `/qa:impact route=/<new-route>` shows which specs need to start covering it.
-- Before deprecating a feature: `/qa:impact area=<area>` shows the suite-level footprint.
-- During a healer triage: `/qa:impact field=<failing-field>` reveals whether the failure is local or systemic.
-- Before deprecating/replacing a business source (a wiki page, a policy doc): `/qa:impact source=<name>` shows every basis rule grounded in it.
-- GraphQL apps: `/qa:impact operation=<OperationName>` — route-level impact collapses to `/graphql`, so the operation key is the discriminating one.
+- Before editing `fixtures/schemas/<entity>.ts`: `/qa-warden:impact field=<old-field-name>` shows everything that will compile-break.
+- After a product RFC lands: `/qa-warden:impact route=/<new-route>` shows which specs need to start covering it.
+- Before deprecating a feature: `/qa-warden:impact area=<area>` shows the suite-level footprint.
+- During a healer triage: `/qa-warden:impact field=<failing-field>` reveals whether the failure is local or systemic.
+- Before deprecating/replacing a business source (a wiki page, a policy doc): `/qa-warden:impact source=<name>` shows every basis rule grounded in it.
+- GraphQL apps: `/qa-warden:impact operation=<OperationName>` — route-level impact collapses to `/graphql`, so the operation key is the discriminating one.
 
 ## What this does NOT do
 
-- It does not regenerate tests. Use `/qa:gen` after editing affected specs.
+- It does not regenerate tests. Use `/qa-warden:gen` after editing affected specs.
 - It does not handle transitive references (spec → step fragment → other spec). The manifest is per-spec only.
 - It does not catch fields referenced in raw test code that bypass the factory (Reviewer Check 10 enforces factory-only).
 - It does not query a live DB. Manifests are derived from the spec + AX-tree snapshot at generate time.
 
 ## Refresh policy
 
-If `/qa:impact` returns stale or zero matches you expect to see, the manifest is out of date. Run `/qa:gen <spec-path>` to regenerate. `/qa:doctor` Check 12 flags any spec newer than its manifest.
+If `/qa-warden:impact` returns stale or zero matches you expect to see, the manifest is out of date. Run `/qa-warden:gen <spec-path>` to regenerate. `/qa-warden:doctor` Check 12 flags any spec newer than its manifest.

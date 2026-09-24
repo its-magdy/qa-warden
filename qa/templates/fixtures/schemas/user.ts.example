@@ -5,7 +5,7 @@
 // form (agents/generator.md §"Factory resolution"). The fields below are an
 // ILLUSTRATION of the pattern only — do not treat them as your app's real shape.
 // To hand-author: copy to `user.ts` (drop `.example`) and replace with the real
-// model discovered by `/qa:intake` / exploration.
+// model discovered by `/qa-warden:intake` / exploration.
 // ─────────────────────────────────────────────────────────────────────────────
 import { z } from "zod";
 

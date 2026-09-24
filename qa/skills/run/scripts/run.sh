@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# run.sh — deterministic run+guard for /qa:run, all four modes.
+# run.sh — deterministic run+guard for /qa-warden:run, all four modes.
 #
 # Consolidates the three former single-purpose runners (headless, run-smoke,
 # flake-check) behind one entry point. Each mode keeps its ORIGINAL on-disk
 # output shape byte-for-byte (reports/headless-<name>.json, artifacts/last-run.json
 # via the config json sink, artifacts/flake-<name>.json) — this is a consolidation
 # of the entry point, not a behavior/output-path change, so every downstream
-# consumer (/qa:report, /qa:heal, the reviewer's rail manifest) keeps working
+# consumer (/qa-warden:report, /qa-warden:heal, the reviewer's rail manifest) keeps working
 # unmodified.
 #
 # The skill (../SKILL.md) owns the caveats and the summary/output format; this
@@ -63,13 +63,13 @@ crash_guard() {
 
 case "$MODE" in
   single)
-    # ---- single: CI-shaped one-shot run of ONE spec (formerly /qa:headless) ----
-    ARG="${1:?usage: /qa:run mode=single <spec-path-or-test-path>}"
+    # ---- single: CI-shaped one-shot run of ONE spec (formerly /qa-warden:headless) ----
+    ARG="${1:?usage: /qa-warden:run mode=single <spec-path-or-test-path>}"
     mkdir -p reports artifacts   # guard: redirect targets must exist (else the run aborts before Playwright starts)
     # This runs the COMPILED TEST. Map every accepted form (bare <area>/<feature>, .md
     # spec, test path) to it AND verify it exists via the canonical resolver — a raw .md
     # path matches ZERO tests (testDir is ./tests) and the report would be a phantom
-    # 0-test "run". Missing script → re-run /qa:init to stamp it.
+    # 0-test "run". Missing script → re-run /qa-warden:init to stamp it.
     TEST=$(bash scripts/resolve-spec-path.sh test "$ARG") || exit 2
     # Report slug from the SAME canonical resolver (`reportname` mode) — area-qualified
     # (auth/login → auth-login) so two areas' same-named specs can't clobber each other's
@@ -94,14 +94,14 @@ case "$MODE" in
     ;;
 
   smoke)
-    # ---- smoke: run the @smoke-tagged suite (formerly /qa:run-smoke) ----
+    # ---- smoke: run the @smoke-tagged suite (formerly /qa-warden:run-smoke) ----
     mkdir -p artifacts
     RUN_START=$(date +%s)   # freshness anchor — the guard below requires last-run.json to be newer than this
     QA_RUN_OF_RECORD=1 npx playwright test --grep @smoke
     PW_EXIT=$?   # F-04: CAPTURE the exit code NOW — see header note.
 
     # Freshness + zero-test + corrupt-JSON gate — single-sourced in scripts/check-last-run.sh
-    # (the same gate /qa:report and doctor Check 1 call). Passing `now - RUN_START` as max_age
+    # (the same gate /qa-warden:report and doctor Check 1 call). Passing `now - RUN_START` as max_age
     # makes the script's staleness predicate exactly "mtime < RUN_START": an ABORTED run
     # (prod-guard throw in globalSetup, config syntax error) leaves the PREVIOUS run's file on
     # disk and lands in the rc-6 arm below. Script exit codes: 3=missing 4=corrupt 5=zero-test 6=stale.
@@ -142,8 +142,8 @@ case "$MODE" in
     ;;
 
   repeat)
-    # ---- repeat: run the same spec N times back-to-back (formerly /qa:flake-check) ----
-    ARG="${1:?usage: /qa:run mode=repeat <spec-path-or-test-path> [N]}"
+    # ---- repeat: run the same spec N times back-to-back (formerly /qa-warden:flake-check) ----
+    ARG="${1:?usage: /qa-warden:run mode=repeat <spec-path-or-test-path> [N]}"
     N="${2:-10}"
     case "$N" in ''|*[!0-9]*) echo "run(repeat): N must be a positive integer (got '$N') — a mis-typed flag or path in slot 2 would otherwise run each test only ONCE and report a false 'stable'."; exit 2 ;; esac
     [ "$N" -ge 1 ] || { echo "run(repeat): N must be >= 1 (got '$N')."; exit 2; }
@@ -226,11 +226,11 @@ case "$MODE" in
     echo "run(changed): $LR (rc=$lr_rc)"
 
     # Specs are Markdown — no test imports them, so an edited spec selects NOTHING. Name them:
-    # an edited spec's test is stale until /qa:gen recompiles it, which a re-run cannot fix.
+    # an edited spec's test is stale until /qa-warden:gen recompiles it, which a re-run cannot fix.
     CHANGED_SPECS=$( { git diff --name-only ${REF:-HEAD} -- specs/ 2>/dev/null; git ls-files --others --exclude-standard -- specs/ 2>/dev/null; } \
       | grep -E '^specs/.*\.md$' | grep -v '^specs/_context/' | sort -u )
     if [ -n "$CHANGED_SPECS" ]; then
-      echo "run(changed): spec(s) edited — NOT selected by --only-changed (no test imports a .md). Their tests are stale until /qa:gen recompiles them:"
+      echo "run(changed): spec(s) edited — NOT selected by --only-changed (no test imports a .md). Their tests are stale until /qa-warden:gen recompiles them:"
       printf '%s\n' "$CHANGED_SPECS" | sed 's/^/  - /'
     fi
 

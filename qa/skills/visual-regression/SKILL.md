@@ -1,6 +1,6 @@
 ---
 name: visual-regression
-description: Add Playwright `toHaveScreenshot()` assertions to catch layout/CSS/typography regressions that text oracles miss. Use in `/qa:review url=` live-page audits (`tests/_audit-<slug>.spec.ts` probes) and when a human is hand-hardening a visually-meaningful flow outside the managed spec contract — a designer reports "something looks off," or the closed oracle vocabulary cannot capture the regression class. Not for generated specs, where a screenshot expect has no oracle key and reviewer Check 2 flags it as an orphan. Not a replacement for Applitools visual-AI at scale — a cheap self-hosted layer that catches the obvious.
+description: Add Playwright `toHaveScreenshot()` assertions to catch layout/CSS/typography regressions that text oracles miss. Use in `/qa-warden:review url=` live-page audits (`tests/_audit-<slug>.spec.ts` probes) and when a human is hand-hardening a visually-meaningful flow outside the managed spec contract — a designer reports "something looks off," or the closed oracle vocabulary cannot capture the regression class. Not for generated specs, where a screenshot expect has no oracle key and reviewer Check 2 flags it as an orphan. Not a replacement for Applitools visual-AI at scale — a cheap self-hosted layer that catches the obvious.
 user-invocable: false
 disable-model-invocation: false
 ---
@@ -12,7 +12,7 @@ Screenshot-diff oracle. Catches the layout/CSS/typography bug class that `text_v
 ## When to use
 - Each "meaningful UI state" in a spec — not every page, but every **state transition** worth a snapshot (post-login dashboard, cart with 2 items, error banner visible, checkout success).
 - Whenever a bug report says "something looks wrong" but the text/DOM is fine.
-- Outside a managed spec's assertion contract — a screenshot assert has no closed-vocab oracle key, so reviewer Check 2 treats it as an orphan expect. Keep it to `/qa:review url=` audits (`tests/_audit-<slug>.spec.ts`) and human hand-hardening.
+- Outside a managed spec's assertion contract — a screenshot assert has no closed-vocab oracle key, so reviewer Check 2 treats it as an orphan expect. Keep it to `/qa-warden:review url=` audits (`tests/_audit-<slug>.spec.ts`) and human hand-hardening.
 
 **Do not use** as the sole oracle — visual diffs without a semantic assertion are the classic "green-but-empty" trap flipped upside down (red-but-meaningless). And do not use this skill for high-volume UI-heavy apps — pair with Applitools / Chromatic / Percy / Argos at that point (Applitools' 1B+ training images is a genuine moat you cannot self-host — see `reference/DESIGN.md` §"Honest limits").
 

@@ -67,7 +67,7 @@ shape below. Do not paraphrase, recompute, or estimate any number it emitted.
 **Per-dimension reporting:**
 0. **Route plan vs footprint** — both directions are WARN-only review prompts, not defect
    lists: a declared-but-untested route is *planned, untested*; a tested-but-undeclared
-   route means either the area file needs an `/qa:explore mode=area site=<id> area=<name>` refresh or it is an
+   route means either the area file needs an `/qa-warden:explore mode=area site=<id> area=<name>` refresh or it is an
    API/login route area files legitimately don't list. **A third arm prints only when it has
    rows — `compiled but UNMANIFESTED` — and it qualifies the first one.** A test on disk whose
    route manifest is missing or was WITHHELD contributes no routes, so every route it touches
@@ -75,7 +75,7 @@ shape below. Do not paraphrase, recompute, or estimate any number it emitted.
    compiled and sends the reader to write a second spec. The verifier withholds a manifest on a
    red parent, a BLIND/INCONCLUSIVE invariant, a disagreeing twin or budget exhaustion — the
    remedy is to clear that blocker. Report the arm verbatim when present; it is the same set
-   `/qa:impact` prints as `### BLIND SPOTS` (one shared walk, `scripts/spec-links.sh
+   `/qa-warden:impact` prints as `### BLIND SPOTS` (one shared walk, `scripts/spec-links.sh
    unmanifested`, so the two commands cannot disagree — doctor Check 9k).
 1. **Requirement coverage** — features with a basis but **no spec** (uncovered — name them,
    lead with these); features with a spec but **fewer assertions than 🔵 rules**
@@ -90,8 +90,8 @@ shape below. Do not paraphrase, recompute, or estimate any number it emitted.
    test to fail" and the gate still reports green. This dimension exists because the gap is
    invisible everywhere else: dim 1 is basis-DRIVEN (a spec authored without a basis is never
    enumerated there, and the basis is optional), doctor Check 15 `continue`s past test-less specs,
-   and `/qa:impact` reads manifests, which an ungenerated spec never emitted. Name every row; the
-   fix is `/qa:gen <spec>`.
+   and `/qa-warden:impact` reads manifests, which an ungenerated spec never emitted. Name every row; the
+   fix is `/qa-warden:gen <spec>`.
 2. **Assertion presence** — mean assertions/spec, and **any spec with 0 oracle keys** (name
    it — this echoes reviewer Check 1; the reviewer is the enforcing gate, this is visibility).
 3. **Lens gaps (self-reported)** — a lens marked `0` (or `✗`, or absent) instead of `✓` is an
@@ -151,13 +151,13 @@ Return ONE Markdown block as your result (and, if `reports/` exists, also write
 ### Numbers (context, not a grade)
 - Requirements: <C>/<T> features with a basis have a spec  ·  assertions vs 🔵 rules is APPROXIMATE
 - Assertion density: <mean> oracle keys/spec  ·  0 assertion-free ✓
-- Lens coverage: <k>/8 lenses non-empty across <N> features   (self-reported by /qa:ideate, not recomputed)
+- Lens coverage: <k>/8 lenses non-empty across <N> features   (self-reported by /qa-warden:ideate, not recomputed)
 - Case→scenario: <feat> ~<K> approved cases / ~<M> scenarios (approximate — data-driven collapse)
 - Flow footprint: <R> routes · <A> areas   (a FLOOR if any spec is uncompiled or unmanifested)
 
 _Limits: feature-level requirement coverage is deterministic; rule→assertion mapping is a
 signal, not proof. Route footprint counts only compiled specs **that carry a manifest** — an
-unmanifested one is invisible here exactly as it is to `/qa:impact`. This is a report, not a
+unmanifested one is invisible here exactly as it is to `/qa-warden:impact`. This is a report, not a
 gate — humans own what to test._
 ```
 
@@ -166,7 +166,7 @@ and continue; never fail the skill.
 
 ## When to use
 - Before a release: "what did we decide to test, and what's still a gap?"
-- After `/qa:ideate` approval: confirm every approved rule has a spec.
+- After `/qa-warden:ideate` approval: confirm every approved rule has a spec.
 - In a PR: paste the Gaps block so reviewers see coverage direction (not a %).
 
 ## What this does NOT do
@@ -176,4 +176,4 @@ and continue; never fail the skill.
 - **No test run** — static analysis of on-disk authoring artifacts only.
 - It cannot prove a 🔵 rule's *oracle is correct* (that's the un-closeable wrong-spec gap);
   it reports whether a rule has *an* assertion, not whether the assertion is *right*.
-  (`/qa:review url=<url>` + the reviewer + metamorphic twins + negative-control probes cover strength.)
+  (`/qa-warden:review url=<url>` + the reviewer + metamorphic twins + negative-control probes cover strength.)

@@ -55,7 +55,7 @@ case "$tool" in Edit|Write) : ;; *) exit 0 ;; esac
 # Who is writing. `agent_type` is optional in the payload — when it is absent (the main
 # thread, or a harness that stopped sending it) this hook does NOT fire. That is a real
 # limitation, stated in hooks/README.md: this layer is defence in depth for two known
-# agents, never the backstop. Strip any plugin namespace so `qa:healer` and `healer` both
+# agents, never the backstop. Strip any plugin namespace so `qa-warden:healer` and `healer` both
 # match, and lowercase so a display-name variant does not slip past.
 agent=$(printf '%s' "$input" | jq -r '.agent_type // empty' 2>/dev/null | tr '[:upper:]' '[:lower:]')
 agent=${agent##*:}; agent=${agent##*/}

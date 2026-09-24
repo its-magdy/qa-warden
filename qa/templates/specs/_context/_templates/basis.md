@@ -1,8 +1,8 @@
 <!--
-TEST BASIS template — written by /qa:intake, structured as an Example Map (Wynne).
-This captures the *understanding* of a feature, NOT test cases. /qa:ideate reads it.
+TEST BASIS template — written by /qa-warden:intake, structured as an Example Map (Wynne).
+This captures the *understanding* of a feature, NOT test cases. /qa-warden:ideate reads it.
 🟡 story · 🔵 rules = THE ORACLE ("what correct means") · 🟢 examples = case seeds ·
-🔴 open questions (blocking ones gate /qa:ideate).
+🔴 open questions (blocking ones gate /qa-warden:ideate).
 Keep it tight; the oracle (rules) is the one mandatory section. Delete this comment.
 -->
 
@@ -10,9 +10,9 @@ Keep it tight; the oracle (rules) is the one mandatory section. Delete this comm
 
 ```yaml
 feature: <area>/<feature>
-kind: feature                 # feature | enhancement | bug | refactor | characterization  (exploratory is roadmap — see reference/test-case-ideation.md §4; /qa:ideate returns "unsupported" for it today, so don't select it yet)
+kind: feature                 # feature | enhancement | bug | refactor | characterization  (exploratory is roadmap — see reference/test-case-ideation.md §4; /qa-warden:ideate returns "unsupported" for it today, so don't select it yet)
 site: app                     # MUST match a sites[].id in specs/_context/app.context.md
-interview: <n questions across <m> rounds | none — fully observable>   # F-016 attestation: how much HUMAN intent-interview actually happened. /qa:intake stamps the real count (e.g. "7 questions across 2 rounds"); "none" is only legitimate when EVERY rule is [grounded:]/[imported:]/[pinned:] (no [human-answered]). A basis with [human-answered] rules but interview: none is a red flag — the human grounding is unattested (doctor WARNs).
+interview: <n questions across <m> rounds | none — fully observable>   # F-016 attestation: how much HUMAN intent-interview actually happened. /qa-warden:intake stamps the real count (e.g. "7 questions across 2 rounds"); "none" is only legitimate when EVERY rule is [grounded:]/[imported:]/[pinned:] (no [human-answered]). A basis with [human-answered] rules but interview: none is a red flag — the human grounding is unattested (doctor WARNs).
 
 # 🟡 yellow — the story (plain English; a non-engineer must understand it)
 story: >
@@ -22,7 +22,7 @@ story: >
 # One plain string per rule, "<condition> → <outcome>" (matches reference/test-case-ideation.md §7).
 # PROVENANCE (recommended when `business_sources:` are declared in app.context.md) — suffix each rule
 # with WHERE it was grounded + the verdict, so a reader can audit why the oracle says what it says.
-# /qa:intake stamps these during its source-consult:
+# /qa-warden:intake stamps these during its source-consult:
 #   # [grounded: <source name>]   — a declared business_source states this rule (cite which)
 #   # [human-answered]            — no source had it; the operator answered in the interview
 #   # [not-in-source]             — the sources are silent → ALSO log it under open_questions until confirmed
@@ -91,10 +91,10 @@ dependencies: [<service>, ...]
 # `dependencies:` (services this feature calls at runtime): a coupling is another area whose
 # rule can silently INVALIDATE an oracle here. Canonical misses this closes: a "totals are
 # equal across surfaces" oracle broken by a multi-unit feature owned elsewhere; an "on-call
-# count" rule that depends on the scheduling area's roster. /qa:intake traces these outward
+# count" rule that depends on the scheduling area's roster. /qa-warden:intake traces these outward
 # from the feature + whatever docs you point it at (source-agnostic — wiki, PRD, ticket, or the
 # live app), records the couplings the area context declares, and turns UNKNOWN couplings into
-# 🔴 open questions instead of silent gaps. /qa:ideate then enumerates a case per coupling.
+# 🔴 open questions instead of silent gaps. /qa-warden:ideate then enumerates a case per coupling.
 # This is an HTSM-style completeness REMINDER (a recognized but heuristic aid), not a proof —
 # it is advisory, never a gate. Omit if none known.
 # `channel:` names WHICH coupling angle this is — a reconciled heuristic subset — the five channels:
@@ -111,7 +111,7 @@ couples_with:
 # test_data / mutation — carry the data-lifecycle directive forward as a MACHINE-READABLE
 # block, not prose in risks:. A mutating flow (checkout, refund, create/delete) needs a
 # worker-scoped seed + teardown so parallel runs don't collide or accumulate — this is the
-# record the generator reads when wiring the test-data-seed skill, and `/qa:doctor` Check 13
+# record the generator reads when wiring the test-data-seed skill, and `/qa-warden:doctor` Check 13
 # verifies (declared-mutation ↔ isolation-marker pairing). Reviewer Check 13 independently
 # detects mutation from the test code — this block is the *declared* half. (Seed is consumed
 # as a Playwright fixture via mergeTests, NOT a `data:` block.) Omit for read-only flows.
@@ -125,7 +125,7 @@ test_data:
 # key, so a case ideated from them cannot become a test in this suite: i18n is out of scope
 # (CLAUDE.md "Honest limit — single-locale oracles"), and nothing drives a second tab/context or
 # measures a timing budget. Declare them anyway if they matter — the declaration puts the risk on
-# the record and /qa:ideate will list the cases — but expect to WAIVE those rows at /qa:approve
+# the record and /qa-warden:ideate will list the cases — but expect to WAIVE those rows at /qa-warden:approve
 # (⊘ out-of-vocab: a real case the closed vocabulary cannot express) and cover them outside this
 # suite. Approving one instead creates a standing reviewer Check 14 WARN nothing here can clear.
 nonfunctional:
@@ -141,7 +141,7 @@ covered_by:                    # legacy coverage — characterization/brownfield
 compliance_relevant: false     # true for PCI/HIPAA/SOX → cross-vendor reviewer
 out_of_scope: ["<explicit non-goal>"]
 
-# 🔴 red — open questions. Mark blocking:true for ones that gate /qa:ideate.
+# 🔴 red — open questions. Mark blocking:true for ones that gate /qa-warden:ideate.
 open_questions:
   - q: "<unresolved intent question>"
     blocking: true

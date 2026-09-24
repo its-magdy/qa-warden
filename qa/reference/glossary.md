@@ -17,16 +17,16 @@ different way, that doc is wrong; reconcile it to this page.
 *sacred*: the healer may patch locators but may **never** weaken or change what a test asserts.
 
 **basis** (test basis) — the plain-language record of *what "correct" means* for one
-feature, captured by `/qa:intake` into `<feature>.basis.md`. Its rules (marked with a 🔵 in
+feature, captured by `/qa-warden:intake` into `<feature>.basis.md`. Its rules (marked with a 🔵 in
 the basis) **are** the oracle — the spec's assertions trace back to them. Think "the contract
 the feature must honor."
 
 **brain / body** — the two halves of the plugin. The **brain** is the plugin-shipped config
 (agents + skills) — auto-updates on `/plugin update`. The **body** is the per-project
-runtime files `/qa:init` stamps (config, scripts, `CLAUDE.md`) — updated with `/qa:init --resync`.
+runtime files `/qa-warden:init` stamps (config, scripts, `CLAUDE.md`) — updated with `/qa-warden:init --resync`.
 A plugin fix reaches the brain automatically; the body doesn't move until you resync.
 
-**case** — one candidate test scenario on the checklist `/qa:ideate` produces
+**case** — one candidate test scenario on the checklist `/qa-warden:ideate` produces
 (`<feature>.cases.md`). A human approves/prunes cases before any test is written. A case
 becomes a scenario in the spec.
 
@@ -38,11 +38,11 @@ the full term.)*
 
 **context** — a file describing what the AI found in your app, so it doesn't guess later.
 Two kinds: the **hot** context `specs/_context/app.context.md` (sites, auth, naming — written
-by `/qa:explore`) and per-area **specialist** context `specs/_context/<site>/<area>.md`
+by `/qa-warden:explore`) and per-area **specialist** context `specs/_context/<site>/<area>.md`
 (routes and vocabulary for one area). A third **cold** tier is the live page snapshot taken at
 generate time — where selectors actually come from; nothing selector-level is cached in the files.
 
-**fast lane** — the quick path from `/qa:explore` straight to `/qa:new-spec`, skipping the
+**fast lane** — the quick path from `/qa-warden:explore` straight to `/qa-warden:new-spec`, skipping the
 rigor lane. Skips no FAIL-level gate; used for lower-risk features. Contrast **rigor lane**.
 
 **green-but-empty / green-but-wrong** — a test that passes while *not actually checking* what
@@ -85,21 +85,21 @@ out-of-vocab key…). Two write-time `PreToolUse` hooks ship, but they are a flo
 the checks decidable from the proposed text alone — the reviewer is still the enforcement for
 everything else. Run it on every PR.
 
-**rigor lane** — the fuller path that inserts `/qa:intake` → `/qa:ideate` → `/qa:approve`
-before `/qa:new-spec`, pinning *what correct means* before anything is generated. Use it
+**rigor lane** — the fuller path that inserts `/qa-warden:intake` → `/qa-warden:ideate` → `/qa-warden:approve`
+before `/qa-warden:new-spec`, pinning *what correct means* before anything is generated. Use it
 for P1 / money / compliance features. Contrast **fast lane**.
 
 **route manifest** — a per-spec record of the routes/operations/fields/factories a test touches
 (`artifacts/route-manifests/`), emitted by the verifier once a spec passes verification — so a
-spec with no manifest is one that did not ship. It powers `/qa:impact` (which specs a
+spec with no manifest is one that did not ship. It powers `/qa-warden:impact` (which specs a
 change would affect). A test that is compiled but **unmanifested** is therefore invisible to
 every manifest-derived answer while looking finished on disk; both commands that read the
-directory name that set explicitly — `/qa:impact` as `### BLIND SPOTS`, `/qa:coverage` as
+directory name that set explicitly — `/qa-warden:impact` as `### BLIND SPOTS`, `/qa-warden:coverage` as
 dim-0's "compiled but UNMANIFESTED" arm — off one shared walk
 (`scripts/spec-links.sh unmanifested`, doctor Check 9k).
 
 **run-of-record** — the one authoritative test run whose results (`artifacts/last-run.json`)
-`/qa:report` reads. Verification/heal re-runs deliberately do **not** overwrite it, so a
+`/qa-warden:report` reads. Verification/heal re-runs deliberately do **not** overwrite it, so a
 side run can't masquerade as the real result.
 
 **sentinel** — a small marker file (`artifacts/.healer-needs-*`) the healer drops when it
@@ -107,9 +107,9 @@ needs the orchestrator to do something (re-explore a stale area, re-seed auth) b
 continue. The loop closes when the orchestrator acts on it.
 
 **SFDIPOT** ("San Francisco Depot") — the seven test-design lenses from James Bach's
-Heuristic Test Strategy Model. `/qa:ideate` rotates through these seven **plus
+Heuristic Test Strategy Model. `/qa-warden:ideate` rotates through these seven **plus
 error-guessing** (an eighth heuristic the toolkit adds) — **8 lenses in total**, which is
-the count `/qa:coverage` (`<k>/8`), the `cases.md` template, and `ideation.md` all use:
+the count `/qa-warden:coverage` (`<k>/8`), the `cases.md` template, and `ideation.md` all use:
 
 | Lens | Asks | Example (editing a task) |
 |---|---|---|
@@ -134,7 +134,7 @@ so the toolkit's count is **8**, not 7.)
 browser's time, and `test lock:` serialises specs that share one piece of server data. They let
 a spec say "when the payment API is down…" without hand-written code.
 
-**smoke** — the fast nightly gate. Tests tagged `@smoke` are what `/qa:run mode=smoke` runs; the
+**smoke** — the fast nightly gate. Tests tagged `@smoke` are what `/qa-warden:run mode=smoke` runs; the
 primary happy-path of a critical feature must be `@smoke`.
 
 **spec** — the human-readable Markdown contract in `specs/<area>/<feature>.md` (prose +
@@ -145,9 +145,9 @@ a fenced YAML oracle block). AI writes it; a human can read it. Not the compiled
 actually replays nightly. Generated from the **spec**. (Rule of thumb: *spec* = Markdown you
 read, *test* = TypeScript Playwright runs.)
 
-**substrate** — the toolkit-owned files `/qa:init` stamps into your project (`scripts/`,
+**substrate** — the toolkit-owned files `/qa-warden:init` stamps into your project (`scripts/`,
 `playwright.config.ts`, `.claude/settings.json`, the context templates…). You don't edit them;
-`/qa:init --resync` refreshes them after a plugin upgrade, and `/qa:doctor` reports
+`/qa-warden:init --resync` refreshes them after a plugin upgrade, and `/qa-warden:doctor` reports
 "substrate drift" when your copies differ from the plugin's.
 
 **trace** — a recorded, step-by-step replay of a test run — DOM snapshots, network, console,

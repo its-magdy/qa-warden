@@ -21,8 +21,8 @@ coverage/
 !.env.example
 
 # Playwright + QA runtime artifacts (regenerated every run) — with ONE carve-out:
-# artifacts/route-manifests/ is DURABLE per-/qa:gen data, not per-run output. It is
-# the sole input to /qa:impact and /qa:coverage's flow footprint (no grep fallback),
+# artifacts/route-manifests/ is DURABLE per-/qa-warden:gen data, not per-run output. It is
+# the sole input to /qa-warden:impact and /qa-warden:coverage's flow footprint (no grep fallback),
 # so it must survive a fresh clone/CI checkout — commit manifests with the spec/test
 # they belong to. `artifacts/*` (not `artifacts/`) because git cannot re-include a
 # path inside an excluded DIRECTORY; the negation below needs the wildcard form.
@@ -39,13 +39,13 @@ all-blob-reports/
 .playwright-cli/
 .playwright/
 # Microsoft's official @playwright/cli skill, installed into .claude/skills/ by
-# /qa:init every run (`npx playwright-cli install --skills`) — regenerated, not source,
+# /qa-warden:init every run (`npx playwright-cli install --skills`) — regenerated, not source,
 # and it churns on each re-init. The plugin ships its OWN thin companion skill
 # separately; don't commit the vendored official copy (F-006). `git add -f` if a team
 # deliberately wants it pinned for offline use.
 .claude/skills/playwright-cli/
-# Suite run output — regenerated every run, never source. Covers the /qa:report
-# summary, /qa:run mode=single per-command JSON, and /qa:review url= findings so none of them
+# Suite run output — regenerated every run, never source. Covers the /qa-warden:report
+# summary, /qa-warden:run mode=single per-command JSON, and /qa-warden:review url= findings so none of them
 # land as tracked VCS churn. If you WANT to keep a specific audit report, `git add -f`.
 reports/summary.md
 reports/headless-*.json
@@ -65,7 +65,7 @@ reports/regression.json
 # The seed writes per-site files: fixtures/auth.app.json, fixtures/auth.admin.json
 fixtures/auth*.json
 
-# `/qa:init --resync` backups. The resync force-refreshes toolkit-owned substrate
+# `/qa-warden:init --resync` backups. The resync force-refreshes toolkit-owned substrate
 # (package.json, playwright.config.ts, prod-guard.*, …) and backs up each changed file
 # to <file>.qa-bak first. They are transient — review, then delete — so they must never
 # be committed: a stray `playwright.config.ts.qa-bak` is a confusing near-duplicate of
