@@ -20,6 +20,12 @@ Thirteen working sessions closing the 2026-09-06 audit (all four blocks). Four s
 changes a consumer cannot infer from a file diff, three deliberate decisions to change
 nothing, and a large body of correctness work.
 
+### MIT license (2026-09-24)
+
+- The plugin now ships a `LICENSE` file (MIT) at its root, matching `"license": "MIT"` in
+  `plugin.json`. Installs copy only the plugin directory, so the repo-root copy alone never
+  reached installed users.
+
 ### Prompt audit — dated instructions removed from the agent, skill and CLAUDE.md prompts (2026-09-24)
 
 A `/claude-api prompt-audit` pass over every prompt surface (7 agents, 24 skills, the shipped
