@@ -1,6 +1,6 @@
 ---
 type: regex
 target: trace
-pattern: 'Check 5\W{0,4}\(no waitForTimeout[^)]*\):\W{0,20}FAIL'
+pattern: 'Check 5[ *]{0,3}(?:\([^()\\\n]{0,200}\)[ *]{0,3})?[*:\s—–-]{1,8}FAIL'
 weight: 3
 ---
