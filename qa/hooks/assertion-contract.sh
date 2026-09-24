@@ -198,7 +198,7 @@ if [ "$agent" = "healer" ]; then
     re=$probe_re; what=$probe_what
     b=$(n_occurrences "$before" "$re"); a=$(n_occurrences "$after" "$re")
     [ "${a:-0}" -gt "${b:-0}" ] || continue
-    hook_deny "QA toolkit - the healer tried to INTRODUCE $what (PreToolUse hook).
+    hook_deny "QA Warden - the healer tried to INTRODUCE $what (PreToolUse hook).
 
 This edit to ${abs##*/} adds an occurrence that was not there before ($b -> $a).
 
@@ -218,7 +218,7 @@ the operator can disable the layer for a session (hooks/README.md)."
   done
 fi
 
-[ -n "$lost" ] && hook_deny "QA toolkit — the $agent tried to change an assertion (PreToolUse hook).
+[ -n "$lost" ] && hook_deny "QA Warden — the $agent tried to change an assertion (PreToolUse hook).
 
 Removed or rewritten by this edit to ${abs##*/}:
 $(printf '%s' "$lost" | sed 's/^/    /' | head -5)

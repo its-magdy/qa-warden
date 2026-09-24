@@ -1,4 +1,9 @@
-# qa — AI-authored, Playwright-replayed E2E QA
+# QA Warden: AI-authored, Playwright-replayed E2E QA
+
+> **AI writes your E2E tests. No AI can quietly loosen them.**
+
+QA Warden is a test-authoring plugin, not a security or secrets tool: the party it guards against is
+the AI itself, when it would weaken an assertion to turn a red test green.
 
 A Claude Code plugin that turns plain-language specs into a deterministic Playwright
 end-to-end suite. **AI authors the specs and tests; Playwright replays them nightly at

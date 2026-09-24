@@ -4,12 +4,12 @@
   "owner": {
     "name": "QA Toolkit"
   },
-  "description": "Private marketplace for the AI QA automation plugin (exploration/planner/ideation/generator/reviewer/healer + oracle-defense skills + page-object reuse layer).",
+  "description": "Private marketplace for QA Warden, the AI QA automation plugin (exploration/planner/ideation/generator/reviewer/healer + oracle-defense skills + page-object reuse layer).",
   "plugins": [
     {
       "name": "qa",
       "source": "./qa",
-      "description": "AI-authored, Playwright-replayed E2E QA suite with an AI-maintained page-object reuse layer. Run /qa:init in a fresh project after install.",
+      "description": "AI-written Playwright E2E tests. The healer can fix selectors, never assertions. AI-authored, Playwright-replayed E2E QA suite with an AI-maintained page-object reuse layer. Run /qa:init in a fresh project after install.",
       "relevance": {
         "topic": "end-to-end testing",
         "signals": {

@@ -61,7 +61,7 @@ clean=$(printf '%s\n' "$payload" | awk '
 report() {
   local line
   line=$(printf '%s' "$3" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | cut -c1-200)
-  hook_deny "QA toolkit — blocked by reviewer $1 (PreToolUse hook).
+  hook_deny "QA Warden — blocked by reviewer $1 (PreToolUse hook).
 
 Offending line in the proposed write to ${abs##*/}:
     $line

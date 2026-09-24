@@ -1,8 +1,12 @@
-# qa-toolkit — the `qa` Claude Code plugin
+# QA Warden — AI-written Playwright E2E tests
+
+> **AI writes your E2E tests. No AI can quietly loosen them.**
+
+QA Warden is a test-authoring plugin, not a security or secrets tool: the party it guards against is the AI itself, when it would weaken an assertion to turn a red test green. (This repo, `qa-toolkit`, is its marketplace.)
 
 > AI writes your end-to-end tests from plain-language specs, Playwright replays them nightly with no LLM in the loop, and AI comes back only to triage a failure.
 
-`qa` is a Claude Code plugin that turns a Markdown spec into a Playwright `.spec.ts`. Each spec's definition of "correct" (its **oracle**) uses a closed 16-key YAML vocabulary. A non-coder can read it, and it compiles one-to-one into `expect()` calls. A separate verifier breaks the app on purpose and checks that each assertion goes red. A read-only reviewer blocks the PR when the spec and the test disagree. The nightly run is plain `npx playwright test`, so it has roughly $0 LLM cost.
+QA Warden is a Claude Code plugin that turns a Markdown spec into a Playwright `.spec.ts`. Each spec's definition of "correct" (its **oracle**) uses a closed 16-key YAML vocabulary. A non-coder can read it, and it compiles one-to-one into `expect()` calls. A separate verifier breaks the app on purpose and checks that each assertion goes red. A read-only reviewer blocks the PR when the spec and the test disagree. The nightly run is plain `npx playwright test`, so it has roughly $0 LLM cost.
 
 **The healer repairs selectors and waits, never the assertion.** A red test stays red until a human decides whether the app or the spec is wrong. See [how this differs from Playwright's own test agents](#how-it-differs-from-playwrights-test-agents).
 
@@ -210,7 +214,7 @@ An oracle may use only these 16 keys. The reviewer fails anything else:
 
 Playwright 1.56+ ships its own planner, generator and healer agents (`npx playwright init-agents`). Authoring, replay and healing are now standard features. This plugin adds the oracle-defense and governance layer on top:
 
-| | Official Playwright agents | `qa` plugin |
+| | Official Playwright agents | QA Warden |
 |---|---|---|
 | Healer may change assertions / expected values | Yes (listed in its instructions, 1.63.0) | No. A `PreToolUse` hook denies the edit |
 | Oracle format | Free-form TypeScript | Closed 16-key YAML a non-coder can review |

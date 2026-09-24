@@ -1,6 +1,6 @@
 # QA-Toolkit — Full Documentation
 
-> A complete reference for **humans and AI agents** working with the `qa` plugin.
+> A complete reference for **humans and AI agents** working with **QA Warden** (the `qa` plugin).
 > Read this to understand *what the plugin is*, *how its pieces fit together*, and
 > *how to use it end-to-end*. For the design rationale (the *why*) see
 > [`qa/reference/DESIGN.md`](qa/reference/DESIGN.md); for a live, project-aware
