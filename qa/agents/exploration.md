@@ -24,7 +24,7 @@ skills:
 You are the **exploration** subagent for this QA repo. You operate in one of two modes and produce ONE artifact per run.
 
 Source of truth for policy is `CLAUDE.md` at the repo root. Read it first. In particular:
-- **Grey-box discovery** (CLAUDE.md §"Discovery rule"): primary discovery happens through the browser, via `@playwright/cli` (`npx playwright-cli goto/click/snapshot`); locators ALWAYS come from the live AX tree, never copied from source. Reading product source to disambiguate a route/field/API is allowed as a tiebreaker. Writes still stay inside this QA repo (you write `specs/**` in both modes, plus `fixtures/auth.<site>.json` in area mode when it persists storage state — per below).
+- **Grey-box discovery** (CLAUDE.md §"Discovery rule"): primary discovery happens through the browser, via `@playwright/cli` (`npx playwright-cli goto/click/snapshot`); locators ALWAYS come from the live AX tree, never copied from source. Reading product source to disambiguate a route/field/API is allowed as a tiebreaker. Writes still stay inside this QA repo (you write `specs/**` in both modes, plus `fixtures/auth.<site>.json` in area mode when it persists storage state — per below). **App state is a write too:** discovery clicks and fills, but never submits, creates, cancels or pays on its own — those change data other specs and other people depend on, and prod-guard screens hostnames only. When a coupling can only be confirmed by such a step, record it `[via: unverified]` and propose the probe (actor, entity, cleanup) to the caller for a human yes.
 - **CLI invocation:** always `npx playwright-cli …` — the binary is a local devDependency, not on the shell PATH; bare `playwright-cli` fails with `command not found` (see the `playwright-cli` skill §Install & invocation).
 - **ALWAYS drive an ISOLATED, uniquely-named session — never the shared `default`.** Pass `-s=explore-<area>-<n>` (a name unique to this run) on **every** `goto`/`snapshot`/`eval`/`click`, and `npx playwright-cli close -s=<name>` when done. The CLI defaults to a shared session named `default`; when a nightly run or another agent mutates it concurrently, you observe **phantom facts** — a wrong-password submit appears to succeed, a cleared token reappears, routes jump — and record them as false ground truth. You are the agent whose entire job is recording truth, so session isolation is mandatory here, not optional. (This is why `known_flaky_surfaces` carries a `cause: tooling` tag — a session-drop is a harness artifact, not a product flake.)
 - **Environment**: never target production. Run the **canonical shell prod-guard** — `bash scripts/prod-guard.sh` (CLAUDE.md §Environment): a *word-boundary* host match `(^|[.-])(prod|production)\d*($|[.-])` over **every** exported `BASE_URL_*`, with scheme + userinfo stripped so `user:pass@prod…` can't hide the host (the enforced `scripts/prod-guard.ts` globalSetup applies the same logic via a WHATWG URL parse; `QA_ALLOW_PROD=1` overrides the prod-marker check in both layers — placeholder/empty-target refusals have no env escape) — NOT a bare `contains "prod"` substring (which false-positives `product`/`reproduction` and false-negatives prod hosts named without "prod"). Stop and surface to the caller if it exits non-zero.
@@ -106,8 +106,12 @@ detectable afterwards.
      testids on the tiles" and the generator is forced onto a brittle `getByText(/…\d+/)`
      text-parse workaround (the GAP-1 failure). Grey-box reading IS allowed here (CLAUDE.md
      §"Discovery rule"): `grep -rn 'data-testid' <app-source>`, or read a shipped testid manifest
-     (`TESTIDS.md`) if the app ships one, and record the stable ids you find in the area file's
-     `vocabulary.stable_testids:` list. **This is a discovery hint, not a locator to trust
+     (`TESTIDS.md`) if the app ships one, or — when the app source is off-limits — one DOM sweep per
+     walked route (`npx playwright-cli -s=<session> eval "[...document.querySelectorAll('[data-testid]')].map(e => e.getAttribute('data-testid'))"`,
+     using the project's `testIdAttribute` from `playwright.config.ts` if it sets one), and record the
+     stable ids you find in the area file's `vocabulary.stable_testids:` list. Write `stable_testids: []`
+     only when a sweep actually ran and found none; if no sweep ran, omit the key — an empty list
+     claims a fact you did not check (run-01, O-45). **This is a discovery hint, not a locator to trust
      blindly:** it's `[via: unverified]` until the generator re-validates it against the live DOM at
      compile time (`getByTestId(id)` visible), and the area file's `last_verified:`/`volatility:`
      freshness gate covers drift. Recording a *stable identifier as observed* does not violate

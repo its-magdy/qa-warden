@@ -85,6 +85,13 @@ hand it off as "done" — the verifier refuses an unverified spec, so that round
 is pure waste; route to the healer or back to the planner instead. Neither agent
 self-commits — they leave the green, verified test for the caller to commit.
 
+**If the generator stops early or returns `PARTIAL`** (turn budget reached, truncated
+hand-back, no run log), re-invoke or resume the **generator** in the foreground, quoting the
+PARTIAL line so it picks up where it stopped. Do not compile or repair `tests/**` in the main
+session yourself: a main-session edit escapes the generator's hard rules and the hooks'
+agent arms, so nothing checks it (run-01, O-74: seventeen unguarded edits). A backgrounded
+resume is lost when a headless turn ends, which is why "foreground" is part of the rule.
+
 **Routing the verifier's three blocking outcomes** (it cannot spawn anyone either,
 so each comes back to you):
 - **BLIND oracle** — the compiled oracle stayed green under injection and the oracle

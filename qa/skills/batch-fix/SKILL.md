@@ -30,7 +30,9 @@ Workflow:
    `artifacts/last-run.json`. `last-run.json` records only the last run — it can
    be stale (a `/qa-warden:run mode=single` or `/qa-warden:run mode=repeat` since, or an edit after the last smoke)
    and may not include these specs at all, so aborting on "zero matches in last-run" can
-   skip a genuinely-red batch. Run the filter fresh, then work from THAT result:
+   skip a genuinely-red batch. Run the filter fresh and in the foreground — a backgrounded
+   run is lost when a headless turn ends, and the healer then starts from nothing (run-01,
+   O-64) — then work from THAT result:
    ```bash
    # zsh (this host's default Bash-tool shell) doesn't word-split unquoted vars and
    # doesn't glob-expand `**` in a variable — Playwright's filter is a path

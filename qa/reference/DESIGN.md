@@ -559,7 +559,10 @@ both produce `/qa-warden:x`. This plugin uses `skills/` exclusively (`bin/qa-sel
   **Constraint: the caller sees ONLY what a forked skill returns**, so every forked skill must
   say so in its body and return its full result, never a summary. A skill that interviews the
   user, or that already delegates to a subagent, must NOT be forked — a fork cannot pause for
-  an answer, and forking a delegator just double-nests.
+  an answer, and forking a delegator just double-nests. **A fork also cannot write a file whose
+  basename matches `report*.md` / `summary*.md` / `findings*.md` / `analysis*.md` (any case)** — Claude Code refuses those `Write`s
+  from any subagent (anthropics/claude-code#44657, no opt-out), which is why `/qa-warden:report`
+  runs inline while `coverage`, `impact` and `doctor` stay forked.
 - **default (neither)** — read-only, cheap, and safe for Claude to reach for on its own.
   `/qa-warden:explore` MUST stay here: `agents/planner.md` and `agents/healer.md` both STOP on stale
   context and rely on the orchestrator re-running `/qa-warden:explore` and re-invoking them.

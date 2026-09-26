@@ -5,7 +5,7 @@
 #     qa/bin/qa-selfcheck            # checks the plugin this script lives in
 #     qa/bin/qa-selfcheck <plugin>   # checks another build (e.g. a published cache dir)
 #
-# NOT stamped into consumer projects and NOT part of /qa-warden:doctor. These seven checks used to live
+# NOT stamped into consumer projects and NOT part of /qa-warden:doctor. These checks (seven of them at the move, plus 9k added 2026-09-26) used to live
 # in templates/scripts/doctor.sh (as 9b, 9bc, 9be, 9d, 9e, 9h, 9j) and ran inside every
 # consumer's project — but they read only plugin source, so a consumer could never act on one.
 # They moved here VERBATIM: same ids, same messages, same logic. The ids are kept so every
@@ -445,11 +445,36 @@ EOF
   fi
 fi
 
+# 9k. Stock-shell parse check. Every shell script in the plugin is parsed with /bin/bash when
+#     that binary is bash 3.x — macOS ships 3.2.57 and never updates it, and it is the shell
+#     every consumer's `bash scripts/doctor.sh` / `bash scripts/init.sh` runs under. Homebrew
+#     bash 5 on PATH hid a 3.2-only syntax error in templates/scripts/doctor.sh (a
+#     `case … in *.x)` inside `$( … )`, which bash fixed in 4.4 — run-01, O-12): every
+#     maintainer `bash -n` passed while every stock-Mac consumer got seven lines and exit 2
+#     from doctor. Skipped, with a note, where /bin/bash is 4+ (Linux) — there the ordinary
+#     `bash -n` in the verification pass already covers it.
+if [ -x /bin/bash ]; then
+  bv=$(/bin/bash -c 'echo "${BASH_VERSINFO[0]}"' 2>/dev/null)
+  if [ "${bv:-0}" -le 3 ]; then
+    while IFS= read -r s; do
+      [ -n "$s" ] || continue
+      if ! /bin/bash -n "$s" 2>/dev/null; then
+        echo "❌ ${s#$ROOT/}: does not parse under /bin/bash $(/bin/bash -c 'echo "$BASH_VERSION"') — the stock macOS shell every consumer runs doctor/init under. Usual cause: a \`case … in *.x)\` arm inside \`\$( … )\`; write \`(*.x)\`"
+        fail=$((fail+1))
+      fi
+    done <<EOF9K
+$(grep -rlE '^#!.*(bash|/sh)' "$ROOT" 2>/dev/null | grep -v node_modules)
+EOF9K
+  else
+    echo "ℹ️  9k: /bin/bash here is ${bv}.x, so the bash-3.2 parse check adds nothing on this host (it bites on stock macOS)"
+  fi
+fi
+
 echo "---"
 if [ "$fail" -ne 0 ]; then
   echo "qa-selfcheck: ❌ FAIL ($fail blocking, $warn warning$([ "$warn" = 1 ] || echo s))"; exit 1
 elif [ "$warn" -ne 0 ]; then
   echo "qa-selfcheck: ⚠️  OK with warnings ($warn)"; exit 0
 else
-  echo "qa-selfcheck: ✅ plugin is self-consistent — all 7 checks passed"; exit 0
+  echo "qa-selfcheck: ✅ plugin is self-consistent — all 8 checks passed"; exit 0
 fi

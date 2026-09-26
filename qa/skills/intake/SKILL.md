@@ -145,7 +145,10 @@ write a basis under an unrecognized area.
      the area smells critical: money, auth, compliance, or the story says "core flow").
    - **Observed-behavior ≠ oracle (mandatory disambiguation).** When the auto-gathered
      context (step 1) or a `bugs/*.md` file describes behavior that looks *wrong* — a stale
-     counter, an error the app never surfaces, a value that disagrees with another surface —
+     counter, an error the app never surfaces, a value that disagrees with another surface, **or an
+     observed example that breaks a rule or `integrity_invariants` entry you are recording in the
+     same basis** (recompute the arithmetic: a Total that is not Net + VAT is a defect wearing an
+     example's clothes — run-01, O-26, where the wrong total travelled two steps downstream) —
      do NOT silently lift that observed value into the 🔵 rule. Ask the human explicitly
      (via `AskUserQuestion`): "the app currently does X here — is X the correct behavior, or
      a defect the test should catch?" Record the answer: correct → the oracle asserts X; defect

@@ -113,7 +113,7 @@ check must name the construct it bans, so it matches its own documentation other
 advisory scans a run's verdict depends on: unprocessed healer sentinels, stray/unmanaged specs
 a full `npx playwright test` would collect but the smoke lane never touched, and still-open
 `bugs/*.md` a parked xfail may be hiding behind an "expected" count. Always exits 0 (advisory)
-and ends with a parseable `post-run: sentinels=<n> stray=<n> open-bugs=<n>` trailer for the
+and ends with a parseable `post-run: sentinels=<n> stray=<n> open-bugs=<n> test-gaps=<n>` trailer for the
 caller's roll-up. Called by `/qa-warden:run mode=smoke`, `/qa-warden:report`, `/qa-warden:run mode=single` (`--only bugs`) and
 `doctor.sh` Checks 4/14 (`--only sentinels,stray`) — each of which used to inline all three,
 byte-identically in places, with its own copy of the `testIgnore` lockstep filter.

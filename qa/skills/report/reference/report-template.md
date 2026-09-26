@@ -76,7 +76,8 @@ over a standing, human-confirmed defect (F-19). "All N tests passed" describes *
 this section describes *quality state*. Omit the section only when the count is truly zero.>
 
 ## Value ledger (running counts — not a score)
-- App defects caught: <O> open, <FIXED> fixed (`bugs/*.md` — <slugs>; found-by: healer <n> · generator <n> · manual <n> · unrecorded <n>)
+- App defects caught: <O> open, <FIXED> fixed (`bugs/*.md` minus test-gap records — <slugs>; found-by: healer <n> · generator <n> · planner <n> · exploration <n> · manual <n> · unrecorded <n>)
+- Test-contract gaps (verifier): <G> open, <GF> fixed (`bugs/*-blind-*.md`, `bugs/*-unverified.md` — an oracle that is decorative or unprobed, not an app defect)
 - Test-side heals: <K> (heal-log: broken-locator <a> · missing-wait <b> · auth-stale <c> · data-drift <d> · stale-context <e>)
 - Spec-drift escalations owed/processed: <E> (changed-text <x> · contract-change <y>)
 _Counts since install. No rates, no percentages — a count you can audit beats a score you can game._

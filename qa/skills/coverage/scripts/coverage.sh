@@ -116,9 +116,12 @@ echo "== 0. Route plan vs footprint — area routes[] vs manifest routes (both d
 # deny always wins, so a find-exec here prompts/denies, F-046). `-rh` suppresses the filename so
 # the trailing `grep -vE '<[^>]*>'` still only sees path values, dropping angle-bracket PLACEHOLDER
 # tokens (F-033) like `- path: "/<route>"` as belt-and-suspenders.
-DECL=$(grep -rhoE '^[[:space:]]*-[[:space:]]*path:[[:space:]]*"[^"]+"' --include='*.md' --exclude-dir='_templates' specs/_context 2>/dev/null | sed -E 's/.*path:[[:space:]]*"([^"]+)".*/\1/' | grep -vE '<[^>]*>' | sort -u)
+# One route, one spelling: `/rooms/:id`, `/rooms/{id}` and `/rooms/[id]` are the same planned route
+# and must not show up as two "planned, untested" gaps (run-01, O-79). Applied to both sides.
+PARAM_NORM='s#/(:[^/]+|\{[^}/]+\}|\[[^]/]+\])#/:param#g'
+DECL=$(grep -rhoE '^[[:space:]]*-[[:space:]]*path:[[:space:]]*"[^"]+"' --include='*.md' --exclude-dir='_templates' specs/_context 2>/dev/null | sed -E 's/.*path:[[:space:]]*"([^"]+)".*/\1/' | grep -vE '<[^>]*>' | sed -E "$PARAM_NORM" | sort -u)
 if [ -n "$MANIFESTS" ]; then
-  TESTED=$(printf '%s\n' "$MANIFESTS" | tr '\n' '\0' | xargs -0 jq -r '.routes[]?' 2>/dev/null | sort -u)
+  TESTED=$(printf '%s\n' "$MANIFESTS" | tr '\n' '\0' | xargs -0 jq -r '.routes[]?' 2>/dev/null | sed -E "$PARAM_NORM" | sort -u)
   echo "-- declared in an area file but touched by NO compiled test (planned, untested):"
   comm -23 <(printf '%s\n' "$DECL") <(printf '%s\n' "$TESTED") | sed '/^$/d; s/^/  ⚠ /'   # drop the blank line printf emits for an empty DECL/TESTED so it never prints a phantom "  ⚠ " gap (m-12)
   echo "-- touched by tests but declared in NO area file (unplanned/undocumented — refresh /qa-warden:explore mode=area site=<id> area=<name>, or an API/login route area files legitimately don't list — review prompt, not defect list):"

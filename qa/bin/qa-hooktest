@@ -67,6 +67,10 @@ run assertion-contract.sh deny  "verifier swaps the matcher"         "$(edit ver
 run assertion-contract.sh deny  "healer deletes the assertion"       "$(edit healer tests/auth/login.spec.ts "$OLD" "// removed")"
 run assertion-contract.sh deny  "namespaced qa-warden:healer"        "$(edit qa-warden:healer tests/auth/login.spec.ts "$OLD" "await expect(page.getByRole('alert')).toHaveText('Incorrect email or password');")"
 run assertion-contract.sh deny  "namespaced qa-warden:verifier"      "$(edit qa-warden:verifier tests/auth/login.spec.ts "$OLD" "await expect(page.getByRole('alert')).toContainText('Invalid credentials');")"
+PROBE="  await page.route('**/api/login', r => r.fulfill({ status: 500 }));"
+run assertion-contract.sh allow "verifier reverts an expect-free probe"          "$(edit verifier tests/auth/login.spec.ts "$PROBE" "")"
+run assertion-contract.sh deny  "verifier probe that carries an expect is stuck (known limit)" "$(edit verifier tests/auth/login.spec.ts "$PROBE
+  await expect(page.getByRole('alert')).toBeVisible();" "")"
 run assertion-contract.sh allow "healer re-points the LOCATOR only"  "$(edit healer tests/auth/login.spec.ts "$OLD" "await expect(page.getByTestId('login-error')).toHaveText('Invalid credentials');")"
 run assertion-contract.sh allow "generator is out of scope"          "$(edit generator tests/auth/login.spec.ts "$OLD" "await expect(page.getByRole('alert')).toHaveText('Something else');")"
 run assertion-contract.sh allow "no agent_type (main session/human)" "$(edit "" tests/auth/login.spec.ts "$OLD" "await expect(page.getByRole('alert')).toHaveText('Something else');")"

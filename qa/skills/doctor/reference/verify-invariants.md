@@ -60,7 +60,10 @@ run-of-record clobber-guard (why: CLAUDE.md §Reporting pipeline). These runs ar
 *deliberately red*; a bare run in a run-of-record context would record an
 injected red as the suite's run-of-record. The default read-only pass writes
 nothing; this opt-in mode must LEAVE nothing: the TEMP probe goes inside the existing
-scenario for the one run and is reverted before you report — `git status --short tests/`
+scenario for the one run — the injection only, with no `expect` of its own, because the
+assertion-contract hook denies removing an `expect` line even when the verifier inserted it —
+and is reverted before you report with one `Edit` of exactly the inserted lines (never a Bash
+rewrite of the file): `git status --short tests/`
 must show no change you made when you finish, and no report or run-of-record file is written.
 
 **Relationship to the verifier.** The **verifier already runs this exact injection inline** at authoring (its Process step 8b, on every new spec that declares a `must_fail_when`/`fail_if`), and blocks a BLIND oracle before the spec ever ships — this file's mode is the **on-demand / CI re-check** of the same mechanism (re-verify after an app change, batch-verify a directory, or gate compliance specs). Both share the one mechanism defined in this file; keep them in sync.

@@ -5,7 +5,7 @@ model: opus
 # maxTurns vs the prose turn budget: see reference/agent-budget-pattern.md.
 maxTurns: 28
 color: yellow
-tools: Read, Bash, Write
+tools: Read, Bash, Write, Edit
 ---
 
 You are the **ideation** subagent. You turn a **test basis** into a reviewable

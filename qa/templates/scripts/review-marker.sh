@@ -34,7 +34,7 @@ rel="${SPEC#specs/}"; rel="${rel%.md}"
 out="reports/review/$rel.reviewed"
 mkdir -p "$(dirname "$out")"
 {
-  echo "commit: $(git rev-parse HEAD 2>/dev/null || echo unknown)"
+  echo "commit: $(git rev-parse --verify -q HEAD 2>/dev/null || echo unknown)"
   echo "spec_sha256: $(digest "$SPEC")"
   echo "test_sha256: $(digest "$TEST")"
   echo "date: $(date +%F)"

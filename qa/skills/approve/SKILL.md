@@ -59,9 +59,14 @@ nothing is recorded.
 
    ```
    Next — one spec per approved group:
-     /qa-warden:new-spec checkout/coupon-stacking     # R2 — coupon stacking (rows R2.a-c)
-     /qa-warden:new-spec checkout/coupon-a11y         # NF.a11y — keyboard + SR labelling
+     /qa-warden:new-spec checkout/coupon-stacking basis=checkout/coupon   # R2 — coupon stacking (rows R2.a-c)
+     /qa-warden:new-spec checkout/coupon-a11y     basis=checkout/coupon   # NF.a11y — keyboard + SR labelling
    ```
+
+   Every fanned line carries `basis=<area>/<feature>`, the checklist's own name. The slug names the
+   group's subject, so nothing downstream can recover the parent from it: without the flag the
+   planner looks up `<slug>.cases.md`, finds nothing, and takes the fast lane past the approval gate
+   you just stamped (run-01, O-24). The whole-feature line needs no flag — its slug IS the feature.
 
    A single whole-feature approval collapses to one line (`/qa-warden:new-spec auth/login`). The rule
    behind the derivation lives in `skills/new-spec/SKILL.md` §"Naming a fanned spec" — cite it

@@ -41,6 +41,78 @@ Thirteen working sessions closing the 2026-09-06 audit (all four blocks). Four s
 changes a consumer cannot infer from a file diff, three deliberate decisions to change
 nothing, and a large body of correctness work.
 
+### First observed end-to-end run of 0.4.0 (run-01, 2026-09-26) — one dead script, two platform traps, twenty prose gaps
+
+A lab drove the whole chain (`help` → `init` → `explore` → `intake` → `ideate` → `approve` →
+`new-spec` → `gen` + verifier → `review` → four fast-lane specs → `run` → `report` → `coverage`
+→ a change event + `heal`) against a booking app and logged 79 observations. Every finding
+below was re-verified against the source before it was fixed; the moat held throughout (the
+healer changed two locator lines and zero assertions, no oracle was weakened, the reviewer
+caught every hollow pass). What broke was around the moat, not in it.
+
+**Consumer-visible (reaches existing projects through `/qa-warden:init --resync`)**
+- `scripts/doctor.sh` was a syntax error under stock macOS `/bin/bash` 3.2 (a `case … *.example)`
+  inside `$( … )` at the lock-shard check): seven lines, exit 2, no rollup. Homebrew bash 5 hid it
+  from every maintainer machine. One arm is now `(*.example)`, and `bin/qa-selfcheck` gains check 9k: every shell script
+  must parse under `/bin/bash` when that binary is bash 3.x (skipped with a note elsewhere).
+- `scripts/review-marker.sh` wrote `commit: HEAD` then `unknown` in a repository with no commit;
+  `git rev-parse --verify -q` fixes the shape.
+- `scripts/post-run-checks.sh` counted the verifier's `*-blind-*.md` / `*-unverified.md` records
+  as open app defects. They are test-contract gaps and now print and count on their own line
+  (`post-run: … open-bugs=N test-gaps=M`). `/qa-warden:report` and its template split the ledger
+  the same way and count both Found-by shapes (bold inline, or a `## Found-by` heading), with
+  `planner` / `exploration` values for bugs the main session files on their behalf.
+- `settings.json` allows `QA_WORKERS=1|2|4|50% npx playwright test …` (one literal rule per
+  value — a `*` before the program would not limit the rule) — the documented capacity knob
+  matched no allow rule, so a subagent's run was denied. `.env.example` now says to quote values
+  containing `#` (dotenv truncates `Member#2026` to `Member`; the shell loader does not) and that
+  `QA_TZ` pins the browser only and should match the app's timezone.
+
+**Platform traps (documented, worked around)**
+- `/qa-warden:report` no longer runs as a forked subagent. Claude Code refuses any subagent
+  `Write` whose basename matches `report*.md` / `summary*.md` / `findings*.md` / `analysis*.md` (any case)
+  (anthropics/claude-code#44657, no opt-out), so `reports/summary.md` was never written while
+  `reports/coverage-all.md` was. Inline, the Write succeeds; the returned block is unchanged.
+- `hooks/assertion-contract.sh` denies the verifier removing *any* `expect` line, including a
+  probe it inserted itself, through `Edit` and through a `Write` of the pre-probe file — so a
+  probe that carried an `expect` could go in but not come out, and the only exit was a Bash
+  rewrite the hook never sees. The hook is unchanged (stateless, fail-open); the verifier now keeps
+  probes injection-only and reverts with one `Edit`, `hooks/README.md` documents the limit, and
+  `qa-hooktest` pins both cases (24 cases, was 22). The verifier, generator and healer are told to
+  touch `tests/**` only with `Edit`/`Write`: a `cat > tests/x.spec.ts <<EOF` needs no prompt
+  (redirect targets are checked against the `Edit(tests/**)` allow) and no hook sees it.
+
+**Authoring chain**
+- `/qa-warden:approve` prints `basis=<area>/<feature>` on every fanned `new-spec` line and
+  `new-spec` forwards it; the planner reads the parent checklist under that name. Before, a
+  fanned spec's slug found no `.cases.md` and the planner silently took the fast lane past the
+  approval gate it was meant to enforce.
+- `generator.md` no longer lists `// verified:` among the annotations it is "required to emit"
+  (it never authors one; step 8 already forbade it); the verifier's re-run skip accepts a carried
+  stamp only when `git diff` shows the line unchanged, so a stamp new in the working tree gets a
+  fresh probe.
+- Generator: a named `PARTIAL — budget reached …` return when the turn budget is hit (the prose
+  budget ended in no behaviour); one sweep per route, no driving of flows the planner marked
+  untried; UI cleanup must anchor on an auto-waiting `expect` instead of a non-waiting
+  `isVisible()` that silently skips itself; app-local time computed from the app's timezone, not
+  the host's. `gen` re-invokes a truncated generator in the foreground rather than letting the
+  main session compile tests unguarded.
+- Intake asks the human when an observed example breaks a rule it is recording in the same basis
+  (a Total that is not Net + VAT was stamped as an example and travelled two steps downstream).
+- Planner and exploration: live probes are read-only; a probe that would create, submit, cancel
+  or pay is proposed to the human first. `playwright-cli/SKILL.md` said the planner uses MCP;
+  it uses the CLI first. Exploration writes `stable_testids: []` only after a sweep actually ran
+  and has a DOM-sweep recipe when app source is off-limits.
+- Healer: a locator heal whose old text also appears in the paired spec now writes the
+  `.healer-needs-spec-update` sentinel, so a recompile cannot regress the heal or let a
+  no-results scenario pass vacuously. `batch-fix` runs its precheck in the foreground.
+- Reviewer (no new check): Check 3 FAILs a `test.fail`/`fixme`/`skip` under `page-objects/**`
+  and WARNs a park narrower than the bug's Actual; Check 7 keys only on `draft: true` or a
+  `> REVIEW:` line, not on the word "auto-drafted" in a comment.
+- `coverage.sh` normalises `:id` / `{id}` / `[id]` before diffing planned against tested routes.
+- `ideation` gains the `Edit` tool, so revising a checklist is an edit rather than a full
+  rewrite or a Bash `sed -i` the deny list blocks.
+
 ### MIT license (2026-09-24)
 
 - The plugin now ships a `LICENSE` file (MIT) at its root, matching `"license": "MIT"` in

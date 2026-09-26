@@ -33,7 +33,7 @@ done
 # Substring test with comma delimiters on BOTH sides so a scan name can never partial-match another.
 enabled() { case ",$ONLY," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
 
-n_sent=0; n_stray=0; n_bugs=0
+n_sent=0; n_stray=0; n_bugs=0; n_gaps=0
 
 # (1) Unprocessed healer sentinels — a stuck `.healer-needs-*` means a prior heal escalated and
 # its follow-up (re-seed / re-explore / migrate) was never run, so that failure is likely STILL
@@ -71,13 +71,23 @@ done < <(find tests -name '*.spec.ts' -type f ! -name '_*' ! -path '*/_*/*' 2>/d
 # defect and a naive read looks all-clear. The scan + the resolved-keyword set are single-sourced in
 # scripts/bug-status.sh --list-open (fail-safe: an unmarked or free-text Status classifies as open,
 # so a defect is over-surfaced rather than laundered green).
+# Verifier test-gap records live in bugs/ too (doctor Check 11 and /qa-warden:report surface them there),
+# but they name a decorative or unprobed ORACLE, not an app defect — counted apart so the ledger
+# does not inflate the defect count (run-01 miscounted the split four times in prose).
 enabled bugs && while IFS= read -r bug; do
   [ -n "$bug" ] || continue
-  echo "$PREFIX open bug filed — $bug: $(grep -m1 '^# ' "$bug" 2>/dev/null | sed 's/^# //'). If a scenario is parked (test.fail/test.fixme) against it, this green is NOT all-clear."
-  n_bugs=$((n_bugs+1))
+  case "$bug" in
+    *-blind-*.md|*-unverified.md)
+      echo "$PREFIX open test-contract gap — $bug: $(grep -m1 '^# ' "$bug" 2>/dev/null | sed 's/^# //'). A verifier record, not an app defect: the governed scenario proves less than it looks until the oracle is fixed."
+      n_gaps=$((n_gaps+1)) ;;
+    *)
+      echo "$PREFIX open bug filed — $bug: $(grep -m1 '^# ' "$bug" 2>/dev/null | sed 's/^# //'). If a scenario is parked (test.fail/test.fixme) against it, this green is NOT all-clear."
+      n_bugs=$((n_bugs+1)) ;;
+  esac
 done < <(bash scripts/bug-status.sh --list-open 2>/dev/null)
 
 [ "$n_bugs" -gt 0 ] && echo "$PREFIX → $n_bugs open bug(s) on file: a run is NOT a verdict. Run /qa-warden:report for the go/no-go quality state."
+[ "$n_gaps" -gt 0 ] && echo "$PREFIX → $n_gaps open test-contract gap(s) (verifier BLIND/unverified records): the oracle, not the app, is the open item."
 
-echo "post-run: sentinels=$n_sent stray=$n_stray open-bugs=$n_bugs"
+echo "post-run: sentinels=$n_sent stray=$n_stray open-bugs=$n_bugs test-gaps=$n_gaps"
 exit 0

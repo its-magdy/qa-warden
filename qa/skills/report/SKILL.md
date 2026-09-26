@@ -1,8 +1,6 @@
 ---
 description: Aggregate artifacts/last-run.json + reports/*.json into a PR/Slack-ready summary — totals, failure-signature grouping, durations, flake/retry surfacing, parked defects, value ledger. Use at the end of a run-of-record suite run (CI, or QA_RUN_OF_RECORD=1), or ad-hoc when asked "what did the suite just do?"
 argument-hint: ""
-context: fork
-background: false
 ---
 
 Produce a compact, human-readable summary of the most recent QA run. Pure aggregation
@@ -75,7 +73,8 @@ Inputs:
   unmanaged specs** — invisible to `last-run.json`'s smoke stats yet collected (and possibly red)
   in a full `npx playwright test`, so the go/no-go must be qualified rather than an unqualified
   "green to merge". It exits 0 always and ends with a parseable
-  `post-run: sentinels=<n> stray=<n> open-bugs=<n>` line:
+  `post-run: sentinels=<n> stray=<n> open-bugs=<n> test-gaps=<n>` line (`test-gaps` are the
+  verifier's BLIND/unverified records — not app defects):
 
   ```bash
   # Guarded like check-last-run.sh above — an older scaffold predates this script, and an
@@ -148,7 +147,7 @@ Output:
     The SCOPE line leads it: only this skill reads `--grep`
     off `.config.argv`, so the anti-false-green qualification originates here (F-27).
   - A one-paragraph lead suitable for a PR comment or `#qa` Slack post.
-- Return the full Markdown block VERBATIM as your final response — this skill runs as a forked subagent, so the caller sees only what you return. Do not summarize, truncate, or replace it with a status line; the block itself is the deliverable the user pastes into a PR or Slack.
+- Return the full Markdown block VERBATIM as your final response, in addition to writing `reports/summary.md`. Do not summarize, truncate, or replace it with a status line; the block itself is the deliverable the user pastes into a PR or Slack. (This skill runs inline, not as a forked subagent, on purpose: Claude Code refuses a subagent `Write` whose basename matches `report*.md` / `summary*.md` / `findings*.md` / `analysis*.md` (any case), so a fork can never produce the canonical file — run-01, O-43/O-78.)
 
 ## Template
 
@@ -164,17 +163,29 @@ the sole owner of the report shape, so do not reconstruct the sections from memo
   is what `bug-status.sh` exists to end):
   ```bash
   # <O> open / <FIXED> fixed. --class prints exactly `open` or `resolved` per file.
-  for f in bugs/*.md; do [ -e "$f" ] || break; bash scripts/bug-status.sh --class "$f"; done \
-    | sort | uniq -c
+  # Verifier test-gap records (`*-blind-*.md`, `*-unverified.md`) are contract gaps, not app
+  # defects — count them on their own line, or the ledger inflates the defect count (run-01, O-49).
+  # One loop over `bugs/*.md` — a second glob such as `bugs/*-unverified.md` aborts under zsh when
+  # nothing matches. Each file is routed by name to `defect` or `gap`, then classified:
+  # `<O>`/`<FIXED>` are the defect rows, `<G>`/`<GF>` the gap rows.
+  for f in bugs/*.md; do
+    [ -e "$f" ] || break
+    case "$f" in *-blind-*.md|*-unverified.md) kind=gap ;; *) kind=defect ;; esac
+    echo "$kind $(bash scripts/bug-status.sh --class "$f")"
+  done | sort | uniq -c        # e.g.  3 defect open · 1 defect resolved · 2 gap open
   ```
   **Found-by attribution.** The authored shape is a bolded label with an em-dash and NO colon —
   `- **Found-by** (OPTIONAL) — healer (nightly triage) | generator (authoring) | verifier (authoring) | manual`
   (CLAUDE.md §"Bug-report schema"). Grepping `Found-by:` matches nothing and silently reports every
   bug as `unrecorded` — the same fail-silent parse class this skill calls out for `## Status`.
-  Match the real form:
+  Bugs the main session files for a **planner** or **exploration** find carry `planner (authoring)` /
+  `exploration (discovery)`; some authors emit the label as a `## Found-by` heading with the value on
+  the next line. Count both shapes — a tally that reads only the bold form reported 7 of 12 bugs as
+  `unrecorded` in run-01 (O-78):
   ```bash
-  grep -ho '\*\*Found-by\*\*[^—]*—[[:space:]]*[a-z]*' bugs/*.md 2>/dev/null \
-    | sed 's/.*—[[:space:]]*//' | sort | uniq -c   # bugs with no match = unrecorded
+  { grep -ho '\*\*Found-by\*\*[^—]*—[[:space:]]*[a-z]*' bugs/*.md 2>/dev/null | sed 's/.*—[[:space:]]*//'
+    grep -h -A1 '^## Found-by' bugs/*.md 2>/dev/null | grep -v '^## \|^--' | sed 's/^[[:space:]]*//; s/[[:space:]].*//'
+  } | sort | uniq -c   # bugs with no match in either shape = unrecorded
   ```
 - **Heal counts** from the healer telemetry log, tolerant of absence:
   ```bash
@@ -184,7 +195,9 @@ the sole owner of the report shape, so do not reconstruct the sections from memo
   ```
 - **RULE (double-counting guard):** app defects are counted from `bugs/` ONLY — heal-log rows
   classified `product-bug`/`expected-failure`/`env-infra` correspond to bug files and contribute
-  ZERO to the defect count.
+  ZERO to the defect count. Verifier test-gap records (`bugs/*-blind-*.md`, `bugs/*-unverified.md`)
+  contribute ZERO as well — they say an oracle is decorative or unprobed, not that the app is wrong —
+  and go on the "Test-contract gaps" line instead.
 - Young projects show 0s everywhere — that is correct, not "no value".
 
 ## Grouping rule — by signature, not by test

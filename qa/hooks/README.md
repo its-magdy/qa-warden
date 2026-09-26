@@ -123,3 +123,20 @@ For the healer stub/clock arm specifically, the ALLOW cases are the ones worth k
 regression table, because they are what a too-eager pattern would break: the **verifier** adding a
 `page.route` probe, the healer re-pointing a locator inside a scenario that already stubs, and a
 healer comment that merely *names* `page.route(`. All three must come back empty.
+
+## Known limits (stateless by design — read before "fixing" a deny)
+
+- **The hook cannot tell the verifier's own `expect` from the author's.** It compares the text
+  before and after one edit, with no memory of earlier edits. So a step-8b probe that carries an
+  `expect` line (or an `expect*` helper call) is allowed IN and denied OUT — through `Edit` and
+  through a `Write` of the pre-probe file alike (run-01, O-59). `agents/verifier.md` therefore
+  keeps probes injection-only and reverts them with one `Edit` of the inserted lines; the two
+  `qa-hooktest` cases "verifier reverts an expect-free probe" / "…carries an expect" pin this.
+- **Bash writes are invisible.** The matcher is `Edit|Write`. A `python3 - <<EOF`, `node -e`,
+  `perl -i` or `cat > tests/x.spec.ts <<EOF` rewrite never reaches this hook, and the last one
+  needs no permission prompt either: Claude Code checks a redirect target against the `Edit`
+  allow rules, and the scaffold allows `Edit(tests/**)`. The agents are told to touch `tests/**`
+  only with `Edit`/`Write`; the reviewer remains the backstop, as the first paragraph says.
+- Any identifier containing `expect` followed by `(` counts as an assertion (`expectLoggedIn(`,
+  `reportUnexpectedError(`). That is deliberate: a helper named `expect…` usually wraps one, and
+  a false deny costs a handoff sentence while a false allow costs the moat.

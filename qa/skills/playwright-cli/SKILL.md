@@ -68,7 +68,7 @@ Always pass `-s=<name>` so parallel Playwright workers do not collide on the def
 ## Decision rule summary
 | Phase | Tool | Why |
 |---|---|---|
-| Planner / explorer | MCP | needs live AX tree |
+| Planner / explorer | **CLI first** (MCP only as the planner's step-7 STOP-and-restart fallback) | needs live AX tree — `goto && snapshot` gives it |
 | Generator | either (default to scaffold) | — |
 | **Healer** | **CLI + skill** | reads trace + DOM from disk |
 | Reviewer | read-only, no browser | — |

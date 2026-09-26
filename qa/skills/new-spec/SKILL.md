@@ -1,6 +1,6 @@
 ---
 description: Draft a new Markdown+YAML spec for one feature via the planner subagent. Runs LAST in the authoring chain (intake → ideate → approve → new-spec) — PRECONDITIONS — the area's context (specs/_context/app.context.md + <site>/<area>.md) must exist and be fresh, and if a .cases.md exists it must be APPROVED. The planner STOPs (handoff) on missing/stale context or un-approved cases.
-argument-hint: "<area/feature> [site=<id>]"
+argument-hint: "<area/feature> [site=<id>] [basis=<area>/<feature>]"
 disable-model-invocation: true
 ---
 
@@ -32,10 +32,11 @@ flag is passed inline:
 # force it so the site= flag separates from the path; no-op in bash.
 [ -n "${ZSH_VERSION:-}" ] && setopt shwordsplit 2>/dev/null
 set -- $ARGUMENTS
-FEATURE=""; SITE=""
+FEATURE=""; SITE=""; BASIS=""
 for tok in "$@"; do
   case "$tok" in
-    site=*) SITE="${tok#site=}" ;;
+    site=*)  SITE="${tok#site=}" ;;
+    basis=*) BASIS="${tok#basis=}" ;;   # parent checklist of a fanned spec (from /qa-warden:approve)
     *)      [ -z "$FEATURE" ] && FEATURE="$tok" ;;   # first bare token = <area/feature>
   esac
 done
@@ -45,7 +46,11 @@ SPEC_PATH=$(bash scripts/resolve-spec-path.sh spec "$FEATURE")   # e.g. specs/ch
 ```
 So `/qa-warden:new-spec admin/refund-partial site=admin` → `specs/admin/refund-partial.md` with
 `site=admin` handed to the planner, never baked into the filename. With no `site=`, the planner
-infers from the story and raises an Open Question if ambiguous.
+infers from the story and raises an Open Question if ambiguous. `basis=<area>/<feature>` names the
+parent checklist when `/qa-warden:approve` fanned one feature into several specs; hand it to the
+planner verbatim ("basis=checkout/coupon") — it reads `<parent>.basis.md`/`.cases.md` under that
+name and stamps `basis:` in the YAML. Without it a fanned spec has no approved rows to compile
+from and the planner, seeing no `.cases.md`, takes the fast lane past the approval gate.
 
 **Area-name sanity check (WARN — the fast lane is deliberately lighter than
 `/qa-warden:intake`) (F-20).** After resolving the `<area>` segment, check it against
@@ -123,9 +128,10 @@ specific case. An approved case that is neither a scenario nor a named waiver is
 **Check 14** (approved-case traceability, WARN — the green-but-incomplete catch) and shows up in
 `/qa-warden:coverage` dim-5's count. Naming it "Deferred"/"pruned" back in the `.cases.md` banner also
 counts as a waiver. This keeps the human approval gate load-bearing rather than advisory.
-When approved groups fan out into separate specs (one `/qa-warden:new-spec` per group), the planner
-sets `basis: <area>/<feature>` on every fanned spec so Check 14 and `/qa-warden:coverage` can pair
-it back to the checklist.
+When approved groups fan out into separate specs (one `/qa-warden:new-spec` per group), approve
+prints `basis=<area>/<feature>` on each line and this skill forwards it, so the planner reads the
+parent checklist and sets `basis: <area>/<feature>` on every fanned spec — which is how Check 14 and
+`/qa-warden:coverage` pair it back.
 
 **Naming a fanned spec — deriving the `<feature-case>` the chain hands you.** After `/qa-warden:approve`,
 `/qa-warden:ideate` and `/qa-warden:approve` point you at `/qa-warden:new-spec <area/feature-case>` "for each approved

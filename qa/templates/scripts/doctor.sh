@@ -1193,7 +1193,7 @@ if [ -n "$TEST_FILES" ]; then
     done < <(printf '%s\n' "$lock_names")
     lock_shard=$(for wf in .github/workflows/*; do
       [ -f "$wf" ] || continue
-      case "$wf" in *.example) continue ;; esac
+      case "$wf" in (*.example) continue ;; esac
       sed -e '/^[[:space:]]*#/d' "$wf" 2>/dev/null | grep -qE -e '--shard|^[[:space:]]*shard:' && echo "$wf"
     done | head -1)
     if [ -n "$lock_shard" ]; then
