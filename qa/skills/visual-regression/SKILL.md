@@ -10,7 +10,7 @@ disable-model-invocation: false
 Screenshot-diff oracle. Catches the layout/CSS/typography bug class that `text_visible` + `count_equals` cannot see.
 
 ## When to use
-- Each "meaningful UI state" in a spec — not every page, but every **state transition** worth a snapshot (post-login dashboard, cart with 2 items, error banner visible, checkout success).
+- Within an audit probe or a hand-hardened test, each "meaningful UI state" — not every page, but every **state transition** worth a snapshot (post-login dashboard, cart with 2 items, error banner visible, checkout success).
 - Whenever a bug report says "something looks wrong" but the text/DOM is fine.
 - Outside a managed spec's assertion contract — a screenshot assert has no closed-vocab oracle key, so reviewer Check 2 treats it as an orphan expect. Keep it to `/qa-warden:review url=` audits (`tests/_audit-<slug>.spec.ts`) and human hand-hardening.
 

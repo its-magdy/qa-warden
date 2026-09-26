@@ -27,9 +27,9 @@ deleted, harness verified green afterwards. Git history is the archive: there is
    - `specs/_context/<site>/<area>/<feature>.basis.md` + `.cases.md`
 
    **CONSUMER-CHECKED** — delete only if nothing else uses it:
-   - **Guard first — a MISSING search tool must never read as "no consumers ⇒ DELETE" (D-4).** The consumer-checks below use `rg`; if ripgrep is absent, `rg -l …` emits nothing and exit-non-zero, which — if trusted — false-reads as "unused ⇒ DELETE" and orphans a still-shared page-object. Set the search command ONCE and use `$RG` on EVERY consumer-check line below, so the fallback is mechanical, not a prose substitution the reader might forget on one line (m-9): `RG="rg -l"; command -v rg >/dev/null 2>&1 || RG="grep -rlE"` (`grep -rlE` — the `-E` matters: the patterns below are regex alternations; both forms are always allowlisted and have the same list-files-with-matches semantics). Do NOT proceed on an empty result from a tool that never ran — fail-closed, exactly as healer step 6 ("if EMPTY, STOP").
+   - **Guard first — a MISSING search tool must never read as "no consumers ⇒ DELETE" (D-4).** The consumer-checks below use `rg`; if ripgrep is absent, `rg -l …` emits nothing and exit-non-zero, which — if trusted — false-reads as "unused ⇒ DELETE" and orphans a still-shared page-object. Run `command -v rg` ONCE, then type the chosen tool literally on EVERY consumer-check line below — `rg -l`, or `grep -rlE` when rg is absent (the `-E` matters: the patterns below are regex alternations; both forms are allowlisted and have the same list-files-with-matches semantics) — so no line silently uses the missing tool (m-9). Don't store the tool in a variable: each Bash call starts a fresh shell, zsh does not word-split an unquoted `$VAR`, and a `$VAR`-led command matches no allow rule. Do NOT proceed on an empty result from a tool that never ran — fail-closed, exactly as healer step 6 ("if EMPTY, STOP").
    - Each page-object/component the spec imports:
-     `$RG "<Class>|<fixtureName>" tests/ page-objects/` EXCLUDING the files being
+     `rg -l "<Class>|<fixtureName>" tests/ page-objects/` (or `grep -rlE`) EXCLUDING the files being
      retired — capture into a variable, inspect, then act (mirror healer step 6's
      discipline). Non-empty ⇒ KEEP (shared; list the consumers).
    - Same for schemas/factories via `jq -r '.factories[]?'` over the REMAINING
@@ -38,7 +38,7 @@ deleted, harness verified green afterwards. Git history is the archive: there is
      (or `.shared.ts`) — the generator emits it and imports it into the parent
      `.spec.ts` (generator §6); the verifier's twins import the same module (verifier
      §8a). Consumer-check it like a POM:
-     `$RG "<feature>\.oracle|<feature>\.shared" tests/ page-objects/` EXCLUDING the
+     `rg -l "<feature>\.oracle|<feature>\.shared" tests/ page-objects/` (or `grep -rlE`) EXCLUDING the
      files being retired. Non-empty ⇒ KEEP (another spec imports the constants; list
      consumers). Empty ⇒ DELETE — otherwise it orphans as a dead module `tsc` won't
      flag (nothing imports it, nothing errors) (F-34).

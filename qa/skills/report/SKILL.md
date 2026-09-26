@@ -14,7 +14,8 @@ Inputs:
   sink. `dotenv.config({ quiet: true })` keeps it valid JSON, and `/qa-warden:run mode=smoke`
   refreshes it. **Staleness guard:** `/qa-warden:run mode=single` and `/qa-warden:run mode=repeat` pass
   explicit `--reporter=…` (for per-command files) and therefore do NOT refresh
-  `last-run.json`, and a heal or reviewer Check-6 re-run can silently overwrite the
+  `last-run.json`, and a re-run in a run-of-record context (CI, or an inherited
+  `QA_RUN_OF_RECORD=1`) without `--reporter=line` can silently overwrite the
   smoke stats you assume are there. **Run this scripted freshness check before
   aggregating — do not rely on eyeballing it:**
 
@@ -211,7 +212,7 @@ Every retry must surface in the summary. A test that passes only on retry-3 is *
 ## Durations (flake SLO context)
 - p50 and p95 spec durations.
 - Slowest N=5 specs — these are healer candidates if they are ALSO flaky.
-- Total wall-clock vs the **prior `reports/summary.md`** baseline — flag >20% regression. Do **NOT** read the baseline from `artifacts/last-run.json`: the `json` reporter overwrites it every run, so it only ever holds the just-finished run — comparing to it yields the run vs itself (always ~0%) and a real 2× regression is never flagged. **Read it BEFORE writing this run's `reports/summary.md`** — that file is overwritten, not timestamped (see Output above), so writing first destroys the only baseline and silently reproduces the compare-the-run-to-itself bug this paragraph exists to prevent. Use the prior LOCAL `reports/summary.md` when present (it is gitignored and overwritten each run — no committed baseline exists); when there is no prior local file, omit the trend line rather than compare the run to itself. Teams that want cross-clone/CI trends must archive summaries out-of-repo.
+- Total wall-clock vs the **prior `reports/summary.md`** baseline — flag >20% regression. Do **NOT** read the baseline from `artifacts/last-run.json`: the `json` reporter overwrites it on every run-of-record run, so it only ever holds the just-finished run — comparing to it yields the run vs itself (always ~0%) and a real 2× regression is never flagged. **Read it BEFORE writing this run's `reports/summary.md`** — that file is overwritten, not timestamped (see Output above), so writing first destroys the only baseline and silently reproduces the compare-the-run-to-itself bug this paragraph exists to prevent. Use the prior LOCAL `reports/summary.md` when present (it is gitignored and overwritten each run — no committed baseline exists); when there is no prior local file, omit the trend line rather than compare the run to itself. Teams that want cross-clone/CI trends must archive summaries out-of-repo.
 
 ## Example invocation
 ```bash

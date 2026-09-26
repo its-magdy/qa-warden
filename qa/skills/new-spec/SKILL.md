@@ -10,7 +10,7 @@ Delegate to the `planner` subagent (uses `@playwright/cli`) to draft a new spec.
 feature — print the block below verbatim and stop:
 
 ```
-Usage:  /qa-warden:new-spec <area/feature> [site=<id>]
+Usage:  /qa-warden:new-spec <area/feature> [site=<id>] [basis=<area>/<feature>]
 Draft a spec for ONE feature. <area/feature> is a path you choose — for example:
 
   /qa-warden:new-spec auth/login          test the sign-in flow
@@ -138,8 +138,8 @@ parent checklist and sets `basis: <area>/<feature>` on every fanned spec — whi
 group." The `-case` suffix is a **human-readable slug of the approved rule-GROUP, not the raw row id**
 (R1, R2, NF.a11y…). Derive it from the group's subject:
 - one spec for the whole feature → just `/qa-warden:new-spec auth/login` (no suffix)
-- a scoped group, e.g. approved rows about coupon-stacking → `/qa-warden:new-spec checkout/coupon-stacking`
-- a non-functional group, e.g. `NF.a11y` → `/qa-warden:new-spec checkout/coupon-a11y`
+- a scoped group, e.g. approved rows about coupon-stacking → `/qa-warden:new-spec checkout/coupon-stacking basis=checkout/coupon`
+- a non-functional group, e.g. `NF.a11y` → `/qa-warden:new-spec checkout/coupon-a11y basis=checkout/coupon`
 
 Keep the slug kebab-case and stable; the planner stamps `basis: <area>/<feature>` (above) so
 coverage/Check 14 pair every fanned spec back to the same checklist regardless of the suffix.

@@ -428,7 +428,7 @@ delete them to make the toolkit sound more complete than it is.
   token the **reviewer** subagent is `Read, Bash` and its read-only contract is prose, not an enforced
   per-agent allowlist (Claude Code scopes `Bash` per *project*, not per *agent*), so it too rests on the
   cooperative-agent assumption below, not on a hard guard. The **real** containment is not the deny-list: it is the
-  QA-scoped `Write`/`Edit` allowlist (agents can only write `tests/`,`specs/`,`bugs/`,… ), per-prompt
+  QA-scoped `Edit(...)` allowlist (it governs the Write tool too) (agents can only write `tests/`,`specs/`,`bugs/`,… ), per-prompt
   approval on anything unmatched, and the macOS OS-level Bash sandbox. Treat the deny-list as raising the
   bar on the *cooperative-agent / accidental-footgun* case, and do NOT rely on it as a prompt-injection
   boundary — a robust guard would need a `PreToolUse` hook over the Bash tool. The `hooks/` layer this

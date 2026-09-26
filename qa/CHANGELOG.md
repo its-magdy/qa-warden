@@ -57,6 +57,32 @@ nothing, and a large body of correctness work.
   tokens. All three are invoked by name (generator, `/qa-warden:review`, verifier preload), so the
   cut text (detection rates, Applitools note, mutation-testing contrast) stays in each body.
 
+### Prompt audit (2026-09-26) — stale cross-references and contradictions
+
+An audit of every agent, skill, reference doc, hook message and the stamped `CLAUDE.md` found no
+older-model pressure language worth changing; the defects were statements the repository itself
+contradicts, left behind when behaviour moved between agents. 33 fixes, prose only:
+
+- Step 8a (twins) and 8b (fault injection) are credited to the verifier everywhere; `CLAUDE.md`,
+  `planner.md` and `reviewer.md` still said the generator.
+- `/qa-warden:retire` and reviewer Check 12 no longer store the search command in `$RG`. On a zsh
+  Bash tool an unquoted `$RG` is not word-split (`command not found: rg -l`), each Bash call is a
+  fresh shell, and a `$VAR`-led command matches no allow rule, so the consumer list came back
+  empty — which `retire` reads as "unused". The tool is now typed literally on each line.
+- `CLAUDE.md` no longer says the hooks skip the generator (only the assertion hook filters by
+  agent), and names the `Edit(...)` allow rules instead of a `Write`/`Edit` allowlist.
+- The reviewer's fail-closed list matches its whole-tree fallback; Check 2c's WARN list points at
+  the two FAIL sub-cases instead of contradicting them; Check 6 no longer quotes a retired gate.
+- `heal`/`report` describe the run-of-record gating of the `json` reporter; `run` drops command
+  names that never existed; `ideate`/`new-spec` examples carry `basis=`; `doctor` Check 0b no
+  longer calls a missing `rg` blocking for `retire` (it falls back to grep).
+- Hook deny messages match their code: the assertion hook names retyped strings, and the lint
+  hook gives `CLAUDE.md`'s locator priority.
+- Smaller fixes in `healer`, `verifier`, `planner`, `exploration`, `playwright-cli`,
+  `test-data-seed`, `visual-regression`, `knowledge-map`, `sentinel-actions`, `report-template`
+  and the `basis.md` template. `CLAUDE.md` belongs to the project, so existing projects keep the
+  old wording until they edit it; the `basis.md` template reaches them via `--resync`.
+
 ### First observed end-to-end run of 0.4.0 (run-01, 2026-09-26) — one dead script, two platform traps, twenty prose gaps
 
 A lab drove the whole chain (`help` → `init` → `explore` → `intake` → `ideate` → `approve` →

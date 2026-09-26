@@ -22,8 +22,8 @@ Several tests red with the same root cause? Use /qa-warden:batch-fix instead.
 browser (interactive MCP replay, step 3) *before* any `npx playwright test`, so the enforced
 `globalSetup` prod backstop has **not** engaged yet — a healer pointed at a prod-marked
 `BASE_URL` would otherwise open a live prod browser session with no STOP. (If the script is
-missing, re-run `/qa-warden:init` to stamp it.) This is the one browser-driving command whose first
-action can be a live-browser step, so the guard cannot be left to `globalSetup`.
+missing, re-run `/qa-warden:init` to stamp it.) Like every command whose first action can be a
+live-browser step, it cannot leave the guard to `globalSetup`.
 
 Delegate to the `healer` subagent (pinned `model: sonnet` in its frontmatter, so it
 runs at that tier in place of the session model and cannot raise it mid-run — it
@@ -58,9 +58,9 @@ The healer must:
    `bugs/<YYYY-MM-DD>-<slug>.md`** (CLAUDE.md §Bug-report schema) and revert
    any patch attempt. Do not mutate the test to make the bug disappear.
 7. Re-run: `npx playwright test <spec> --retries=0 --reporter=line`. Green → write
-   the diff as a PR comment. (`--reporter=line` is load-bearing: a bare re-run fires
-   the config's `json` reporter and overwrites `artifacts/last-run.json` — the
-   run-of-record `/qa-warden:report` reads; see `healer.md` step 6 / reviewer.md.)
+   the diff as a PR comment. (`--reporter=line` is load-bearing: in CI, or with an inherited
+   `QA_RUN_OF_RECORD=1`, a bare re-run fires the config's gated `json` reporter and
+   overwrites `artifacts/last-run.json` — the run-of-record `/qa-warden:report` reads; see `healer.md` step 6 / reviewer.md.)
 
 **Hard turn budget: 14.** After 14 turns on the same failure, stop and signal that
 a stronger model is required (per the pin above, that signal is for the operator to

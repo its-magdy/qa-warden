@@ -16,7 +16,7 @@ Parallel-safe test data seeding. The canonical rule: worker-scoped fixtures keye
 
 ## When to use
 - Any spec that writes: login as a fresh user, create an order, provision an org, upload a file.
-- Anytime a spec hardcodes `alice@example.com` (the §8 example does this deliberately as a teaching anti-pattern — it will collide at 10 workers).
+- Anytime a spec creates or mutates a resource keyed on a hardcoded email (e.g. signs up `alice@example.com`) — it will collide at 10 workers. A pre-seeded login referenced through `password_env` (the planner's credential form) is fine.
 - When a flake post-mortem groups failures by "same user / same timeslot / resource already exists."
 
 ## The five rules

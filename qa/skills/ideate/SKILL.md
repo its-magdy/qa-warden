@@ -56,8 +56,8 @@ The subagent reads
   (Fallback, offline: approve/prune by editing the file and write the banner yourself —
   same format; the command is the paved path, not the only path.) This is the human gate;
   do not rubber-stamp: completeness is undecidable and the critic's recall is unvalidated,
-  so a thin lens is a prompt for *your* judgment, not a guarantee. For each approved group
-  then: `/qa-warden:new-spec <area/feature-case>`.
+  so a thin lens is a prompt for *your* judgment, not a guarantee. For each approved group,
+  `/qa-warden:approve` prints the exact `/qa-warden:new-spec … basis=<area>/<feature>` line; run those.
 - For `bug`/`enhancement`: remember the full suite still runs as the safe-fallback
   regression (`npx playwright test`) — impact selection never replaces it.
 

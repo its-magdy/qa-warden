@@ -21,5 +21,4 @@ This table is the single source for the sentinel contract. Its consumers are `/q
 primary loop), `/qa-warden:batch-fix` (same loop around its representative-failure triage), and
 `/qa-warden:doctor` Check 4 (which reports orphans and points here for the remedy). It lives in
 `reference/` rather than inside `/qa-warden:heal` because those three read it and a table owned by one
-command that two others reach into is a drift shape with no check policing it — the same failure
-that made `report`/`report-summarizer` diverge.
+command that two others reach into is a drift shape with no check policing it.

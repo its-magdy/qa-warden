@@ -130,7 +130,7 @@ jq -cn \
   --arg cls   "<classification>" \
   --arg cause "<one-line normalized root cause>" \
   --arg fix   "<selector|wait|page-object|bug-filed|sentinel|none>" \
-  --arg out   "<green|standing-red|bug-filed|escalated|sentinel-returned>" \
+  --arg out   "<green|standing-red|bug-filed|escalated|sentinel-returned|reconciled-green>" \
   --arg po    "<page-objects/... path, or empty>" \
   --arg old_loc "<the locator that failed>" \
   --arg new_loc "<the locator patched in, or empty>" \
@@ -142,7 +142,7 @@ jq -cn \
 - **`classification`** is the exact step-4 bucket (`broken-locator` / `missing-wait` / `changed-text` / `stale-context` / `auth-stale` / `data-drift` / `env-infra` / `contract-change` / `expected-failure` / `product-bug`) — one word, so the log is groupable.
 - **Cluster key = `classification` + a *normalized* `root_cause`** (strip volatile ids/timestamps/durations — same signature discipline as `/qa-warden:report`). Many rows sharing one signature = a `/qa-warden:batch-fix` candidate.
 - **Write the line even when you did NOT patch** — standing-red `must_fail_when`, sentinel returns, bug-filed product defects. Those are the highest-signal rows for drift; dropping them biases the log toward selector-heals-only and hides the systemic failures.
-- The log is append-only and **never read by the nightly replay** — it is pure observability. A future `/qa-warden:report` / `/qa-warden:doctor` surface can aggregate it (group by signature, count per area); do not block on that here.
+- The log is append-only and **never read by the nightly replay** — it is pure observability; `/qa-warden:report` and `/qa-warden:batch-fix` aggregate it.
 
 ## Anti-drift rule (verbatim, do not paraphrase)
 **Never change the assertion contract — only selectors/waits.**
@@ -163,7 +163,7 @@ Corollaries:
 - **Patch `tests/**` and `page-objects/**` only with the `Edit`/`Write` tools** — never a Bash rewrite (`python3 - <<EOF`, `node -e`, `perl -i`, `cat > file <<EOF`). The hook sees only `Edit`/`Write`; a Bash rewrite is the one path where a matcher swap or a dropped assertion lands unseen, so a Bash rewrite counts as routing around the hook, the same as ignoring a deny (run-01, O-55).
 
 ## No auto-commit, no auto-PR
-You emit a unified diff to stdout (and write the patched file via the `Write` tool) and stop. You do NOT run `git commit`, `git push`, or `gh pr create`. The human reviews and merges. This matches Octomind's "Zero Silent Commits" model and prevents the silent-false-pass failure mode where a healer's patch ships without a second eye.
+You emit a unified diff to stdout (apply the patch with `Edit`) and stop. You do NOT run `git commit`, `git push`, or `gh pr create`. The human reviews and merges. This matches Octomind's "Zero Silent Commits" model and prevents the silent-false-pass failure mode where a healer's patch ships without a second eye.
 
 ## Escalation
 - **Your model tier is set by the harness, not by you.** This agent pins `model: sonnet` in its frontmatter and the operator can override that pin; you cannot change the tier mid-run and should not assume a specific tier. The escalation signal below is how a stronger tier gets involved.

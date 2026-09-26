@@ -10,7 +10,7 @@ Keep it tight; the oracle (rules) is the one mandatory section. Delete this comm
 
 ```yaml
 feature: <area>/<feature>
-kind: feature                 # feature | enhancement | bug | refactor | characterization  (exploratory is roadmap — see reference/test-case-ideation.md §4; /qa-warden:ideate returns "unsupported" for it today, so don't select it yet)
+kind: feature                 # feature | enhancement | bug | refactor | characterization
 site: app                     # MUST match a sites[].id in specs/_context/app.context.md
 interview: <n questions across <m> rounds | none — fully observable>   # F-016 attestation: how much HUMAN intent-interview actually happened. /qa-warden:intake stamps the real count (e.g. "7 questions across 2 rounds"); "none" is only legitimate when EVERY rule is [grounded:]/[imported:]/[pinned:] (no [human-answered]). A basis with [human-answered] rules but interview: none is a red flag — the human grounding is unattested (doctor WARNs).
 

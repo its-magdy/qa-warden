@@ -62,10 +62,9 @@ does not fix anything — each finding names its repair:
   *resolved* test, so an **all-red run is fresh, not zero-test** (`expected` alone
   counts only PASSED tests). Corrupt/zero-test → fix the run and refresh via
   `/qa-warden:run mode=smoke`; stale/missing → confirm which run you mean or re-run.
-- **Check 0b (ripgrep missing, WARN):** `rg` is an undeclared plugin-wide dependency. Install it
-  (`brew install ripgrep`) *before* running `/qa-warden:retire` — a missing `rg` makes retire's
-  "is this shared?" consumer query return empty, which false-reads as "unused ⇒ safe to DELETE".
-  A fail-OPEN on a destructive path, so treat it as blocking for retire even though it is a WARN.
+- **Check 0b (ripgrep missing, WARN):** `rg` is an undeclared plugin-wide dependency (the healer,
+  reviewer and planner greps use it). `/qa-warden:retire` checks for it and falls back to
+  `grep -rlE` for its consumer checks; install it anyway (`brew install ripgrep`).
 - **Check 9bb (arg-shape drift):** a key's argument shape diverged between
   `templates/CLAUDE.md` and `agents/planner.md` — reconcile to CLAUDE.md (the stamped SoT).
   Only the shape expression is compared; rewording the trailing prose never fires this.

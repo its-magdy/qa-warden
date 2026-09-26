@@ -96,7 +96,7 @@ hit=$(first_match "page\.locator[[:space:]]*\(|page\.\\\$\\\$?[[:space:]]*\(|xpa
 [ -n "$hit" ] && report "Check 9 (locator policy)" \
   "Raw CSS/XPath is not an allowed locator anywhere under tests/ or page-objects/. The allowed
 factories are getByRole, getByText, getByLabel, getByPlaceholder, getByAltText, getByTitle and
-getByTestId — in that priority order, with getByTestId as the escape hatch. Page objects holding
+getByTestId — prefer getByRole, then getByLabel/getByPlaceholder, then getByText, with getByTestId as the escape hatch. Page objects holding
 raw CSS is the exact anti-pattern that makes a POM layer rot." "${hit#*:}"
 
 # --- Check 11: .only markers ------------------------------------------------------------

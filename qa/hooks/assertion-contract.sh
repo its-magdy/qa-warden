@@ -161,8 +161,8 @@ else
   lost=$(comm -23 <(printf '%s\n' "$before" | assertions 1) <(printf '%s\n' "$after" | assertions 1))
   rule="agents/healer.md §\"Never change the assertion contract\" — you patch selectors and waits.
 Changing WHICH matcher is called (toHaveText -> toContainText, anything -> toBeVisible), flipping a
-.not, or dropping an assertion weakens the test while leaving every string, range and locator
-untouched. That is the canonical silent-false-pass.
+.not, retyping an expected string, number or regex, or dropping an assertion weakens what the
+test proves. That is the canonical silent-false-pass.
 
 Re-point the locator instead, or widen the matcher's own timeout — both keep the contract. If the
 assertion itself is now wrong, this is a contract-change or a product bug: classify it, file

@@ -9,7 +9,7 @@ disable-model-invocation: false
 
 **This file is NOT the official Playwright skill — it is a thin project companion.** Microsoft ships an official `@playwright/cli` agent skill *inside the npm package*; `/qa-warden:init` installs it via `npx playwright-cli install --skills`, and it is the **authoritative, auto-updating** reference for the CLI's command surface (tracing, storage-state, request-mocking, test-generation, …). This companion exists ONLY to pin the toolkit-specific decision rules (CLI vs MCP), the healer/generator recipe shape, and session hygiene — the parts Microsoft's generic skill does not cover.
 
-**Do NOT treat the command list below as the source of truth, and do not re-copy Microsoft's tool list into this file** — that is what goes stale between `@playwright/cli` releases. For the current command surface always defer to `npx playwright-cli --help` and the installed official skill at `node_modules/@playwright/cli/skills/playwright-cli/SKILL.md` (also printed by `--help` as "Agent skill: …"). When this companion and the installed binary/skill disagree, **the binary + its bundled skill win.**
+**Do NOT treat the command list below as the source of truth, and do not re-copy Microsoft's tool list into this file** — that is what goes stale between `@playwright/cli` releases. For the current command surface always defer to `npx playwright-cli --help` and the installed official skill (its path is printed by `--help` as "Agent skill: …"). When this companion and the installed binary/skill disagree, **the binary + its bundled skill win.**
 
 ## When to use
 - **Healer** reading `trace.zip` + failing DOM from disk (the cheapest repeat loop).
@@ -17,7 +17,7 @@ disable-model-invocation: false
 - **Nightly smoke/regression** where you want predictable token cost — CLI's ~68-token schema overhead vs MCP's ~3,600-4,200.
 - Any filesystem-native loop (read file, interact, write file) where MCP's live AX tree is wasted.
 
-**Skip this skill and use Playwright MCP (`npx playwright mcp`, bundled since Playwright 1.62; the standalone `@playwright/mcp` package is legacy) when:** first-contact exploration of an unknown app (planner drafting selectors against a live AX tree), or fuzz-style adversarial runs where the live DOM is the point.
+**Skip this skill and use Playwright MCP (`npx playwright mcp`, bundled since Playwright 1.62; the standalone `@playwright/mcp` package is legacy) when:** first-contact exploration of an unknown app (the planner's step-7 fallback when the CLI cannot disambiguate), or fuzz-style adversarial runs where the live DOM is the point.
 
 ## Install & invocation
 `/qa-warden:init` installs `@playwright/cli` as a **local devDependency** (see `templates/package.json`) — it does NOT install globally. So the binary lives at `node_modules/.bin/playwright-cli`, which is **not on an agent Bash shell's PATH**.
@@ -70,7 +70,7 @@ Always pass `-s=<name>` so parallel Playwright workers do not collide on the def
 |---|---|---|
 | Planner / explorer | **CLI first** (MCP only as the planner's step-7 STOP-and-restart fallback) | needs live AX tree — `goto && snapshot` gives it |
 | Generator | either (default to scaffold) | — |
-| **Healer** | **CLI + skill** | reads trace + DOM from disk |
+| **Healer** | **CLI** | reads trace + DOM from disk |
 | Reviewer | read-only, no browser | — |
 | Exploratory fuzz | MCP | live reaction |
 | **Nightly** | **`npx playwright test`** | zero LLM, deterministic |

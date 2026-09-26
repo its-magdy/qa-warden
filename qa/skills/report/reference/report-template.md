@@ -2,7 +2,7 @@
 
 This is the **sole owner** of the PR/Slack summary shape (totals, failures table, signature
 grouping, value ledger). `skills/report/SKILL.md` §Inputs renders everything below the SCOPE
-line from this file, and `reference/DESIGN.md` §"Where each concern lives" points here.
+line from this file, and `reference/DESIGN.md` §"Where the operational facts live" points here.
 
 It lives outside `SKILL.md` because the skill was over the ~5,000-token ceiling recorded in
 `reference/knowledge-map.md` — past which Claude Code re-attaches only the first 5k after a

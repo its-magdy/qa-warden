@@ -20,7 +20,7 @@ further args) · `mode=repeat <spec-path-or-test-path> [N]` · `mode=changed [<g
 
 **Safety rail (CLAUDE.md §Environment):** run `bash scripts/prod-guard.sh`
 first — STOP and ask the user to confirm in-chat if it exits non-zero. For
-`mode=repeat` this matters more than the other two: a repeat-each run drives
+`mode=repeat` this matters more than for the other modes: a repeat-each run drives
 the live target N times, multiplying blast radius rather than reducing it —
 flake probes run against **staging only**.
 
@@ -44,7 +44,7 @@ already printed why (missing/stale/corrupt/zero-test JSON, a non-zero
 Playwright exit masked by a 0-failure JSON — F-04 — or bad args). Stop and
 relay that message rather than summarizing.
 
-## mode=single (formerly `/qa-warden:headless`)
+## mode=single
 
 CI-shaped single-shot run of one spec — no interactive session, JSON output
 only.
@@ -68,7 +68,7 @@ hit into the summary (F-17: Playwright folds conditional `test.fail` xfails
 into `expected`, so "N expected" can hide a scenario parked against a
 confirmed-live defect).
 
-## mode=smoke (formerly `/qa-warden:run-smoke`)
+## mode=smoke
 
 Runs the `@smoke`-tagged suite deterministically. Then print a compact summary
 to chat, reading counts from `artifacts/last-run.json` (the config `json`
@@ -96,7 +96,7 @@ Do not retry past the default Playwright retry count. Do not add
 `hooks/` layer matches `Edit|Write`, never `Bash`, so nothing stops a cover-up
 flag on the command line (CLAUDE.md §Oracle defense); the reviewer is the backstop.
 
-## mode=repeat (formerly `/qa-warden:flake-check`)
+## mode=repeat
 
 Repeatability probe: run the same spec N times in a row and report the
 pass/fail rate. A healthy test should stay above 95% over 10 runs; anything
