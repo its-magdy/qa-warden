@@ -90,6 +90,10 @@ does not fix anything — each finding names its repair:
   rules), and the scaffold's jq merge is an additive UNION that can only ADD. So a rule the toolkit
   **retracts** is stranded in every already-scaffolded project forever with nothing to notice it.
   Delete the named rule by hand; `/qa-warden:init --resync` will not do it for you.
+  A second arm raises ONE warning for any path-scoped `Write(<path>)` rule: Claude Code checks
+  file permissions against `Edit(...)`/`Read(...)` rules only, so such a rule is never consulted
+  (and is warned about at startup). The template shipped 30 of them, each with an `Edit` twin,
+  until 0.4.0. Delete them; give any rule without an `Edit` twin one.
 - **Check 9f (healer MCP grant ↔ settings.json mirror):** the 17 `mcp__playwright__*` entries
   are hand-typed twice — as `agents/healer.md`'s `tools:` list and as `templates/settings.json`'s
   `permissions.allow[]` — and were the last hand-mirrored pair in the substrate with no check.

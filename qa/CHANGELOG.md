@@ -41,6 +41,18 @@ Thirteen working sessions closing the 2026-09-06 audit (all four blocks). Four s
 changes a consumer cannot infer from a file diff, three deliberate decisions to change
 nothing, and a large body of correctness work.
 
+### Permission and fork-wording fixes found by the 2026-09-26 doc review
+
+- `templates/settings.json` no longer ships its 30 path-scoped `Write(...)` rules (8 allow, 22 deny).
+  Claude Code checks file permissions against `Edit(...)` and `Read(...)` rules only, never consults
+  a `Write(<path>)` rule, and warns about each one at startup. Every one had an `Edit(...)` twin in
+  the same list, so no protection changes. The scaffold's merge never removes a rule, so existing
+  projects keep them: `/qa-warden:doctor` Check 9c now raises one warning listing them. Delete
+  them from `.claude/settings.json` by hand.
+- `approve`, `intake` and `batch-fix` said a `context: fork` skill inherits the parent's history
+  (or tools). It does not: it runs as a fresh subagent without the conversation history. The
+  conclusion (a fork is no way to make an interactive skill work) is unchanged.
+
 ### First observed end-to-end run of 0.4.0 (run-01, 2026-09-26) — one dead script, two platform traps, twenty prose gaps
 
 A lab drove the whole chain (`help` → `init` → `explore` → `intake` → `ideate` → `approve` →

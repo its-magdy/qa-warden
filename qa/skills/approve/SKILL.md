@@ -10,8 +10,9 @@ produced — the structured form of the gate its closing line points at. This ru
 
 **Interactivity contract (mirrors intake's F-16).** The round uses `AskUserQuestion`,
 which exists **only in the main-session toolset — it is NOT available to subagents.**
-This includes **forks** (`context: fork`): a fork inherits the parent's history, model and
-tools, but `AskUserQuestion` is filtered out of it like the other main-session-only tools —
+This includes **forks** (`context: fork`): a forked skill runs as a fresh subagent (default
+`general-purpose`) that does not see the conversation history, and `AskUserQuestion` is
+filtered out of it like the other main-session-only tools —
 so `context: fork` is NOT an escape hatch for an interactive skill, and a forked skill that
 prompts dead-calls it.
 If `AskUserQuestion` is unavailable in your context, do NOT dead-call it or silently

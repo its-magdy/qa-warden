@@ -11,8 +11,8 @@ filters on, **not** a shell glob; see the note below).
 **Session boundary (F-38):** this command runs in the **main session** and owns the
 in-chat propose/confirm gate at step 3 — a non-interactive subagent has no channel to
 receive an in-chat confirmation, so the gate must NOT be delegated — and that includes a
-**fork** (`context: fork`), which inherits the parent's tools but has `AskUserQuestion`
-filtered out, so forking buys interactivity back no more than a plain subagent does. The `healer` subagent
+**fork** (`context: fork`), which runs as a fresh subagent without the conversation history and
+has `AskUserQuestion` filtered out, so forking buys interactivity back no more than a plain subagent does. The `healer` subagent
 is invoked only for the bounded **step-2 triage** of the ONE representative failure; the
 mechanical N-file application (step 4) happens in the main session *after* confirmation.
 

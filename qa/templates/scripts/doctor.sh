@@ -860,6 +860,25 @@ Bash(sed *e *)
 Bash(sed *e;*)
 Bash(printenv)
 RETIRED
+  # 9c-ii. Path-scoped `Write(...)` rules — never consulted. Claude Code checks file permissions
+  #        against `Edit(path)` and `Read(path)` rules ONLY; a `Write(<path>)` rule is accepted,
+  #        never consulted, and warned about at startup (code.claude.com/docs/en/permissions
+  #        §Read and Edit). `Edit` rules already cover the Write tool. The template shipped 30 of
+  #        them (each with an `Edit` twin) until 0.4.0, and the additive merge strands them, so
+  #        this is ONE summary warning rather than 30 RETIRED entries. A bare `Write` (no path)
+  #        is a valid tool-level rule and is not flagged.
+  if command -v jq >/dev/null 2>&1; then
+    write_rules=$(jq -r '.permissions | (.allow // []), (.deny // []), (.ask // []) | .[]
+                         | select(type == "string" and startswith("Write("))' \
+                    .claude/settings.json 2>/dev/null)
+  else
+    write_rules=$(grep -oE '"Write\([^"]*\)"' .claude/settings.json 2>/dev/null | tr -d '"')
+  fi
+  n_write=$(printf '%s\n' "$write_rules" | grep -c . | tr -d ' ')
+  if [ "$n_write" -gt 0 ]; then
+    echo "⚠️  $n_write path-scoped Write(...) rule(s) in .claude/settings.json are never consulted — Claude Code checks file permissions against Edit(...)/Read(...) rules only and warns about these at startup. Delete them BY HAND (the scaffold's merge never removes a rule); where a rule has no Edit(...) twin, replace it with one. First: $(printf '%s\n' "$write_rules" | head -3 | tr '\n' ' ')"
+    warn=$((warn+1))
+  fi
 fi
 
 # 9f. Healer MCP tool-grant ↔ settings.json permission mirror. `agents/healer.md`'s `tools:`
