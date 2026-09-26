@@ -1,6 +1,6 @@
 ---
 name: visual-regression
-description: Add Playwright `toHaveScreenshot()` assertions to catch layout/CSS/typography regressions that text oracles miss. Use in `/qa-warden:review url=` live-page audits (`tests/_audit-<slug>.spec.ts` probes) and when a human is hand-hardening a visually-meaningful flow outside the managed spec contract — a designer reports "something looks off," or the closed oracle vocabulary cannot capture the regression class. Not for generated specs, where a screenshot expect has no oracle key and reviewer Check 2 flags it as an orphan. Not a replacement for Applitools visual-AI at scale — a cheap self-hosted layer that catches the obvious.
+description: Add Playwright `toHaveScreenshot()` assertions for layout/CSS/typography regressions that text oracles miss. Use in `/qa-warden:review url=` live-page audits and when a human hand-hardens a visually meaningful flow outside the managed spec contract. Not for generated specs — a screenshot expect has no oracle key, so reviewer Check 2 flags it as an orphan.
 user-invocable: false
 disable-model-invocation: false
 ---

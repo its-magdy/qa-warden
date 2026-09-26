@@ -1,6 +1,6 @@
 ---
 name: metamorphic-relations
-description: Generate 2-3 metamorphic-relation "twin" specs of a passing `.spec.ts`. Twins run on the nightly schedule and flag any twin whose outcome disagrees with the parent — catching specification drift that mutation testing cannot (mutation asks "does breaking code fail the test?"; MRs ask "does an invariant-preserving transform keep the output equal?"). A metamorphic-relation oracle-defense layer. Authored by the VERIFIER (Process step 8a — it has Write, and is independent of the generator that wrote the parent) right after a new spec's first green run; the read-only reviewer only VERIFIES the twins exist and agree.
+description: Generate 2-3 metamorphic-relation "twin" specs of a passing `.spec.ts` — invariant-preserving transforms whose outcome must match the parent, run nightly to catch specification drift. The verifier authors them (Process step 8a) right after a new spec's first green run; the read-only reviewer only checks that they exist and agree.
 user-invocable: true
 disable-model-invocation: false
 argument-hint: <parent-spec-path>

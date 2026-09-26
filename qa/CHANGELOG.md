@@ -52,6 +52,10 @@ nothing, and a large body of correctness work.
 - `approve`, `intake` and `batch-fix` said a `context: fork` skill inherits the parent's history
   (or tools). It does not: it runs as a fresh subagent without the conversation history. The
   conclusion (a fork is no way to make an interactive skill work) is unchanged.
+- The `axe-a11y`, `visual-regression` and `metamorphic-relations` descriptions are about half as
+  long (~630 → ~340 chars each), cutting the always-loaded skill listing from ~1,228 to ~1,010
+  tokens. All three are invoked by name (generator, `/qa-warden:review`, verifier preload), so the
+  cut text (detection rates, Applitools note, mutation-testing contrast) stays in each body.
 
 ### First observed end-to-end run of 0.4.0 (run-01, 2026-09-26) — one dead script, two platform traps, twenty prose gaps
 

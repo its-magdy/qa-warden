@@ -1,6 +1,6 @@
 ---
 name: axe-a11y
-description: Compile an `a11y_violations_below` oracle into a settled, full-page @axe-core/playwright WCAG scan, or run the a11y half of a `/qa-warden:review url=` live-page audit. Use when a spec's oracle declares that key (the planner declares it per meaningful UI state — post-login, cart-with-items, error dialog open — not per page), when auditing a live page, or when adding an adversarial-pair spec to prove the detector is live. Not for specs whose oracle does not declare it — an axe scan with no oracle item is an orphan assert. Catches ~30-40% of WCAG violations by success-criterion count, ~57% by issue volume; the rest needs a human.
+description: Compile an `a11y_violations_below` oracle into a settled, full-page @axe-core/playwright WCAG scan, or run the a11y half of a `/qa-warden:review url=` live-page audit. Use when a spec's oracle declares that key or when auditing a live page. Not for specs whose oracle does not declare it — the scan would be an orphan assert.
 user-invocable: false
 disable-model-invocation: false
 ---
