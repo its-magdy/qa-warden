@@ -82,6 +82,9 @@ contradicts, left behind when behaviour moved between agents. 33 fixes, prose on
   `test-data-seed`, `visual-regression`, `knowledge-map`, `sentinel-actions`, `report-template`
   and the `basis.md` template. `CLAUDE.md` belongs to the project, so existing projects keep the
   old wording until they edit it; the `basis.md` template reaches them via `--resync`.
+- `CLAUDE.md`'s locator priority no longer calls itself "Playwright's own recommendation".
+  Playwright's docs only put role locators first and test ids last; label/placeholder before
+  text for form fields is Testing Library's documented priority. The order is unchanged.
 
 ### First observed end-to-end run of 0.4.0 (run-01, 2026-09-26) — one dead script, two platform traps, twenty prose gaps
 
