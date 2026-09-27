@@ -65,7 +65,12 @@ fp=$(printf '%s' "$input"  | jq -r '.tool_input.file_path // empty' 2>/dev/null)
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)
 abs=$(hook_abs_path "$fp" "$cwd") || exit 0
 
-case "$abs" in *.spec.ts) : ;; *) exit 0 ;; esac
+# Two file kinds carry the contract. The spec holds the expect(...) calls; the generator's
+# `tests/<area>/<feature>.oracle.ts` (generator.md F-33) holds the expected VALUES those calls
+# import: an expected total, an exact error string. Guarding only the spec left the cheapest
+# weakening open: retype `EXPECTED_TOTAL` in the oracle module and every expect that imports it
+# goes green with no assertion line touched.
+case "$abs" in *.spec.ts|*.oracle.ts) : ;; *) exit 0 ;; esac
 case "$abs" in */tests/*) : ;; *) exit 0 ;; esac
 hook_qa_root "$abs" >/dev/null || exit 0
 
@@ -147,7 +152,30 @@ assertions() {
     }' | LC_ALL=C sort
 }
 
-if [ "$agent" = "verifier" ]; then
+# The oracle module has no expect(...) to normalise: every line of it IS contract. So the reading
+# is every code line, comments dropped and whitespace squeezed, and the same SUBSET test applies:
+# a line may be added (the verifier exporting a constant a twin needs) but never removed or
+# rewritten. Neither agent's job ever changes one - the healer re-points locators, which live in
+# the spec and the page objects, and the verifier imports these constants, never retypes them.
+oracle_lines() {
+  awk '{ s = $0; sub(/^[ \t]+/, "", s)
+         if (s ~ /^(\/\/|\*|\/\*)/) next
+         if (match(s, /[^:]\/\/.*$/)) s = substr(s, 1, RSTART)
+         gsub(/[ \t]+$/, "", s); gsub(/[ \t]+/, " ", s)
+         if (s != "") print s }' | LC_ALL=C sort
+}
+
+if [ "${abs%.oracle.ts}" != "$abs" ]; then
+  lost=$(comm -23 <(printf '%s\n' "$before" | oracle_lines) <(printf '%s\n' "$after" | oracle_lines))
+  rule="${abs##*/} is the spec's oracle module (agents/generator.md F-33): it pins the expected
+values the spec's assertions import. Changing or removing one changes what every test that
+imports it proves, without touching a single expect(...) line. That is the canonical
+silent-false-pass, and neither the healer nor the verifier may do it.
+
+If the expected value is now wrong, this is a contract-change or a product bug, never a heal:
+classify it, file bugs/<slug>.md, leave the test red, and kick the oracle back to the planner.
+Adding a new export (a constant a twin needs) stays allowed."
+elif [ "$agent" = "verifier" ]; then
   lost=$(comm -23 <(printf '%s\n' "$before" | assertions 0) <(printf '%s\n' "$after" | assertions 0))
   rule="Hard rule 1 in agents/verifier.md — you may NOT edit any expect(...), locator, matcher or
 asserted value in the parent spec. You did not choose them, and the whole reason you exist as an

@@ -37,6 +37,15 @@ the `bin/qa-*` scripts and the `qa-toolkit` marketplace name all stay as they we
 
 ## [Unreleased]
 
+### The assertion hook also guards the oracle module (found building the demo, 2026-09-27)
+
+- `hooks/assertion-contract.sh` now covers `tests/<area>/<feature>.oracle.ts`, where the
+  generator keeps expected totals and exact strings (F-33). Before, it checked only `*.spec.ts`,
+  so a healer or verifier that retyped `EXPECTED_TOTAL` turned every importing test green without
+  touching an `expect(...)` line, and nothing denied it. Any removed or rewritten code line in the
+  module is now denied for those two agents; adding an export and editing comments stay allowed.
+  `bin/qa-hooktest` has 10 new cases.
+
 Thirteen working sessions closing the 2026-09-06 audit (all four blocks). Four structural
 changes a consumer cannot infer from a file diff, three deliberate decisions to change
 nothing, and a large body of correctness work.

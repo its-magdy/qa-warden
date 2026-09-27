@@ -75,6 +75,24 @@ run assertion-contract.sh allow "healer re-points the LOCATOR only"  "$(edit hea
 run assertion-contract.sh allow "generator is out of scope"          "$(edit generator tests/auth/login.spec.ts "$OLD" "await expect(page.getByRole('alert')).toHaveText('Something else');")"
 run assertion-contract.sh allow "no agent_type (main session/human)" "$(edit "" tests/auth/login.spec.ts "$OLD" "await expect(page.getByRole('alert')).toHaveText('Something else');")"
 
+echo "assertion-contract.sh — the oracle module (tests/<area>/<feature>.oracle.ts, F-33)"
+ORA="export const EXPECTED_TOTAL = '\$52.00';"
+run assertion-contract.sh deny  "healer retypes an expected total"       "$(edit healer tests/auth/login.oracle.ts "$ORA" "export const EXPECTED_TOTAL = '\$53.00';")"
+run assertion-contract.sh deny  "verifier retypes an expected total"     "$(edit verifier tests/auth/login.oracle.ts "$ORA" "export const EXPECTED_TOTAL = '\$53.00';")"
+run assertion-contract.sh deny  "healer deletes an oracle constant"      "$(edit healer tests/auth/login.oracle.ts "$ORA" "")"
+run assertion-contract.sh deny  "healer edits a bare value fragment"     "$(edit healer tests/auth/login.oracle.ts "52.00" "53.00")"
+printf '%s\n' "// pinned by the generator" "$ORA" > "$P/tests/auth/login.oracle.ts"
+run assertion-contract.sh deny  "healer Write-overwrites the module"     "$(jq -nc --arg p "$P/tests/auth/login.oracle.ts" --arg d "$P" --arg c "export const EXPECTED_TOTAL = '\$53.00';" \
+  '{hook_event_name:"PreToolUse",tool_name:"Write",agent_type:"healer",cwd:$d,tool_input:{file_path:$p,content:$c}}')"
+run assertion-contract.sh allow "verifier adds an export a twin needs"   "$(edit verifier tests/auth/login.oracle.ts "$ORA" "$ORA
+export const REFUSAL = 'Payment failed';")"
+run assertion-contract.sh allow "healer changes only a comment"          "$(edit healer tests/auth/login.oracle.ts "// total for 2 seats
+$ORA" "// total for two seats
+$ORA")"
+run assertion-contract.sh allow "generator is out of scope"              "$(edit generator tests/auth/login.oracle.ts "$ORA" "export const EXPECTED_TOTAL = '\$53.00';")"
+run assertion-contract.sh allow "no agent_type (main session/human)"     "$(edit "" tests/auth/login.oracle.ts "$ORA" "export const EXPECTED_TOTAL = '\$53.00';")"
+run assertion-contract.sh allow "other non-spec helper is out of scope"  "$(edit healer tests/auth/helpers.ts "$ORA" "export const EXPECTED_TOTAL = '\$53.00';")"
+
 echo "escape hatch"
 out=$(printf '%s' "$(write tests/a.spec.ts "await page.waitForTimeout(500);")" | QA_HOOKS_OFF=1 CLAUDE_PROJECT_DIR="$P" bash "$HK/spec-lint.sh" 2>/dev/null)
 if [ -z "$out" ]; then pass=$((pass+1)); echo "  ok    allow QA_HOOKS_OFF=1 disables the layer"; else bad=$((bad+1)); echo "  FAIL  QA_HOOKS_OFF=1 did not disable spec-lint"; fi
