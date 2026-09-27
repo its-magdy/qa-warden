@@ -37,6 +37,15 @@ the `bin/qa-*` scripts and the `qa-toolkit` marketplace name all stay as they we
 
 ## [Unreleased]
 
+### A documented defect stays red: no `test.fail` marker (found in the demo run, 2026-09-27)
+
+- `agents/healer.md` step 0 and its `must_fail_when` bucket now forbid `test.fail` alongside
+  `test.fixme`/`test.skip`. Before, they named only the last two, so in the demo run four of five
+  heals of a defect the spec already listed took the product-bug bucket's conditional `test.fail`
+  and turned the nightly red into an "expected failure". That bucket is for undocumented defects.
+- `skills/heal/SKILL.md` step 6 says which marker applies: a documented defect stays red (any
+  marker the healer added is reverted); only an undocumented product bug is parked.
+
 ### The assertion hook also guards the oracle module (found building the demo, 2026-09-27)
 
 - `hooks/assertion-contract.sh` now covers `tests/<area>/<feature>.oracle.ts`, where the

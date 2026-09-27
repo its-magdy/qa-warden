@@ -57,6 +57,12 @@ The healer must:
 6. **If the root cause is a product defect, file
    `bugs/<YYYY-MM-DD>-<slug>.md`** (CLAUDE.md §Bug-report schema) and revert
    any patch attempt. Do not mutate the test to make the bug disappear.
+   **Which marker, if any:** when the failing scenario's spec documents the defect
+   (`must_fail_when:`/`fail_if:`/`prompt_guardrail:`, the expected-failure bucket), the test
+   stays **red**: revert any `test.fail`/`test.fixme`/`test.skip` the healer added, even a
+   conditional one. Only an **undocumented** product bug (the product-bug bucket) may be parked
+   with the conditional `test.fail(<observed> === <buggyValue>, 'bugs/…')` that `healer.md`
+   prescribes.
 7. Re-run: `npx playwright test <spec> --retries=0 --reporter=line`. Green → write
    the diff as a PR comment. (`--reporter=line` is load-bearing: in CI, or with an inherited
    `QA_RUN_OF_RECORD=1`, a bare re-run fires the config's gated `json` reporter and
