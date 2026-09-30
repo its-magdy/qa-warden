@@ -315,7 +315,7 @@ Why it matters: a 2026 study of autonomous test repair documented "assertion wea
 | Learn (first time) | [Tutorial: your first test](qa-warden/reference/tutorial-first-test.md) · [Reviewing AI-written tests without reading code](qa-warden/reference/reviewing-without-code.md) |
 | Do a specific task | [How-to recipes](qa-warden/reference/how-to.md): import manual cases, fix a failing test, brownfield adoption, nightly CI |
 | Look up a fact | [`DOCUMENTATION.md`](DOCUMENTATION.md) (full reference) · [Glossary](qa-warden/reference/glossary.md) |
-| Understand the why | [`DESIGN.md`](qa-warden/reference/DESIGN.md) · [`MERGE-NOTES.md`](MERGE-NOTES.md) (design lineage) |
+| Understand the why | [`DESIGN.md`](qa-warden/reference/DESIGN.md) · [`docs/MERGE-NOTES.md`](docs/MERGE-NOTES.md) (design lineage) |
 | What changed | [`qa-warden/CHANGELOG.md`](qa-warden/CHANGELOG.md) |
 
 ---

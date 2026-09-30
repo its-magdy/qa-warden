@@ -889,7 +889,7 @@ stable row ids exist (`/qa-warden:approve` mints them).
 qa-warden/
 ├── README.md                       # how the plugin is packaged & installed (marketplace-level)
 ├── DOCUMENTATION.md                # ← this file (the CANONICAL reference)
-├── MERGE-NOTES.md                  # design lineage (Test-Browser oracle-defense + POM reuse merge)
+├── docs/MERGE-NOTES.md             # design lineage (Test-Browser oracle-defense + POM reuse merge)
 ├── .claude-plugin/
 │   └── marketplace.json            # the catalog (lists the QA Warden plugin)
 └── qa-warden/                      # THE PLUGIN
