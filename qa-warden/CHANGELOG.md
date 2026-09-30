@@ -7,13 +7,33 @@ the repository since then as **`0.3.0`**: a feature release on the published `0.
 line, with no breaking change to the spec format or the `/qa:*` surface. **`0.4.0`** adds only
 the rename on top of it, and that one IS breaking (see its section). **`0.4.1`** is
 documentation fixes only; **`0.5.0`** fixes what a fresh-install test and a re-check of the
-2026-09-26 end-to-end run found; **`0.5.1`** is a one-line wording fix on top.
-`.claude-plugin/plugin.json` reads `0.5.1`; tag the build with `claude plugin tag ./qa-warden`.
+2026-09-26 end-to-end run found; **`0.5.1`** is a one-line wording fix on top, and **`0.5.2`** fixes what a full end-to-end run
+of the README walkthrough found.
+`.claude-plugin/plugin.json` reads `0.5.2`; tag the build with `claude plugin tag ./qa-warden`.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/). Versions are the
 number in `plugin.json`, which is also the key the installer caches under
 (`~/.claude/plugins/cache/<marketplace>/qa-warden/<version>/`) — so **two different builds must
 never carry the same number**, or the second one has no way to announce itself.
+
+---
+
+## 0.5.2 — fixes from a full run of the demo walkthrough (2026-09-30)
+
+A headless run of the README walkthrough against Playwright's TodoMVC demo passed end to end
+(explore drafted `auth_mode: none`, gen wrote no login setup, the verifier caught all 5 injected
+defects, `SMOKE: PASS (1/1)`) for about $6 and 40 minutes. It surfaced these:
+
+- **Confirming the explore draft** now says what it takes: delete `draft:` and the `> REVIEW:`
+  banner, resolve `# REVIEW:` notes, set `last_verified:` to today. Deleting only `draft:` left
+  `/qa-warden:review` warning that the context was unconfirmed while doctor said healthy.
+- **`/qa-warden:doctor`** runs its script as one command; the `if …; fi` wrapper it used matched
+  no allow rule and was denied headless.
+- **Headless `--add-dir`**: `/qa-warden:gen` belongs on the list too (its verifier reads
+  `verify-invariants.md` from the plugin). The nightly CI example's opt-in heal step now says the
+  runner needs the plugin installed plus `--add-dir` and `--settings` (`--resync` to pick it up).
+- README: the "Try it in 5 minutes" section is now "Try it on a demo app", with the measured
+  time and cost; the reviewer-eval cost figure is updated.
 
 ---
 

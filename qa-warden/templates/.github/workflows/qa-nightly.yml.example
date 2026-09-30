@@ -61,6 +61,9 @@ jobs:
       # Optional AI triage in CI (OFF by default — nightly stays $0 LLM). Requires an
       # ANTHROPIC_API_KEY secret; uses the same entrypoint as skills/review/SKILL.md's CI snippet
       # (anthropics/claude-code-action@v1, or the CLI: npm i -g @anthropic-ai/claude-code && claude -p).
+      # The runner needs the plugin installed (qa-review.yml.example shows plugin_marketplaces/plugins),
+      # and heal reads the plugin's reference/sentinel-actions.md, so a CLI run also needs
+      # --add-dir <plugin install path> and --settings .claude/settings.json (README §Running headless or in CI).
       # - name: AI heal (opt-in)
       #   if: failure()
       #   env: { ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} }

@@ -21,17 +21,11 @@ The entire deterministic check suite (checks 0–21 + rollup) lives in
 `scripts/doctor.sh`, stamped into the project by `/qa-warden:init`. Run it — do not
 re-derive the checks inline:
 
+Run this ONE command, as its own Bash call (an `if …; fi` wrapper matches no allow rule and is
+denied headless). If it fails with "No such file" for `scripts/doctor.sh`, the script is missing:
+see the two cases below (Glob for `playwright.config.ts` / `package.json` to tell them apart).
+
 ```bash
-if [ ! -f scripts/doctor.sh ]; then
-  if [ ! -f playwright.config.ts ] && [ ! -f package.json ]; then
-    # never scaffolded — no substrate at all → plain /qa-warden:init (NOT --resync, which repairs a STALE substrate)
-    echo "scripts/doctor.sh missing and no playwright.config.ts/package.json — this project was never scaffolded; run /qa-warden:init to stamp the runtime substrate (never silently pass)"
-  else
-    # scaffolded before doctor.sh shipped — substrate present but stale → repair with --resync
-    echo "scripts/doctor.sh missing but a substrate exists — it predates doctor.sh; re-run /qa-warden:init --resync to stamp it (never silently pass)"
-  fi
-  exit 2
-fi
 # Pass CLAUDE_PLUGIN_ROOT EXPLICITLY. Per the plugins reference, the three path placeholders are
 # exported as environment variables only "to hook processes and to MCP and LSP server subprocesses"
 # — NOT to the Bash tool — but they ARE substituted inline in "skill and agent content, anywhere the

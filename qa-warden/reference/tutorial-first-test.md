@@ -66,7 +66,8 @@ Check it worked: run `/qa-warden:doctor` — a healthy setup prints a short summ
 The exploration agent opens your app in a real browser and writes a short **[context](glossary.md)**
 file (`specs/_context/app.context.md`) describing what it found — the sites, how login works,
 the naming. The **first** run writes it as a `draft:` — open that file, fix anything wrong, and
-remove the `draft:` line to confirm it.
+confirm it: delete the `draft:` line and the `> REVIEW:` banner, resolve any `# REVIEW:` notes,
+and set `last_verified:` to today's date.
 
 > You're teaching the AI the lay of the land once. **Heads-up:** the first time you run
 > `/qa-warden:new-spec` for a new area (next step), it will *also* do a one-time deeper exploration of

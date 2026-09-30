@@ -17,7 +17,7 @@ QA Warden is a Claude Code plugin that turns a Markdown spec into a Playwright `
   - [Uninstall](#uninstall)
 - [Configuration](#configuration)
 - [Usage](#usage)
-  - [Try it in 5 minutes](#try-it-in-5-minutes)
+  - [Try it on a demo app](#try-it-on-a-demo-app)
 - [Troubleshooting](#troubleshooting)
   - [Running headless or in CI](#running-headless-or-in-ci)
 - [Commands reference](#commands-reference)
@@ -110,7 +110,7 @@ A healthy project prints a summary with no ❌ blockers. While `BASE_URL_APP` is
 
 ## Usage
 
-### Try it in 5 minutes
+### Try it on a demo app
 
 This walkthrough targets Playwright's public TodoMVC demo, so you need no app of your own and no account. In a new, empty folder, install the plugin as in [Installation](#installation), then:
 
@@ -135,7 +135,7 @@ Keep the trailing slash. Without it, the app's relative `goto('./')` lands on a 
 /qa-warden:run mode=smoke
 ```
 
-- After `/qa-warden:explore`, open `specs/_context/app.context.md`, check it, and delete the `draft:` line to confirm it.
+- After `/qa-warden:explore`, open `specs/_context/app.context.md` and check it. To confirm it: delete the `draft:` line and the `> REVIEW:` banner, resolve any `# REVIEW:` notes, and set `last_verified:` to today's date.
 - `/qa-warden:new-spec` runs the area explore itself if it needs one.
 - The oracle should look something like this. The demo's rows carry `data-testid="todo-item"`, and a test id is justified here because the `listitem` role also matches the filter links:
 
@@ -145,7 +145,7 @@ oracle:
   count_equals: { locator: "getByTestId('todo-item')", n: 2 }
 ```
 
-The demo is public and shared, so it may change or be down. The walkthrough makes real model calls: the authoring pass (`explore` through `gen`) is the expensive part, while `/qa-warden:run` has no LLM cost.
+The demo is public and shared, so it may change or be down. The walkthrough makes real model calls: the authoring pass (`explore` through `review`) is the expensive part, while `/qa-warden:run` has no LLM cost. A measured run of exactly these steps (0.5.1, 2026-09-30) took about 40 minutes and about $6, half of it in `gen`, which also has an independent verifier break the app on purpose to prove the test can fail.
 
 ### Fast lane: your first test
 
@@ -157,7 +157,7 @@ The demo is public and shared, so it may change or be down. The walkthrough make
 /qa-warden:run mode=smoke            # run the @smoke suite (no LLM)
 ```
 
-- The first `/qa-warden:explore` writes `app.context.md` as a **draft**. Open it, correct it, and delete the `draft:` line to confirm it.
+- The first `/qa-warden:explore` writes `app.context.md` as a **draft**. Open it and correct it. To confirm it: delete the `draft:` line and the `> REVIEW:` banner, resolve any `# REVIEW:` notes, and set `last_verified:` to today's date. Until then `/qa-warden:review` warns that the context is unconfirmed.
 - The spec is the only file you review. Here is the oracle `/qa-warden:new-spec` produces:
 
 ```yaml
@@ -241,7 +241,7 @@ If product copy changed, the healer does not absorb it. It routes the question (
 ### Running headless or in CI
 
 - **`claude -p` ignores the project's permission rules in a folder that was never opened interactively.** It logs "Ignoring N permissions.allow entries" because the folder has not been trusted. Pass `--settings .claude/settings.json`: the warning still prints (it is about the project's own copy), but the rules passed with `--settings` apply. Or open the folder once in interactive Claude Code and trust it.
-- **Some skills read reference files inside the plugin:** `/qa-warden:report` (its template), `/qa-warden:help` (its knowledge map), `/qa-warden:heal` and `/qa-warden:batch-fix` (the sentinel actions), and `/qa-warden:doctor --verify-invariants`. Interactively, Claude Code asks once to allow the read. Headless, pass the plugin directory with `--add-dir`. The installed copy is under `~/.claude/plugins/cache/qa-warden/qa-warden/<version>/`; the `installPath` in `~/.claude/plugins/installed_plugins.json` names the exact directory. A skill cannot pre-approve that read.
+- **Some skills read reference files inside the plugin:** `/qa-warden:report` (its template), `/qa-warden:help` (its knowledge map), `/qa-warden:heal` and `/qa-warden:batch-fix` (the sentinel actions), `/qa-warden:doctor --verify-invariants`, and `/qa-warden:gen` (its verifier reads `verify-invariants.md` to break the app on purpose). Interactively, Claude Code asks once to allow the read. Headless, pass the plugin directory with `--add-dir`. The installed copy is under `~/.claude/plugins/cache/qa-warden/qa-warden/<version>/`; the `installPath` in `~/.claude/plugins/installed_plugins.json` names the exact directory. A skill cannot pre-approve that read.
 - The agents resolve target URLs with `bash scripts/prod-guard.sh --list-targets` and pass them literally, so they need no chained `.env`-loading command, which a headless run would deny.
 
 ---
@@ -360,7 +360,7 @@ qa-selfcheck: ✅ plugin is self-consistent — all 8 checks passed
 qa-hooktest: ✅ all 34 cases passed
 ```
 
-When you change `qa-warden/agents/reviewer.md`, also run the behavioural evals. They make real model calls (about $1.6 and 6 minutes per case), so run them per change, not per commit. Details are in [`qa-warden/evals/README.md`](qa-warden/evals/README.md).
+When you change `qa-warden/agents/reviewer.md`, also run the behavioural evals. They make real model calls (on 2026-09-30, about $0.4 and 2 minutes per case; all five cost $1.97), so run them per change, not per commit. Details are in [`qa-warden/evals/README.md`](qa-warden/evals/README.md).
 
 ```bash
 cd qa-warden && claude plugin eval . --tag reviewer --runs 1 --ablation none --scaffold --trust-plugin --no-publish
@@ -374,7 +374,7 @@ claude --plugin-dir ./qa-warden
 
 ### Versioning and releasing
 
-The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.5.1`. Users receive an update only when that string changes.
+The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.5.2`. Users receive an update only when that string changes.
 
 > **Bump `version` in the same commit as every user-visible change.** If you push without a bump, nothing ships, and `/plugin update` tells users they are already current. No error warns you.
 
