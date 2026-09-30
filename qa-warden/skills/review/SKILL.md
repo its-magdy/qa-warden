@@ -84,7 +84,7 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           plugin_marketplaces: "https://github.com/<your-org>/<marketplace-repo>.git"
-          plugins: "qa-warden@qa-toolkit"
+          plugins: "qa-warden@qa-warden"
           prompt: "Use the reviewer subagent to review the PR diff and its imported page objects. Fail the job on any reviewer FAIL, and also fail the job if the reviewer's report contains no explicit verdict line (a report cut off before a verdict is written is not a PASS)."
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```

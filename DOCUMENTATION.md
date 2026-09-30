@@ -1,9 +1,9 @@
-# QA-Toolkit — Full Documentation
+# QA Warden — Full Documentation
 
 > A complete reference for **humans and AI agents** working with **QA Warden** (the `qa-warden` plugin).
 > Read this to understand *what the plugin is*, *how its pieces fit together*, and
 > *how to use it end-to-end*. For the design rationale (the *why*) see
-> [`qa/reference/DESIGN.md`](qa/reference/DESIGN.md); for a live, project-aware
+> [`qa-warden/reference/DESIGN.md`](qa-warden/reference/DESIGN.md); for a live, project-aware
 > "what do I do next" answer run **`/qa-warden:help`**.
 >
 > **This file is canonical.** There is no second, prettier copy to keep in step: the
@@ -12,23 +12,23 @@
 > or Playwright 1.63.0) with no generator to replay it. Docs land here.
 >
 > **New here? Don't start with this file — it's the reference.** Do the
-> [**tutorial**](qa/reference/tutorial-first-test.md) (author one test end to end), keep the
-> [**glossary**](qa/reference/glossary.md) open, and for a specific goal use a how-to recipe
-> (e.g. [import your existing manual cases](qa/reference/how-to-import-manual-cases.md)). If
+> [**tutorial**](qa-warden/reference/tutorial-first-test.md) (author one test end to end), keep the
+> [**glossary**](qa-warden/reference/glossary.md) open, and for a specific goal use a how-to recipe
+> (e.g. [import your existing manual cases](qa-warden/reference/how-to-import-manual-cases.md)). If
 > you sign off on tests but don't read code, see
-> [**reviewing without code**](qa/reference/reviewing-without-code.md). Come back *here* once
+> [**reviewing without code**](qa-warden/reference/reviewing-without-code.md). Come back *here* once
 > you know the shape and need to look something up. (Goal-oriented recipes live in
-> [`qa/reference/how-to.md`](qa/reference/how-to.md).)
+> [`qa-warden/reference/how-to.md`](qa-warden/reference/how-to.md).)
 
 ---
 
 ## Table of contents
 
 **Reading guide — this file is the *reference*.** New here? Start with the
-[tutorial](qa/reference/tutorial-first-test.md), not this file. Within, sections group by need:
+[tutorial](qa-warden/reference/tutorial-first-test.md), not this file. Within, sections group by need:
 **Concepts (the *why*)** — §2, §4, §11–14, §18 · **Reference (facts to look up)** — §7–10, §16–17,
 §19 · **Recipes & setup (tasks)** — §5–6, §15–16.1 (goal-titled recipes also in
-[how-to.md](qa/reference/how-to.md)).
+[how-to.md](qa-warden/reference/how-to.md)).
 
 1. [What this is (in one paragraph)](#1-what-this-is-in-one-paragraph)
 2. [The core idea: AI authors, Playwright replays, AI triages on failure](#2-the-core-idea)
@@ -59,7 +59,7 @@
 
 ## 1. What this is (in one paragraph)
 
-**QA-Toolkit** is a private Claude Code **marketplace** that hosts a single plugin,
+This repo (`qa-warden`) is a Claude Code **marketplace** that hosts a single plugin,
 **QA Warden** (plugin id `qa-warden`). QA Warden turns plain-language feature descriptions into a
 deterministic **Playwright** end-to-end (E2E) test suite. An AI (Claude, via a set of
 specialized subagents) *authors* the specs and compiles them into runnable
@@ -130,7 +130,7 @@ a human for the long tail. See [Honest limits](#18-honest-limits).
 ### 4.1 Two layers: the marketplace and the plugin
 
 ```
-QA-Toolkit/                          ← the MARKETPLACE (a git repo)
+qa-warden/                          ← the MARKETPLACE (a git repo)
 ├── .claude-plugin/marketplace.json  ← the catalog — lists the "qa-warden" plugin
 └── qa/                              ← the PLUGIN
     ├── .claude-plugin/plugin.json   ← the plugin manifest
@@ -202,11 +202,11 @@ generating untracked files its own output tells you to review.
 ## 5. Install & quickstart
 
 ```bash
-# 1. Register this marketplace (private git — SSH or HTTPS both work)
-/plugin marketplace add git@your-host:org/qa-toolkit.git
+# 1. Register this marketplace (this GitHub repo)
+/plugin marketplace add its-magdy/qa-warden
 
 # 2. Install the plugin at project scope
-/plugin install qa-warden@qa-toolkit --scope project
+/plugin install qa-warden@qa-warden --scope project
 
 # 3. Stamp the runtime substrate into THIS project + install deps
 /qa-warden:init
@@ -233,9 +233,9 @@ anything is generated. **Right-sizing:** the fast lane skips no FAIL-level gate
 
 Running the suite = `npx playwright test` — plain Playwright, zero LLM.
 
-**Local plugin development** (no marketplace): `claude --plugin-dir ./qa`, then
+**Local plugin development** (no marketplace): `claude --plugin-dir ./qa-warden`, then
 `/reload-plugins` after edits. **Validate before pushing:**
-`claude plugin validate --strict ./qa` (passes clean in versioned mode — verified; the
+`claude plugin validate --strict ./qa-warden` (passes clean in versioned mode — verified; the
 former "drop `--strict`" advice applied only while `version` was omitted).
 
 > **Versioning note.** The plugin ships in **versioned mode** — `plugin.json` carries an
@@ -341,7 +341,7 @@ suite) is the common case. The playbook:
 All commands are namespaced `/qa-warden:`. "Delegates to" names the subagent or skill that
 does the work; "—" means it runs inline in the main session.
 
-Every one of these is a **skill** at `qa/skills/<name>/SKILL.md` — upstream merged custom
+Every one of these is a **skill** at `qa-warden/skills/<name>/SKILL.md` — upstream merged custom
 slash commands into skills, and this plugin uses the skill layout exclusively (a `commands/`
 directory reappearing fails the toolkit's own `bin/qa-selfcheck`, Check 9d). You type them exactly as before;
 nothing about the `/qa-warden:` names changed.
@@ -622,7 +622,7 @@ Every defense below answers *that* problem:
   **verifier** any edit that removes or rewrites an existing assertion. A check earns a
   hook only if it is decidable from the proposed text alone; everything needing repository
   state or judgment stays with the reviewer, which is most of it. **Keep it on a capable
-  model.** See `qa/hooks/README.md`.
+  model.** See `qa-warden/hooks/README.md`.
 
 ---
 
@@ -862,7 +862,7 @@ stable row ids exist (`/qa-warden:approve` mints them).
 ## 17. Repository map
 
 ```
-QA-Toolkit/
+qa-warden/
 ├── README.md                       # how the plugin is packaged & installed (marketplace-level)
 ├── DOCUMENTATION.md                # ← this file (the CANONICAL reference)
 ├── MERGE-NOTES.md                  # design lineage (Test-Browser oracle-defense + POM reuse merge)
@@ -917,7 +917,7 @@ make the toolkit sound more complete than it is:
   ([§11](#11-the-oracle-defenses)), but a hook sees one tool call's input — no paired spec,
   no `bugs/` tree, no diff, no test run — so only checks decidable from the proposed text
   alone are enforced at write time. Three more were examined and deliberately left with the
-  reviewer (see `qa/hooks/README.md` §"What is NOT hooked"). The reviewer remains the
+  reviewer (see `qa-warden/hooks/README.md` §"What is NOT hooked"). The reviewer remains the
   backstop, by discipline.
 - **No request-side oracle, and HAR replay is refused.** Specs can stub a dependency
   (`fault:`) and control time (`clock:`), and the vocabulary asserts what the server
@@ -952,7 +952,7 @@ of "correct" (the assertions) · **smoke** — the `@smoke`-tagged fast gate
 > compiled artifact under `tests/` is always *the test* — even though Playwright
 > names its files `.spec.ts`.
 
-**The complete, canonical glossary is [`qa/reference/glossary.md`](qa/reference/glossary.md)** —
+**The complete, canonical glossary is [`qa-warden/reference/glossary.md`](qa-warden/reference/glossary.md)** —
 every term defined once (the single source of truth, so definitions can't drift between two
 copies). It covers all of the above plus `assertion contract`, `closed vocabulary`,
 `green-but-empty/-wrong`, `metamorphic twin`, `must_fail_when`, `route manifest`, `sentinel`,
@@ -974,7 +974,7 @@ Every operational fact has exactly one authoritative home — do **not** duplica
 | Subagent roster (models, tools) | `templates/CLAUDE.md` §"Subagent roster" + `agents/**` |
 | Prod-guard / env-loading / writable-path policy | `templates/CLAUDE.md` (policy) + `templates/scripts/prod-guard.{sh,ts}` (implementation — regexes must stay in lockstep) |
 | Ideation mechanics (lenses, per-kind processes) | `skills/intake/SKILL.md` + `agents/ideation.md` + `templates/specs/_context/_templates/**` |
-| The design rationale (the *why*) | `qa/reference/DESIGN.md` |
+| The design rationale (the *why*) | `qa-warden/reference/DESIGN.md` |
 
 **Maintenance rule:** if you're about to document a *mechanic* (a key, a check, a
 command) in `DESIGN.md`, stop — it belongs in one of the homes above. `DESIGN.md` holds

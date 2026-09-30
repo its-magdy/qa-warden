@@ -6,7 +6,7 @@ The **last published build was `0.2.0` (2026-07-24)**. The `[Unreleased]` sectio
 the repository since then as **`0.3.0`**: a feature release on the published `0.1.0 → 0.2.0`
 line, with no breaking change to the spec format or the `/qa:*` surface. **`0.4.0`** adds only
 the rename on top of it, and that one IS breaking (see its section).
-`.claude-plugin/plugin.json` reads `0.4.0`; tag the build with `claude plugin tag ./qa`.
+`.claude-plugin/plugin.json` reads `0.4.0`; tag the build with `claude plugin tag ./qa-warden`.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/). Versions are the
 number in `plugin.json`, which is also the key the installer caches under
@@ -18,12 +18,14 @@ never carry the same number**, or the second one has no way to announce itself.
 ## 0.4.0 — renamed to QA Warden (2026-09-24)
 
 **BREAKING:** the plugin id is now `qa-warden`, so every command moves from `/qa:<cmd>` to
-`/qa-warden:<cmd>` and the install string from `qa@qa-toolkit` to `qa-warden@qa-toolkit`.
+`/qa-warden:<cmd>` and the install string from `qa@qa-toolkit` to `qa-warden@qa-warden`.
 Nothing else changes: the `QA_*` env vars, the `specs/` and `tests/` layout, the spec format,
-the `bin/qa-*` scripts and the `qa-toolkit` marketplace name all stay as they were.
+and the `bin/qa-*` scripts all stay as they were. The marketplace is renamed too, from `qa-toolkit`
+to `qa-warden`, and the plugin directory moves from `qa/` to `qa-warden/`.
 
 **Upgrading a project:**
-1. `/plugin uninstall qa@qa-toolkit`, then `/plugin install qa-warden@qa-toolkit --scope project`.
+1. `/plugin uninstall qa@qa-toolkit` and `/plugin marketplace remove qa-toolkit`, then
+   `/plugin marketplace add its-magdy/qa-warden` and `/plugin install qa-warden@qa-warden --scope project`.
    The old `qa@qa-toolkit` entry in `.claude/settings.json` `enabledPlugins` is now stale; remove it.
 2. `/qa-warden:init --resync`. Until you run it, `/qa-warden:doctor` reports substrate drift,
    because the resynced scripts mention the new command names.
@@ -331,7 +333,7 @@ only a real run shows. Existing projects pick all of it up with `/qa:init --resy
   or the `reviewer` subagent does not exist there. Deliberately NOT in `resync-set.txt` — an
   optional example must not raise a blocking substrate-drift ❌ on existing projects; a plain
   `/qa:init` stamps it.
-- **Docs:** `qa/README.md` leads with the four-command fast lane and gains a section on how the
+- **Docs:** `qa-warden/README.md` leads with the four-command fast lane and gains a section on how the
   healer differs from Playwright's official one (whose instructions list "Fixing assertions and
   expected values"). The catalog no longer claims `visual-regression` triggers during spec
   authoring — no oracle key requests a screenshot, so only `/qa:review url=` reaches it.
@@ -469,7 +471,7 @@ These are **verdicts, not omissions**. Each was worked as a full item and closed
 The hand-authored visual one-pager is deleted. It had no generator, sat a full release cycle out
 of date (no mention of the verifier split, `lock:`/`fault:`/`clock:` or Playwright 1.63.0), and
 two of the three pointers to it were already false — the repo README called it "a browser-viewable
-copy of the reference" when it was a different, smaller document, and `qa/README.md` shipped
+copy of the reference" when it was a different, smaller document, and `qa-warden/README.md` shipped
 *inside the plugin* pointing at a repo-root file consumers never receive. `DOCUMENTATION.md` is
 now stated to be canonical.
 

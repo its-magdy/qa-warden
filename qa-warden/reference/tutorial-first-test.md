@@ -25,7 +25,7 @@ human-readable test — and you'll have seen the plugin do the thing that makes 
 ## Before you start
 
 You need, once:
-- the plugin installed (`/plugin install qa-warden@qa-toolkit`),
+- the plugin installed (`/plugin install qa-warden@qa-warden`),
 - **your app running and reachable** on a **non-production** URL (localhost or staging),
 - a **test account** that already exists in that app (an email + password you can use).
 

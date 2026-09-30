@@ -1149,7 +1149,7 @@ umw_re='-f[[:space:]]*"artifacts/route-manifests/\$\{'
 # File list, not `grep -rl`: each candidate is filtered through `sed` first. `bin/` is listed
 # explicitly because qa-scaffold is EXTENSIONLESS (the §6 note) and a `*.sh` glob misses it.
 UMW_PLUG=$([ -n "$TMPL" ] && cd "$TMPL/.." 2>/dev/null && pwd)   # resolve, as Check 9j does, so a
-# reported path reads `qa/skills/...` and not `qa/templates/../skills/...`.
+# reported path reads `qa-warden/skills/...` and not `qa-warden/templates/../skills/...`.
 umw_files=$({ [ -n "$UMW_PLUG" ] && find "$UMW_PLUG" -name '*.sh' -type f 2>/dev/null
               [ -n "$UMW_PLUG" ] && [ -d "$UMW_PLUG/bin" ] && find "$UMW_PLUG/bin" -type f 2>/dev/null
               find scripts -name '*.sh' -type f 2>/dev/null

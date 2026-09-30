@@ -1,4 +1,4 @@
-# QA-Toolkit — Design rationale (the *why*)
+# QA Warden — Design rationale (the *why*)
 
 This is the small, durable "why" behind the QA Warden plugin. It deliberately does **not**
 restate operational facts — the oracle vocabulary, the reviewer's checks, the command

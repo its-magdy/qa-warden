@@ -2,7 +2,7 @@
 
 > **AI writes your E2E tests. No AI can quietly loosen them.**
 
-QA Warden is a test-authoring plugin, not a security or secrets tool: the party it guards against is the AI itself, when it would weaken an assertion to turn a red test green. (This repo, `qa-toolkit`, is its marketplace.)
+QA Warden is a test-authoring plugin, not a security or secrets tool: the party it guards against is the AI itself, when it would weaken an assertion to turn a red test green. (This repo is also its marketplace, also named `qa-warden`.)
 
 > AI writes your end-to-end tests from plain-language specs, Playwright replays them nightly with no LLM in the loop, and AI comes back only to triage a failure.
 
@@ -41,12 +41,12 @@ QA Warden is a Claude Code plugin that turns a Markdown spec into a Playwright `
 Run these inside Claude Code, from the project that will hold the tests:
 
 ```bash
-# 1. Register the marketplace (private git: SSH or HTTPS)
-/plugin marketplace add git@your-host:org/qa-toolkit.git
+# 1. Register the marketplace (this GitHub repo)
+/plugin marketplace add its-magdy/qa-warden
 
 # 2. Install at project scope. This records the plugin in .claude/settings.json,
 #    so teammates who clone and trust the repo are prompted to install it too.
-/plugin install qa-warden@qa-toolkit --scope project
+/plugin install qa-warden@qa-warden --scope project
 
 # 3. Stamp the runtime substrate into this project and install dependencies
 /qa-warden:init
@@ -114,7 +114,7 @@ oracle:
 
 - `/qa-warden:gen` also keeps a `.webm` video of the run. It shows the real flow the test drove, so you don't need to read the TypeScript.
 
-The step-by-step version, including what you should see at each step, is in the [first-test tutorial](qa/reference/tutorial-first-test.md).
+The step-by-step version, including what you should see at each step, is in the [first-test tutorial](qa-warden/reference/tutorial-first-test.md).
 
 ### Rigor lane: P1, money and compliance features
 
@@ -223,7 +223,7 @@ Playwright 1.56+ ships its own planner, generator and healer agents (`npx playwr
 | PR gate on spec↔test drift | No | The reviewer blocks the merge |
 | Nightly LLM cost | None | None |
 
-Why it matters: a 2026 study of autonomous test repair documented "assertion weakening and test-case deletion used as workaround mechanisms" ([arXiv:2605.01471](https://arxiv.org/abs/2605.01471)). The full comparison is in [`DESIGN.md`](qa/reference/DESIGN.md#how-we-differ-from--and-complement--official-playwright-test-agents).
+Why it matters: a 2026 study of autonomous test repair documented "assertion weakening and test-case deletion used as workaround mechanisms" ([arXiv:2605.01471](https://arxiv.org/abs/2605.01471)). The full comparison is in [`DESIGN.md`](qa-warden/reference/DESIGN.md#how-we-differ-from--and-complement--official-playwright-test-agents).
 
 ---
 
@@ -240,11 +240,11 @@ Why it matters: a 2026 study of autonomous test repair documented "assertion wea
 
 | Need | Read |
 |---|---|
-| Learn (first time) | [Tutorial: your first test](qa/reference/tutorial-first-test.md) · [Reviewing AI-written tests without reading code](qa/reference/reviewing-without-code.md) |
-| Do a specific task | [How-to recipes](qa/reference/how-to.md): import manual cases, fix a failing test, brownfield adoption, nightly CI |
-| Look up a fact | [`DOCUMENTATION.md`](DOCUMENTATION.md) (full reference) · [Glossary](qa/reference/glossary.md) |
-| Understand the why | [`DESIGN.md`](qa/reference/DESIGN.md) · [`MERGE-NOTES.md`](MERGE-NOTES.md) (design lineage) |
-| What changed | [`qa/CHANGELOG.md`](qa/CHANGELOG.md) |
+| Learn (first time) | [Tutorial: your first test](qa-warden/reference/tutorial-first-test.md) · [Reviewing AI-written tests without reading code](qa-warden/reference/reviewing-without-code.md) |
+| Do a specific task | [How-to recipes](qa-warden/reference/how-to.md): import manual cases, fix a failing test, brownfield adoption, nightly CI |
+| Look up a fact | [`DOCUMENTATION.md`](DOCUMENTATION.md) (full reference) · [Glossary](qa-warden/reference/glossary.md) |
+| Understand the why | [`DESIGN.md`](qa-warden/reference/DESIGN.md) · [`MERGE-NOTES.md`](MERGE-NOTES.md) (design lineage) |
+| What changed | [`qa-warden/CHANGELOG.md`](qa-warden/CHANGELOG.md) |
 
 ---
 
@@ -260,7 +260,7 @@ qa/                               the plugin
 ├── skills/     23 skills: the 19 /qa-warden:* commands + 4 model-only helpers
 │               (playwright-cli, axe-a11y, visual-regression, test-data-seed)
 ├── hooks/      2 PreToolUse gates: lexical reviewer FAILs, and the healer/verifier
-│               assertion prohibition (see qa/hooks/README.md)
+│               assertion prohibition (see qa-warden/hooks/README.md)
 ├── reference/  DESIGN.md, tutorial, how-to, glossary, ideation and sentinel references
 ├── templates/  the runtime substrate /qa-warden:init stamps into each project
 ├── bin/qa-scaffold    deterministic substrate installer (used by /qa-warden:init)
@@ -276,9 +276,9 @@ The plugin itself (agents, skills, hooks, `reference/`) updates automatically wi
 Run before every plugin commit:
 
 ```bash
-qa/bin/qa-selfcheck            # 7 consistency checks over agents/ skills/ hooks/ reference/
-qa/bin/qa-hooktest             # 20 real payloads through the two PreToolUse hooks
-claude plugin validate --strict ./qa   # mandatory after any frontmatter edit
+qa-warden/bin/qa-selfcheck            # 7 consistency checks over agents/ skills/ hooks/ reference/
+qa-warden/bin/qa-hooktest             # 20 real payloads through the two PreToolUse hooks
+claude plugin validate --strict ./qa-warden   # mandatory after any frontmatter edit
 ```
 
 Expected tail:
@@ -288,7 +288,7 @@ qa-selfcheck: ✅ plugin is self-consistent — all 7 checks passed
 qa-hooktest: ✅ all 22 cases passed
 ```
 
-When you change `qa/agents/reviewer.md`, also run the behavioural evals. They make real model calls (about $1.6 and 6 minutes per case), so run them per change, not per commit. Details are in [`qa/evals/README.md`](qa/evals/README.md).
+When you change `qa-warden/agents/reviewer.md`, also run the behavioural evals. They make real model calls (about $1.6 and 6 minutes per case), so run them per change, not per commit. Details are in [`qa-warden/evals/README.md`](qa-warden/evals/README.md).
 
 ```bash
 cd qa && claude plugin eval . --tag reviewer --runs 1 --ablation none --scaffold --trust-plugin --no-publish
@@ -297,26 +297,26 @@ cd qa && claude plugin eval . --tag reviewer --runs 1 --ablation none --scaffold
 Load the plugin locally without the marketplace (run `/reload-plugins` after edits):
 
 ```bash
-claude --plugin-dir ./qa
+claude --plugin-dir ./qa-warden
 ```
 
 ### Versioning and releasing
 
-The plugin ships in **versioned mode**: `qa/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.4.0`. Users receive an update only when that string changes.
+The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.4.0`. Users receive an update only when that string changes.
 
 > **Bump `version` in the same commit as every user-visible change.** If you push without a bump, nothing ships, and `/plugin update` tells users they are already current. No error warns you.
 
 To release:
 
-1. Bump `version` in `qa/.claude-plugin/plugin.json` and add an entry to `qa/CHANGELOG.md`.
-2. Run `claude plugin validate --strict ./qa`.
-3. Push, then tag with `claude plugin tag ./qa`.
+1. Bump `version` in `qa-warden/.claude-plugin/plugin.json` and add an entry to `qa-warden/CHANGELOG.md`.
+2. Run `claude plugin validate --strict ./qa-warden`.
+3. Push, then tag with `claude plugin tag ./qa-warden`.
 
 Consumers pick up the release with:
 
 ```bash
-/plugin marketplace update qa-toolkit
-/plugin update qa
+/plugin marketplace update qa-warden
+/plugin update qa-warden
 /reload-plugins
 ```
 

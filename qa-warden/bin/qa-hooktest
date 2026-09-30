@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # qa-hooktest — regression tests for the two PreToolUse hooks. Run from the toolkit repo:
 #
-#     qa/bin/qa-hooktest
+#     qa-warden/bin/qa-hooktest
 #
 # NOT shipped to consumers. The hooks are the only deterministic code in this plugin that can
 # BLOCK a write, and until this file they had no tests at all — each case below was first run

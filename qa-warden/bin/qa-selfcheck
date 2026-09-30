@@ -2,8 +2,8 @@
 # qa-selfcheck — the plugin's OWN consistency checks. Run it from the toolkit repo after any
 # change to agents/, skills/, hooks/ or reference/:
 #
-#     qa/bin/qa-selfcheck            # checks the plugin this script lives in
-#     qa/bin/qa-selfcheck <plugin>   # checks another build (e.g. a published cache dir)
+#     qa-warden/bin/qa-selfcheck            # checks the plugin this script lives in
+#     qa-warden/bin/qa-selfcheck <plugin>   # checks another build (e.g. a published cache dir)
 #
 # NOT stamped into consumer projects and NOT part of /qa-warden:doctor. These checks (seven of them at the move, plus 9k added 2026-09-26) used to live
 # in templates/scripts/doctor.sh (as 9b, 9bc, 9be, 9d, 9e, 9h, 9j) and ran inside every

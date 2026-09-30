@@ -39,9 +39,9 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # REPLACE with the Git URL of YOUR copy of the marketplace repo (see PREREQUISITE).
           plugin_marketplaces: |
-            https://github.com/<your-org>/<qa-toolkit-marketplace-repo>.git
+            https://github.com/its-magdy/qa-warden.git
           plugins: |
-            qa-warden@qa-toolkit
+            qa-warden@qa-warden
           prompt: >-
             Use the reviewer subagent to review the PR diff and its imported page objects.
             If no subagent named reviewer is available, fail the job and say the QA Warden plugin
