@@ -8,8 +8,8 @@ line, with no breaking change to the spec format or the `/qa:*` surface. **`0.4.
 the rename on top of it, and that one IS breaking (see its section). **`0.4.1`** is
 documentation fixes only; **`0.5.0`** fixes what a fresh-install test and a re-check of the
 2026-09-26 end-to-end run found; **`0.5.1`** is a one-line wording fix on top, **`0.5.2`** fixes what a full end-to-end run
-of the README walkthrough found, **`0.5.3`** fixes what a whole-plugin code review found, and **`0.5.4`** fixes what a
-security review found. `.claude-plugin/plugin.json` reads `0.5.4`; tag the build with `claude plugin tag ./qa-warden`.
+of the README walkthrough found, **`0.5.3`** fixes what a whole-plugin code review found, **`0.5.4`** fixes what a
+security review found, and **`0.5.5`** hardens one step of it. `.claude-plugin/plugin.json` reads `0.5.5`; tag the build with `claude plugin tag ./qa-warden`.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/). Versions are the
 number in `plugin.json`, which is also the key the installer caches under
@@ -17,6 +17,15 @@ number in `plugin.json`, which is also the key the installer caches under
 never carry the same number**, or the second one has no way to announce itself.
 
 ---
+
+## 0.5.5 — nightly visibility step hardened (2026-09-30)
+
+- **The nightly's repo-visibility step now writes exactly `private=true` or `private=false`.**
+  On an HTTP error, `gh api` prints the error JSON to stdout without applying `--jq`, so in
+  0.5.4 a failed lookup wrote that JSON as the value. The upload was still skipped (only
+  `'true'` passes the gate), so nothing leaked, but the value is no longer passed through.
+  Tested against a public repo, a private repo and a missing repo, and linted with actionlint.
+  Run `/qa-warden:init --resync` to pick it up; doctor reports the template drift.
 
 ## 0.5.4 — fixes from a whole-plugin security review (2026-09-30)
 

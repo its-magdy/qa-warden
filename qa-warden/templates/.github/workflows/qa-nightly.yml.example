@@ -55,16 +55,20 @@ jobs:
       # never inside artifacts, and anyone with read access can download an artifact — on a PUBLIC
       # repo that is everyone. Playwright's CI docs: upload reports and traces "only to trusted
       # artifact stores". So the upload runs only on a PRIVATE repo. A `schedule` run has no event
-      # payload (github.event.repository is unset), so ask the API; if the lookup fails, `private`
-      # stays empty and nothing is uploaded (fail closed).
+      # payload (github.event.repository is unset), so ask the API. Only an exact `true` counts:
+      # on an HTTP error `gh api` prints the error JSON to stdout WITHOUT applying --jq, so a
+      # failed lookup must map to `false` (fail closed), never be passed through.
       - name: Repo visibility (gates the artifact upload)
         id: visibility
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          private=$(gh api "repos/$GITHUB_REPOSITORY" --jq .private 2>/dev/null || true)
-          echo "private=$private" >> "$GITHUB_OUTPUT"
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private 2>/dev/null)" = true ]; then
+            echo "private=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "private=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() && steps.visibility.outputs.private == 'true' }}
         with:
