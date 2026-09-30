@@ -240,7 +240,7 @@ If product copy changed, the healer does not absorb it. It routes the question (
 
 ### Running headless or in CI
 
-- **`claude -p` ignores the project's permission rules in a folder that was never opened interactively.** It logs "Ignoring N permissions.allow entries" because the folder has not been trusted. Pass `--settings .claude/settings.json`, or open the folder once in interactive Claude Code and trust it.
+- **`claude -p` ignores the project's permission rules in a folder that was never opened interactively.** It logs "Ignoring N permissions.allow entries" because the folder has not been trusted. Pass `--settings .claude/settings.json`: the warning still prints (it is about the project's own copy), but the rules passed with `--settings` apply. Or open the folder once in interactive Claude Code and trust it.
 - **Some skills read reference files inside the plugin:** `/qa-warden:report` (its template), `/qa-warden:help` (its knowledge map), `/qa-warden:heal` and `/qa-warden:batch-fix` (the sentinel actions), and `/qa-warden:doctor --verify-invariants`. Interactively, Claude Code asks once to allow the read. Headless, pass the plugin directory with `--add-dir`. The installed copy is under `~/.claude/plugins/cache/qa-warden/qa-warden/<version>/`; the `installPath` in `~/.claude/plugins/installed_plugins.json` names the exact directory. A skill cannot pre-approve that read.
 - The agents resolve target URLs with `bash scripts/prod-guard.sh --list-targets` and pass them literally, so they need no chained `.env`-loading command, which a headless run would deny.
 
@@ -374,7 +374,7 @@ claude --plugin-dir ./qa-warden
 
 ### Versioning and releasing
 
-The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.5.0`. Users receive an update only when that string changes.
+The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.5.1`. Users receive an update only when that string changes.
 
 > **Bump `version` in the same commit as every user-visible change.** If you push without a bump, nothing ships, and `/plugin update` tells users they are already current. No error warns you.
 

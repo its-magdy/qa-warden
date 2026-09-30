@@ -7,13 +7,22 @@ the repository since then as **`0.3.0`**: a feature release on the published `0.
 line, with no breaking change to the spec format or the `/qa:*` surface. **`0.4.0`** adds only
 the rename on top of it, and that one IS breaking (see its section). **`0.4.1`** is
 documentation fixes only; **`0.5.0`** fixes what a fresh-install test and a re-check of the
-2026-09-26 end-to-end run found.
-`.claude-plugin/plugin.json` reads `0.5.0`; tag the build with `claude plugin tag ./qa-warden`.
+2026-09-26 end-to-end run found; **`0.5.1`** is a one-line wording fix on top.
+`.claude-plugin/plugin.json` reads `0.5.1`; tag the build with `claude plugin tag ./qa-warden`.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/). Versions are the
 number in `plugin.json`, which is also the key the installer caches under
 (`~/.claude/plugins/cache/<marketplace>/qa-warden/<version>/`) — so **two different builds must
 never carry the same number**, or the second one has no way to announce itself.
+
+---
+
+## 0.5.1 — fast lane first in the stamped CLAUDE.md (2026-09-30)
+
+The stamped `CLAUDE.md` called the rigor chain (`intake` → `ideate` → `new-spec` → `gen`) *the*
+authoring chain, so agents such as `/qa-warden:doctor` recommended it to newcomers. It now
+names the fast lane (`new-spec` → `gen`) first and the rigor lane as the P1 option. `--resync`
+does not rewrite `CLAUDE.md`; edit that line by hand in existing projects if you want it.
 
 ---
 
