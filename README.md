@@ -14,8 +14,10 @@ QA Warden is a Claude Code plugin that turns a Markdown spec into a Playwright `
 
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
+  - [Uninstall](#uninstall)
 - [Configuration](#configuration)
 - [Usage](#usage)
+- [Troubleshooting](#troubleshooting)
 - [Commands reference](#commands-reference)
 - [How it differs from Playwright's test agents](#how-it-differs-from-playwrights-test-agents)
 - [Scope and limits](#scope-and-limits)
@@ -52,22 +54,32 @@ Run these inside Claude Code, from the project that will hold the tests:
 /qa-warden:init
 ```
 
-`/qa-warden:init` writes `package.json` (with `@playwright/test` pinned to `1.63.0`), `playwright.config.ts`, `tsconfig.json`, `CLAUDE.md`, `.claude/settings.json` permission rules, `.mcp.json`, `scripts/`, `fixtures/`, `page-objects/` and `.env.example`. Then it runs `npm install` and installs the Playwright browsers.
+`/qa-warden:init` copies every file in the plugin's `templates/` into the project and skips any file that already exists: `package.json` (with `@playwright/test` pinned to `1.63.0`), `playwright.config.ts`, `tsconfig.json`, `CLAUDE.md`, `.mcp.json`, `.mcp.explore.json`, `.gitignore`, `.env.example`, `scripts/`, `fixtures/`, `page-objects/`, `specs/_context/_templates/` and two CI examples in `.github/workflows/*.yml.example`. It also creates `.env` from `.env.example` and merges its permission rules into `.claude/settings.json`. Then it runs `npm install` and installs the Playwright browsers.
 
 | Flag | Effect |
 |---|---|
 | `--no-install` | Stamp files only; skip `npm install` / `npx playwright install` |
 | `--resync` | Force-refresh toolkit-owned files in an existing project. Changed files are backed up to `<file>.qa-bak`. `.env` and customized files are left alone. |
 
+What the plugin changes in your session:
+
+- **Two `PreToolUse` hooks run automatically on every `Edit` and `Write`.** `assertion-contract.sh` stops the healer and the verifier from removing or rewriting an assertion in `tests/**/*.spec.ts` or an expected value in `tests/**/*.oracle.ts`. `spec-lint.sh` blocks lexical reviewer FAILs (such as `waitForTimeout`, raw CSS/XPath or `.only`) in writes to `tests/**/*.ts` and `page-objects/**/*.ts`. Details are in [`qa-warden/hooks/README.md`](qa-warden/hooks/README.md).
+- **Permission rules go into `.claude/settings.json`.** They are merged, not overwritten: your own rules and other keys stay. The merge needs `jq`. Without it, init writes the rules to `.claude/settings.qa-suggested.json` for you to merge by hand.
+
+### Uninstall
+
+```bash
+/plugin uninstall qa-warden@qa-warden
+/plugin marketplace remove qa-warden   # optional: also drop the marketplace
+```
+
+Uninstalling removes the plugin, its commands and its hooks. It does not touch what `/qa-warden:init` stamped into the project: `package.json`, `playwright.config.ts`, `CLAUDE.md`, `.mcp.json`, `.mcp.explore.json`, `scripts/`, `fixtures/`, `page-objects/`, `specs/_context/_templates/`, `.github/workflows/*.yml.example`, `.env.example` and `.env` all stay. So do the permission rules merged into `.claude/settings.json`. Remove them by hand if you no longer want them.
+
 ---
 
 ## Configuration
 
-Copy the example env file and set the target app and test account:
-
-```bash
-cp .env.example .env
-```
+`/qa-warden:init` created `.env` from `.env.example`. Open `.env` and set the target app and test account:
 
 ```bash
 BASE_URL_APP=http://localhost:3000     # staging or localhost, never prod
@@ -118,9 +130,10 @@ The step-by-step version, including what you should see at each step, is in the 
 
 ### Rigor lane: P1, money and compliance features
 
-Add three steps between `explore` and `new-spec`. They pin down what "correct" means before any test is generated:
+Add four steps between `explore` and `new-spec`. They pin down what "correct" means before any test is generated:
 
 ```bash
+/qa-warden:explore mode=area site=app area=checkout   # area context → specs/_context/app/checkout.md
 /qa-warden:intake  checkout/coupon   # interview → .basis.md (the intended behaviour)
 /qa-warden:ideate  checkout/coupon   # SFDIPOT checklist of candidate cases → .cases.md
 /qa-warden:approve checkout/coupon   # a human approves/prunes/defers each row; mints stable row ids
@@ -171,6 +184,16 @@ If product copy changed, the healer does not absorb it. It routes the question (
 /qa-warden:help checkout/coupon          # scoped to one feature
 /qa-warden:help "how do I add a test"
 ```
+
+---
+
+## Troubleshooting
+
+- **The prod-guard refuses to run: `BASE_URL_APP` is a placeholder.** It still holds `CHANGEME`, or an `example.com` host. The prod-guard fails closed on placeholders. Edit `.env` and set it to your staging or local URL.
+- **The prod-guard says a host `looks like production`.** The host contains a `prod` or `production` label. Point `BASE_URL_*` at staging or QA. Set `QA_ALLOW_PROD=1` only if you are certain the target is safe: the suite mutates data.
+- **`/qa-warden:doctor` reports `❌ jq not installed`.** Install `jq` and re-run `/qa-warden:init`. If init ran without `jq`, it left the permission rules in `.claude/settings.qa-suggested.json`, and the re-run merges them and deletes that file.
+- **`/qa-warden:intake` stops and asks you to run `explore` first.** Intake needs the area context file `specs/_context/<site>/<area>.md`, and a bare `/qa-warden:explore` writes only `app.context.md`. Run `/qa-warden:explore mode=area site=<id> area=<area>`, then intake again.
+- **`/qa-warden:doctor` reports `substrate drift` after a plugin update.** A template changed, and the stamped copy in the project is older. Run `/qa-warden:init --resync`. Changed files are backed up to `<file>.qa-bak`.
 
 ---
 
@@ -254,7 +277,7 @@ Why it matters: a 2026 study of autonomous test repair documented "assertion wea
 
 ```
 .claude-plugin/marketplace.json   the marketplace catalog (lists the QA Warden plugin)
-qa/                               the plugin
+qa-warden/                        the plugin
 ├── .claude-plugin/plugin.json    manifest; pinned `version`
 ├── agents/     planner, generator, verifier, healer, reviewer, exploration, ideation
 ├── skills/     23 skills: the 19 /qa-warden:* commands + 4 model-only helpers
@@ -276,22 +299,22 @@ The plugin itself (agents, skills, hooks, `reference/`) updates automatically wi
 Run before every plugin commit:
 
 ```bash
-qa-warden/bin/qa-selfcheck            # 7 consistency checks over agents/ skills/ hooks/ reference/
-qa-warden/bin/qa-hooktest             # 20 real payloads through the two PreToolUse hooks
+qa-warden/bin/qa-selfcheck            # 8 consistency checks over agents/ skills/ hooks/ reference/
+qa-warden/bin/qa-hooktest             # 34 real payloads through the two PreToolUse hooks
 claude plugin validate --strict ./qa-warden   # mandatory after any frontmatter edit
 ```
 
 Expected tail:
 
 ```
-qa-selfcheck: ✅ plugin is self-consistent — all 7 checks passed
-qa-hooktest: ✅ all 22 cases passed
+qa-selfcheck: ✅ plugin is self-consistent — all 8 checks passed
+qa-hooktest: ✅ all 34 cases passed
 ```
 
 When you change `qa-warden/agents/reviewer.md`, also run the behavioural evals. They make real model calls (about $1.6 and 6 minutes per case), so run them per change, not per commit. Details are in [`qa-warden/evals/README.md`](qa-warden/evals/README.md).
 
 ```bash
-cd qa && claude plugin eval . --tag reviewer --runs 1 --ablation none --scaffold --trust-plugin --no-publish
+cd qa-warden && claude plugin eval . --tag reviewer --runs 1 --ablation none --scaffold --trust-plugin --no-publish
 ```
 
 Load the plugin locally without the marketplace (run `/reload-plugins` after edits):
@@ -302,7 +325,7 @@ claude --plugin-dir ./qa-warden
 
 ### Versioning and releasing
 
-The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.4.0`. Users receive an update only when that string changes.
+The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.4.1`. Users receive an update only when that string changes.
 
 > **Bump `version` in the same commit as every user-visible change.** If you push without a bump, nothing ships, and `/plugin update` tells users they are already current. No error warns you.
 

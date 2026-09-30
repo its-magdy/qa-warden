@@ -68,7 +68,7 @@ Safety: never bypass MFA on a live IdP; minted state is gitignored and treated a
 - Page objects (reuse layer): `page-objects/<area>/<page>.page.ts` and `page-objects/<area>/components/<widget>.ts`. Shared UI flows live here, wired into `fixtures/test.ts` — see §"Page-object reuse layer".
 - Shared auth setup: `tests/<site>.setup.ts` — matched by the `setup` project in `playwright.config.ts` (a dependency of every site project, so it runs first) — writes `fixtures/auth.<site>.json`. Exploration area-mode may persist that state directly instead. One auth artifact per site.
 - Bugs: `bugs/<YYYY-MM-DD>-<slug>.md`.
-- Artifacts (screenshots, traces, videos, `last-run.json`): `artifacts/`. Video is `retain-on-failure` (kept only for failing tests); set `QA_KEEP_VIDEO=1` to keep it on pass too — the generator does this on a new spec's final run so a human can watch the `.webm` and confirm the test drives the intended flow, then delete `artifacts/`. Never set in nightly/CI.
+- Artifacts (screenshots, traces, videos, `last-run.json`): `artifacts/`. Video is `retain-on-failure` (kept only for failing tests); set `QA_KEEP_VIDEO=1` to keep it on pass too — the verifier (step 8d) does this on a new spec's final run so a human can watch the `.webm` and confirm the test drives the intended flow, then delete `artifacts/`. Never set in nightly/CI.
 - Aggregated run output: `reports/`.
 
 ## Test case format contract

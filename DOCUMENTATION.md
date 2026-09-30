@@ -37,8 +37,8 @@
 5. [Install & quickstart](#5-install--quickstart)
 6. [The workflow, end to end](#6-the-workflow-end-to-end)
     - [6.1 Brownfield adoption](#61-brownfield-adoption)
-7. [Command reference (21 user-invocable skills)](#7-command-reference)
-8. [Agent reference (6 subagents)](#8-agent-reference)
+7. [Command reference (19 user-invocable skills)](#7-command-reference)
+8. [Agent reference (7 subagents)](#8-agent-reference)
 9. [Skill reference (5 skills)](#9-skill-reference)
 10. [Key concept — the closed oracle vocabulary (16 keys)](#10-the-closed-oracle-vocabulary)
 11. [Key concept — the oracle defenses (why tests can't fake green)](#11-the-oracle-defenses)
@@ -132,7 +132,7 @@ a human for the long tail. See [Honest limits](#18-honest-limits).
 ```
 qa-warden/                          ← the MARKETPLACE (a git repo)
 ├── .claude-plugin/marketplace.json  ← the catalog — lists the "qa-warden" plugin
-└── qa/                              ← the PLUGIN
+└── qa-warden/                       ← the PLUGIN
     ├── .claude-plugin/plugin.json   ← the plugin manifest
     ├── agents/                      ← the "brain" (7 subagents)
     ├── skills/                      ← 23 SKILL.md: 19 /qa-warden:* commands + 4 helpers
@@ -359,7 +359,7 @@ What *is* new is that each skill declares **who may invoke it** — see
   the planner and healer stop on stale context and rely on the orchestrator re-running it.
   `metamorphic-relations` is also here even though it writes twin specs: the verifier
   applies it on every new spec during `/qa-warden:gen`.
-- **Runs in its own subagent** (`coverage`, `doctor`, `impact`, `report`) — the heavy
+- **Runs in its own subagent** (`coverage`, `doctor`, `impact`) — the heavy
   read-only passes, so their working output stays out of your session.
 
 | Command | Argument hint | Does | Delegates to |
@@ -368,11 +368,11 @@ What *is* new is that each skill declares **who may invoke it** — see
 | **`/qa-warden:explore`** | `[mode=hot \| mode=area site=<id> area=<name>]` | Build the context layer. `mode=hot` refreshes `app.context.md`; `mode=area` writes one `<site>/<area>.md`. Never caches selectors. | **exploration** |
 | **`/qa-warden:intake`** | `<area/feature> [kind=…] [site=<id>]` | Interactive interview capturing the **test basis** — auto-gathers observable context, asks only about non-observable intent (the oracle) → `.basis.md`. If `app.context.md` declares `business_sources:`, **consults them to ground each rule + stamp provenance** and runs a **multi-channel coupling sweep**; asks the operator on a source-vs-app conflict. | — (interactive) |
 | **`/qa-warden:ideate`** | `<area/feature> [site=<id>]` | Enumerate candidate test cases (SFDIPOT fan-out, de-dup, risk-rank, completeness critic) → `.cases.md` checklist. **Never writes specs/tests.** | **ideation** |
-| **`/qa-warden:approve`** | `<area/feature>` | Record the human verdict on a `.cases.md` checklist — approve/prune/defer per row, stamp the approval banner, mint stable row ids (the traceability anchor for Check 14 and TCM export). Closes by printing the **literal `/qa-warden:new-spec` command per approved group** (slug derived from the group subject) rather than the naming rule — that hand-off is where the chain historically tripped people. | — (interactive) |
-| **`/qa-warden:import-cases`** | `<area/feature> [source=<name>] [<file>]` | Import an existing manual test-case suite (CSV/TCM export) as `.cases.md` rows with `[imported:]` provenance; import-once, the external id becomes the row id. | — |
+| **`/qa-warden:approve`** | `<area/feature> [site=<id>]` | Record the human verdict on a `.cases.md` checklist — approve/prune/defer per row, stamp the approval banner, mint stable row ids (the traceability anchor for Check 14 and TCM export). Closes by printing the **literal `/qa-warden:new-spec` command per approved group** (slug derived from the group subject) rather than the naming rule — that hand-off is where the chain historically tripped people. | — (interactive) |
+| **`/qa-warden:import-cases`** | `<area/feature> [site=<id>] [source=<name>] [<file-path>]` | Import an existing manual test-case suite (CSV/TCM export) as `.cases.md` rows with `[imported:]` provenance; import-once, the external id becomes the row id. | — |
 | **`/qa-warden:retire`** | `<area/feature>` | Retire a feature coherently — a dry-run plan of every linked artifact (spec, test, twins, route manifest, basis/cases), shared page-objects/fixtures deleted only when nothing else uses them, then `tsc` + `--list` verification. Git history is the archive. | — |
-| **`/qa-warden:new-spec`** | `<area/feature>` | Draft one feature's Markdown spec with a closed-vocab YAML oracle → `specs/<area>/<feature>.md`. **Never emits `.spec.ts`.** | **planner** |
-| **`/qa-warden:gen`** | `<spec-path or area/feature>` | Compile a spec → `tests/<area>/<feature>.spec.ts`; run it once and leave it green for the caller to commit. Keeps a confirmation `.webm` on new specs. | **generator** |
+| **`/qa-warden:new-spec`** | `<area/feature> [site=<id>] [basis=<area>/<feature>]` | Draft one feature's Markdown spec with a closed-vocab YAML oracle → `specs/<area>/<feature>.md`. **Never emits `.spec.ts`.** | **planner** |
+| **`/qa-warden:gen`** | `<spec-path or area/feature> [site=<id>] [keep-video]` | Compile a spec → `tests/<area>/<feature>.spec.ts`; run it once and leave it green for the caller to commit. Keeps a confirmation `.webm` on new specs. | **generator** |
 | **`/qa-warden:review`** | `[spec-or-path — default: working diff]` | Run the **load-bearing reviewer** over the diff (or a named path). The shipped trigger for the full assertion-contract check suite. Any FAIL blocks the PR. Read-only. | **reviewer** |
 | **`/qa-warden:run mode=smoke`** | *(none)* | Run the `@smoke` suite, print a pass/fail summary. Sets `QA_RUN_OF_RECORD=1` so it refreshes `last-run.json`. No LLM, no auto-heal. | — |
 | **`/qa-warden:run mode=single`** | `<spec-path-or-test-path>` | CI-shaped single-shot run of one spec → `reports/headless-<name>.json`. Does **not** refresh `last-run.json`. | — |
@@ -415,7 +415,7 @@ if it's missing/stale — it cannot spawn exploration itself). Emits **one** Mar
 spec with a fenced YAML **oracle** block drawn from the [16-key closed
 vocabulary](#10-the-closed-oracle-vocabulary). Lifts "broken-when" prose into a
 `must_fail_when:` list. Never writes `.spec.ts`, never writes password literals
-(always `password_env`), never targets production. Tools: `Bash, Read, Write`.
+(always `password_env`), never targets production. Tools: `Bash, Read, Write, Edit`.
 
 ### 8.2 generator + verifier — compiles, then proves the test
 
@@ -468,13 +468,14 @@ when it finds an already-green test whose bug is still `open`, it **reconciles t
 
 **Anti-drift rule (verbatim): "Never change the assertion contract — only
 selectors/waits."** It is the only agent with Playwright **MCP** `browser_*` tools
-(for interactive triage). Turn budget: 5. Tools: `Bash, Read, Write` + Playwright MCP.
+(for interactive triage). Turn budget: 14 per failure, configurable via `HEALER_TURN_BUDGET`
+(clamped 1–20). Tools: `Bash, Read, Write, Edit` + Playwright MCP.
 
 ### 8.4 reviewer — the load-bearing gate
 
 Read-only. For each new/modified `.spec.ts` (plus its spec and every imported page
 object) it runs a battery of deterministic checks. **Any FAIL blocks the PR**;
-Checks 2c/2e/7/12/14/15 are WARN-level. Check numbering is frozen — new checks append
+Checks 2c/2e/7/12/14/15 are WARN-level (2c has two mechanically-decidable FAIL sub-cases). Check numbering is frozen — new checks append
 (14, 15, …) or sub-letter (2b–2e); existing numbers are never reused or renumbered.
 
 | Check | Level | Catches |
@@ -482,7 +483,7 @@ Checks 2c/2e/7/12/14/15 are WARN-level. Check numbering is frozen — new checks
 | 1 — failable expect | FAIL | a test with no `expect()` that can fail |
 | 2 — step→assertion coverage | FAIL | steps performed but nothing asserted (green-but-empty) |
 | 2b — `must_fail_when` reified-or-waived | FAIL | a declared invariant that isn't an oracle key or an explicit waiver |
-| 2c — oracle discriminating-power | WARN | a valid but non-discriminating key (`text_visible` where intent needs `count_equals`) |
+| 2c — oracle discriminating-power | WARN (two mechanical FAIL sub-cases) | a valid but non-discriminating key (`text_visible` where intent needs `count_equals`) |
 | 2d — oracle **value fidelity** | FAIL | right key, wrong value (green-but-**wrong**) |
 | 2e — equality-invariant **precondition scope** | WARN | an equality/relational oracle asserted with no `invariant_holds_when:` domain, or pinned `data:` outside it (green-but-**over-broad**) |
 | 3 — no unlinked `test.fixme/skip/fail` | FAIL | a parked test with no `bugs/` link, **or a link to a non-`open` bug** (stale marker laundering a resolved defect); prefer the conditional `test.fail(<observed>===<buggy>)` park — WARN on an unconditional `test.fail(true)` lacking a `// park: unconditional` note (P-14) |
@@ -511,7 +512,7 @@ authenticates, walks *only* that area's routes (depth-2 BFS, no full crawl), sna
 the AX tree for **domain vocabulary** (not selectors), records stable `data-testid`s
 as grey-box hints, and writes a dated `<site>/<area>.md` with a `volatility:` tier.
 Discipline: an inaccurate-but-fresh file is worse than a stale one. Tools: `Bash,
-Read, Write`.
+Read, Write, Edit`.
 
 ### 8.6 ideation — enumerate what to test
 
@@ -520,7 +521,7 @@ Reads a feature's `.basis.md` and rotates through the full **SFDIPOT** lenses
 error-guessing), de-dups, risk-ranks (NIST interaction strength + RCRCRC
 change-proximity), runs a completeness critic, and writes a **`.cases.md` checklist
 for a human to approve or prune**. Routes on `kind:` (feature | enhancement | bug |
-refactor). **Never writes specs or tests.** Tools: `Read, Bash, Write`.
+refactor). **Never writes specs or tests.** Tools: `Read, Bash, Write, Edit`.
 
 ---
 
@@ -605,7 +606,7 @@ Every defense below answers *that* problem:
   may fix selectors and waits but must **never** touch assertions; a changed-text
   failure escalates back to the planner.
 - **`must_fail_when:` + negative-control injection** — a declared "broken-when"
-  invariant is fault-injected by the generator (step 8b) to prove the oracle *actually*
+  invariant is fault-injected by the verifier (step 8b) to prove the oracle *actually*
   goes red; a BLIND oracle blocks. Re-runnable via `/qa-warden:doctor --verify-invariants`.
 - **Metamorphic relations** — a check needing no ground-truth answer: instead of "is
   this output correct?" they ask "does an invariant-preserving transform of the input
@@ -770,11 +771,11 @@ copies every file), so new templates never strand.
 
 | File / dir | Purpose |
 |---|---|
-| **`CLAUDE.md`** | The stamped **source-of-truth policy** (~238 lines): mission, prod-guard, discovery rule, file layout, the **test-case format contract** (the 16 oracle keys + argument shapes), assertion style, oracle-defense layers, the page-object reuse rules, the subagent roster, MCP discipline, cost discipline, the bug-report schema, and escalation rules. |
+| **`CLAUDE.md`** | The stamped **source-of-truth policy**: mission, prod-guard, discovery rule, file layout, the **test-case format contract** (the 16 oracle keys + argument shapes), assertion style, oracle-defense layers, the page-object reuse rules, the subagent roster, MCP discipline, cost discipline, the bug-report schema, and escalation rules. |
 | **`playwright.config.ts`** | `globalSetup: prod-guard.ts`; run-of-record-gated `json → artifacts/last-run.json` reporter; `outputDir: ./artifacts/test-results`; `trace: retain-on-failure`; `video` retain-on-failure (or `on` when `QA_KEEP_VIDEO=1`); `reducedMotion:'reduce'`; `locale:'en-US'`; `grepInvert: /@quarantine/`; `setup → app → (conditional) admin` projects, **tag-routed** (`@site:*`) not path-routed. |
 | **`package.json`** | Pinned dev deps (see below) + `overrides` pinning `playwright`/`playwright-core` to one stable browser revision, and npm scripts (`test`, `test:smoke`, `test:regression`, `typecheck`, …). |
 | **`.mcp.json`** / **`.mcp.explore.json`** | Empty `{}` default vs the Playwright-MCP-registered explore/heal config (the two-config pattern of [§13](#13-cli-vs-mcp)). |
-| **`scripts/`** | `prod-guard.sh` (advisory), `prod-guard.ts` (enforced globalSetup), `resolve-spec-path.sh` (single `<arg>`→spec/test path mapper), `doctor.sh` (the `/qa-warden:doctor` deterministic self-check, checks 0–21 + rollup), `check-last-run.sh` (canonical `last-run.json` freshness/zero-test gate, shared by doctor + `/qa-warden:report`), `bug-status.sh` (canonical `bugs/*.md` Status parser **and** — via `--class` — the canonical resolved-vs-open classification, shared by doctor + `/qa-warden:run mode=smoke`/`/qa-warden:run mode=single`/`/qa-warden:report`), `retire-delete.sh` (the sanctioned scoped-delete wrapper `/qa-warden:retire` calls), `resync-set.txt` (the single manifest of toolkit-owned files, read by BOTH `qa-scaffold --resync` and doctor's substrate-drift check), `runtime-dirs.txt` (the single manifest of runtime directories, read by BOTH bootstrap entry points so `/qa-warden:init` and `npm run init` stamp the same tree), `oracle-keys.txt` (the closed oracle vocabulary as data, read by doctor Checks 2/9b), `prod-guard-rails.txt` (the manifest of skills that must carry a prod-guard rail, read by Check 9bd), `claude-md-vocab.txt` (the manifest of toolkit-owned symbols that must survive in your `CLAUDE.md` — the delivery half of the upgrade path, since that file is shared-ownership and `--resync` cannot refresh it), `init.sh` (plugin-free bootstrap for a fresh clone), plus a `README.md` covering all of them. |
+| **`scripts/`** | `prod-guard.sh` (advisory), `prod-guard.ts` (enforced globalSetup), `resolve-spec-path.sh` (single `<arg>`→spec/test path mapper), `doctor.sh` (the `/qa-warden:doctor` deterministic self-check, checks 0–21 + rollup), `check-last-run.sh` (canonical `last-run.json` freshness/zero-test gate, shared by doctor + `/qa-warden:report`), `bug-status.sh` (canonical `bugs/*.md` Status parser **and** — via `--class` — the canonical resolved-vs-open classification, shared by doctor + `/qa-warden:run mode=smoke`/`/qa-warden:run mode=single`/`/qa-warden:report`), `retire-delete.sh` (the sanctioned scoped-delete wrapper `/qa-warden:retire` calls), `resync-set.txt` (the single manifest of toolkit-owned files, read by BOTH `qa-scaffold --resync` and doctor's substrate-drift check), `runtime-dirs.txt` (the single manifest of runtime directories, read by BOTH bootstrap entry points so `/qa-warden:init` and `npm run init` stamp the same tree), `oracle-keys.txt` (the closed oracle vocabulary as data, read by doctor Check 2 and the plugin's `bin/qa-selfcheck` Check 9b), `prod-guard-rails.txt` (the manifest of skills that must carry a prod-guard rail, read by Check 9bd), `claude-md-vocab.txt` (the manifest of toolkit-owned symbols that must survive in your `CLAUDE.md` — the delivery half of the upgrade path, since that file is shared-ownership and `--resync` cannot refresh it), `cli-fill-env.sh` (fills a form field from a `.env` variable so a credential never appears in a command line or tool output — the one sanctioned way to type one via playwright-cli), `post-run-checks.sh` (the advisory post-run scans — sentinels, stray artifacts, bugs; always exits 0), `review-marker.sh` (writes the `/qa-warden:review` attestation marker for one reviewed spec/test pair in a single allow-listed call), `spec-links.sh` (the one parser of the basis/feature ↔ spec relation, shared by doctor, `/qa-warden:coverage` and `/qa-warden:impact`), `init.sh` (plugin-free bootstrap for a fresh clone), plus a `README.md` covering all of them. |
 | **`.env.example`** | `BASE_URL_APP=CHANGEME` fail-closed sentinel, blank creds, documented toggles (`QA_KEEP_VIDEO`, `QA_RUN_QUARANTINE`, `QA_RUN_OF_RECORD`, `QA_ALLOW_PROD`). |
 | **`fixtures/`** | `test.ts` (the `test`/`expect` barrel; the generator adds one fixture per promoted page object), plus `schemas/` + `factories/` `.ts.example` illustrations (real schemas/factories are generated **on demand, grounded in the real app**, on first `factory:` use). |
 | **`specs/_context/_templates/`** | `app.context.md` (hot-tier skeleton), `area.md` (specialist skeleton), `basis.md` (the Example-Map test-basis template), `cases.md` (the SFDIPOT candidate-case checklist template). |
@@ -789,14 +790,14 @@ copies every file), so new templates never strand.
 | `@playwright/test` | `1.63.0` | exact pin (no caret) + `overrides` pin `playwright`/`playwright-core` to `1.63.0`. These three **plus** the version-pinned npx arg in `.mcp.explore.json` are **FOUR sites that move in one change** — all four enforced by `/qa-warden:doctor` Check 8b (the exact-pin arm matters: a caret floats the runner above the forced core while the equality arm still reads true). Bumped 1.62.1 → 1.63.0 on 2026-09-20 to enable `test lock:` (see below); the bump moves the **Chromium revision 1234 → 1243**, so run `npx playwright install` after pulling. `@playwright/cli` 0.1.17 and both MCP paths were re-verified driving a real browser on the forced-stable 1.63.0 core. |
 | `@playwright/cli` | `0.1.17` | default transport; exact pin (pre-1.0, no float) — manual-bump |
 | `@playwright/mcp` | `^0.0.78` | **legacy fallback only** — explore/heal now use the MCP server bundled with `playwright` (`npx playwright mcp`, 1.62+); `.mcp.explore.json` launches the bundled server, not this package |
-
-**`test lock:` (Playwright 1.63+).** `lock?: string | string[]` on `TestDetails` — available on `test(title, details, body)` and `test.describe.parallel(title, details, body)` — is the only cross-file mutual-exclusion primitive the runner ships, and the reason for the 1.63.0 bump. Reviewer **Check 13** offers it for the cross-FEATURE *mutator/consumer* race (spec A mutates a shared seed entity that spec B merely reads), where the previous remedies were a throwaway entity or pinning a whole lane. The **generator** emits it into the compiled `.spec.ts` — it is not an oracle key, not a `steps:` form, and nothing in a spec's YAML authors it. Three ways it is *silently* wrong, all measured on 1.63.0 rather than read from a release note, and all enforced: a lock name declared at exactly **one** site is inert (`/qa-warden:doctor` **Check 9l** FAILs it); **sharding voids it** entirely, because the shard filter splits by test count and never reads the locks (Check 9l FAILs the combination — fold the contention into ONE file's serial `describe` instead, which is shard-safe); and a lock on a hooked `describe.parallel` is held at **group** granularity, so it stalls unlocked neighbours.
 | `@axe-core/playwright` | `^4.12.1` | a11y skill |
 | `zod` | `~3.25.0` | pinned to Zod **3** — `zod-fixture 2.5.2` breaks on Zod 4; use `z.string().email()`, not `z.email()` |
 | `zod-fixture` | `^2.5.2` | factory generation |
 | `typescript` | `^5.9.0` | held on 5.x |
 | `@types/node` | `^24.0.0` | held on 24 LTS |
 | `dotenv` | `^17.4.2` | `{ quiet: true }` — v17 banner would corrupt JSON reporters |
+
+**`test lock:` (Playwright 1.63+).** `lock?: string | string[]` on `TestDetails` — available on `test(title, details, body)` and `test.describe.parallel(title, details, body)` — is the only cross-file mutual-exclusion primitive the runner ships, and the reason for the 1.63.0 bump. Reviewer **Check 13** offers it for the cross-FEATURE *mutator/consumer* race (spec A mutates a shared seed entity that spec B merely reads), where the previous remedies were a throwaway entity or pinning a whole lane. The **generator** emits it into the compiled `.spec.ts` — it is not an oracle key, not a `steps:` form, and nothing in a spec's YAML authors it. Three ways it is *silently* wrong, all measured on 1.63.0 rather than read from a release note, and all enforced: a lock name declared at exactly **one** site is inert (`/qa-warden:doctor` **Check 9l** FAILs it); **sharding voids it** entirely, because the shard filter splits by test count and never reads the locks (Check 9l FAILs the combination — fold the contention into ONE file's serial `describe` instead, which is shard-safe); and a lock on a hooked `describe.parallel` is held at **group** granularity, so it stalls unlocked neighbours.
 
 ---
 
@@ -868,7 +869,7 @@ qa-warden/
 ├── MERGE-NOTES.md                  # design lineage (Test-Browser oracle-defense + POM reuse merge)
 ├── .claude-plugin/
 │   └── marketplace.json            # the catalog (lists the QA Warden plugin)
-└── qa/                             # THE PLUGIN
+└── qa-warden/                      # THE PLUGIN
     ├── README.md                   # plugin-level intro + authoring workflow
     ├── .claude-plugin/plugin.json  # manifest (name, description, keywords, version — bump to ship)
     ├── agents/                     # planner · generator · verifier · healer · reviewer · exploration · ideation
@@ -886,7 +887,12 @@ qa-warden/
     │   ├── sentinel-actions.md     # sentinel → action contract (heal · batch-fix · doctor Check 4)
     │   └── test-case-ideation.md   # research grounding for intake/ideate
     ├── templates/                  # the runtime substrate /qa-warden:init stamps (see §16)
-    └── bin/qa-scaffold             # the deterministic substrate installer
+    ├── bin/
+    │   ├── qa-scaffold             # the deterministic substrate installer
+    │   ├── qa-selfcheck            # the plugin's own consistency checks (not shipped to projects)
+    │   └── qa-hooktest             # regression tests for the two PreToolUse hooks (not shipped)
+    ├── evals/                      # behavioural evals: each case plants one defect for an agent to catch
+    └── CHANGELOG.md                # release notes, one entry per plugin version
 ```
 
 ---
@@ -901,7 +907,7 @@ make the toolkit sound more complete than it is:
   satisfy the scanner while making the screen-reader experience *worse*. A human with a
   screen reader must review a11y fixes; never auto-merge a scanner-pass diff.
 - **No automated mutation gate for `.spec.ts`.** Mutation testing (Stryker) covers
-  pure-TS units only. For browser tests, `must_fail_when:` + the generator's step-8b
+  pure-TS units only. For browser tests, `must_fail_when:` + the verifier's step-8b
   negative control is the substitute — but it only covers *declared* invariants;
   automated mutation coverage for browser tests is an open gap.
 - **Ordinary (non-`must_fail_when`) oracles are not falsification-tested.** A plain
@@ -916,7 +922,7 @@ make the toolkit sound more complete than it is:
 - **Most of the reviewer cannot be a hook.** Two `PreToolUse` gates ship
   ([§11](#11-the-oracle-defenses)), but a hook sees one tool call's input — no paired spec,
   no `bugs/` tree, no diff, no test run — so only checks decidable from the proposed text
-  alone are enforced at write time. Three more were examined and deliberately left with the
+  alone are enforced at write time. Several more were examined and deliberately left with the
   reviewer (see `qa-warden/hooks/README.md` §"What is NOT hooked"). The reviewer remains the
   backstop, by discipline.
 - **No request-side oracle, and HAR replay is refused.** Specs can stub a dependency
@@ -966,7 +972,7 @@ Every operational fact has exactly one authoritative home — do **not** duplica
 
 | Fact | Authoritative home |
 |---|---|
-| Oracle vocabulary (16 keys) + argument shapes | `templates/CLAUDE.md` (the stamped SoT). **Enumerated** (editable list — change all in one commit) in `agents/planner.md`, `agents/generator.md`, reviewer Check 4, `/qa-warden:doctor` Check 2, `/qa-warden:coverage`'s grep. `/qa-warden:new-spec` and `/qa-warden:review url=` **defer** (hold no list). |
+| Oracle vocabulary (16 keys) + argument shapes | `templates/CLAUDE.md` (the stamped SoT). **Enumerated** (editable list — change all in one commit) in `agents/planner.md`, `agents/generator.md`, reviewer Check 4, `/qa-warden:coverage`'s grep (`skills/coverage/scripts/coverage.sh`). **Data file:** `templates/scripts/oracle-keys.txt` — `/qa-warden:doctor` Check 2 reads it and holds no copy. `/qa-warden:new-spec` and `/qa-warden:review url=` **defer** (hold no list). |
 | Reviewer checks (the full suite) | `agents/reviewer.md` |
 | Sentinel → action contract (`.healer-needs-*`) | `reference/sentinel-actions.md` — single source; `/qa-warden:heal`, `/qa-warden:batch-fix` and doctor Check 4 all point at it |
 | Command catalog + workflow order | skill frontmatter under `skills/**`; `skills/help/SKILL.md` (or run `/qa-warden:help`) |

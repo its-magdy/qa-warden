@@ -41,8 +41,8 @@ Coverage is **triaged, not backfilled** — start with one high-risk area, expan
 Full playbook (incl. `kind: characterization` for unspecifiable behavior): see
 **`DOCUMENTATION.md` §6.1** at the root of the toolkit's marketplace repo. (An installed
 plugin can't open a `../` path outside its own directory, so read it on the repo, not via
-a relative link — C-1.) **Plugin-only reader (no repo checkout)?** Ask `/qa-warden:help characterization`
-(or `/qa-warden:help <topic>`) from inside your project for the in-plugin answer — F-012.
+a relative link.) **Plugin-only reader (no repo checkout)?** Ask `/qa-warden:help characterization`
+(or `/qa-warden:help <topic>`) from inside your project for the in-plugin answer.
 
 ## Make sure every test got reviewed
 
@@ -70,8 +70,8 @@ The scaffold ships `.github/workflows/qa-nightly.yml.example`. Arming it is a **
 
 Details (secrets table, the opt-in in-CI heal step, sharding): see **`DOCUMENTATION.md`
 §16.1** at the root of the toolkit's marketplace repo — read it on the repo, not via a
-`../` path (an installed plugin can't follow one — C-1). No repo checkout? Ask
-`/qa-warden:help ci` / `/qa-warden:help nightly` from inside your project for the in-plugin summary (F-012).
+`../` path (an installed plugin can't follow one). No repo checkout? Ask
+`/qa-warden:help ci` / `/qa-warden:help nightly` from inside your project for the in-plugin summary.
 
 ## Add rigor to a P1 / money / compliance flow
 
@@ -79,9 +79,10 @@ For a flow where "correct" must be pinned *before* any test is written, insert t
 between explore and new-spec:
 
 ```
-/qa-warden:intake <area/feature>    → capture what "correct" means (the basis)
-/qa-warden:ideate <area/feature>    → a checklist of candidate cases (SFDIPOT lenses)
-/qa-warden:approve <area/feature>   → you approve/prune the checklist  ← mandatory human gate
+/qa-warden:explore mode=area site=<id> area=<area>  → map the area first (intake needs it)
+/qa-warden:intake <area/feature>                    → capture what "correct" means (the basis)
+/qa-warden:ideate <area/feature>                    → a checklist of candidate cases (SFDIPOT lenses)
+/qa-warden:approve <area/feature>                   → you approve/prune the checklist  ← mandatory human gate
 ```
 Then continue with `/qa-warden:new-spec` → `/qa-warden:gen` as usual. The fast lane skips no FAIL-level gate;
 the rigor lane adds *what-to-test* discipline on top.

@@ -54,7 +54,7 @@ Treat them as a **first-line filter, not a replacement for your eyes**:
 
 - the **[reviewer](glossary.md)** blocks any test with a step that isn't asserted, an assertion
   checking the *wrong value*, or an out-of-vocabulary "should look right" check;
-- **[must_fail_when](glossary.md)**: the generator deliberately breaks the feature at authoring
+- **[must_fail_when](glossary.md)**: the verifier deliberately breaks the feature at authoring
   time and refuses to ship a test that stays green on the bug;
 - **[metamorphic twins](glossary.md)**: extra tests that catch a spec that's subtly wrong.
 

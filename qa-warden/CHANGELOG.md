@@ -5,13 +5,37 @@ All notable consumer-facing changes to QA Warden (plugin id `qa-warden`; `qa` be
 The **last published build was `0.2.0` (2026-07-24)**. The `[Unreleased]` section below landed in
 the repository since then as **`0.3.0`**: a feature release on the published `0.1.0 → 0.2.0`
 line, with no breaking change to the spec format or the `/qa:*` surface. **`0.4.0`** adds only
-the rename on top of it, and that one IS breaking (see its section).
-`.claude-plugin/plugin.json` reads `0.4.0`; tag the build with `claude plugin tag ./qa-warden`.
+the rename on top of it, and that one IS breaking (see its section). **`0.4.1`** is
+documentation fixes only.
+`.claude-plugin/plugin.json` reads `0.4.1`; tag the build with `claude plugin tag ./qa-warden`.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/). Versions are the
 number in `plugin.json`, which is also the key the installer caches under
-(`~/.claude/plugins/cache/<marketplace>/qa/<version>/`) — so **two different builds must
+(`~/.claude/plugins/cache/<marketplace>/qa-warden/<version>/`) — so **two different builds must
 never carry the same number**, or the second one has no way to announce itself.
+
+---
+
+## 0.4.1 — documentation fixes (2026-09-30)
+
+No behaviour change. A full audit of the docs against the code fixed:
+
+- **Install and first run:** the tutorial now shows the `/plugin marketplace add its-magdy/qa-warden`
+  step and `--scope project`; init already creates `.env`, so the docs say to edit it rather than copy it.
+- **Rigor lane:** `/qa-warden:explore mode=area site=<id> area=<area>` is now listed before
+  `/qa-warden:intake`, which stops without that area context.
+- **`/qa-warden:import-cases`:** the import guide said the command did not exist; it now documents it.
+- **Who does what:** fault injection (step 8b) and the kept video (step 8d) are the verifier's, not the
+  generator's; the generator, not the verifier, writes page objects; the healer parks an
+  undocumented product bug as an expected failure and leaves only a documented one red.
+- **Stale numbers and paths:** healer budget 14 turns (not 5), 19 commands, 7 agents, 8 prod-guard
+  rails, selfcheck 8 checks, hooktest 34 cases; `qa/` paths left over from the directory rename.
+- **README:** new Uninstall and Troubleshooting sections, and a note on the two hooks and the
+  permission rules init merges.
+
+The stamped `CLAUDE.md` changed by one line (the video is kept by the verifier at step 8d).
+`--resync` does not rewrite `CLAUDE.md`, so existing projects keep the old wording unless you
+edit it by hand; nothing depends on it.
 
 ---
 

@@ -6,7 +6,7 @@ edited. These cases do: each one plants ONE known defect in an otherwise-correct
 requires the agent's report to name it.
 
 ```bash
-cd qa
+cd qa-warden
 claude plugin eval . --tag reviewer --runs 1 --ablation none \
   --scaffold --trust-plugin --no-publish --max-cost-usd 10
 ```

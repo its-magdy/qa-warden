@@ -25,7 +25,9 @@ human-readable test — and you'll have seen the plugin do the thing that makes 
 ## Before you start
 
 You need, once:
-- the plugin installed (`/plugin install qa-warden@qa-warden`),
+- the plugin installed — run these two commands in Claude Code:
+  `/plugin marketplace add its-magdy/qa-warden`, then
+  `/plugin install qa-warden@qa-warden --scope project`,
 - **your app running and reachable** on a **non-production** URL (localhost or staging),
 - a **test account** that already exists in that app (an email + password you can use).
 
@@ -39,9 +41,11 @@ No Playwright knowledge required.
 /qa-warden:init
 ```
 Run this **once** per project. It drops the runtime files in (config, scripts, a policy file,
-and a `.env.example`) and installs dependencies. You'll see a list of created files ending in ✅.
+a `.env.example`, and a `.env` made from it) and installs dependencies. You'll see one
+`[qa-scaffold] created <file>` line per file, then `[qa-scaffold] done.` and a short **`Next:`**
+list of the commands to run — the same path this tutorial walks you through.
 
-Now **copy `.env.example` to `.env`** and set the URL and the test account — **never point at
+Now **open the `.env` that init created** and set the URL and the test account — **never point at
 production:**
 ```
 BASE_URL_APP=http://localhost:3000        # your localhost or staging (a URL, not a real site)
@@ -104,11 +108,13 @@ it comes from `QA_USER_PASSWORD` in your `.env`.)
 ```
 `/qa-warden:gen` runs **two** AIs in a row. First the *generator* turns the spec into a real
 [test](glossary.md) at `tests/auth/login.spec.ts`, runs it once, and leaves it **green**. Then a
-second AI — the *verifier*, which did not write the test — checks that the green means something:
-it deliberately breaks the app's behaviour behind the scenes and confirms your test actually turns
-**red**. An assertion that stays green even when the thing it checks is broken is the one failure
-this whole toolkit exists to catch, and the AI that wrote the assertion is the last one you'd ask
-to grade it.
+second AI — the *verifier*, which did not write the test — checks that the green means something.
+For every **[must_fail_when](glossary.md)** (or `fail_if`) rule a spec declares — "this test must
+go red when *that* breaks" — it deliberately breaks that behaviour behind the scenes and confirms
+your test actually turns **red**. An assertion that stays green even when the thing it checks is
+broken is the one failure this whole toolkit exists to catch, and the AI that wrote the assertion
+is the last one you'd ask to grade it. This simple example declares no `must_fail_when`, so the
+verifier has nothing to break here — which is why Step 7 has you prove it by hand.
 
 The verifier also saves a short **`.webm` video** of the run — open it and watch the AI drive your
 real sign-in flow. *That video is your proof it tested the real thing* — you never read the
@@ -129,7 +135,7 @@ pull request — a "PR", the change you ask a teammate to merge — a FAIL here 
 /qa-warden:run mode=smoke
 ```
 Runs the `@smoke`-tagged tests with **no AI in the loop** — exactly what your nightly does, at
-~$0. You'll see `1 passed`. The test passes — **but passing isn't the point yet.** A green test
+~$0. The summary leads with a one-line roll-up like `SMOKE: PASS (1/1)`. The test passes — **but passing isn't the point yet.** A green test
 only matters if it would go *red* on a real problem. Let's prove it does.
 
 ---
@@ -143,8 +149,9 @@ by making the check *false* and watching it refuse to stay green:
 2. In the `oracle:`, change `text_visible: "My tasks"` to something the app never shows, e.g.
    `text_visible: "Totally wrong text"`.
 3. Recompile: `/qa-warden:gen specs/auth/login.md`. Because the oracle is now deliberately false, the test
-   **can't pass** — `/qa-warden:gen` runs it once and reports it **red ❌ right there** (the generator never
-   parks a failing test as green). `/qa-warden:run mode=smoke` then shows it red too.
+   **can't pass** — `/qa-warden:gen` runs it once and reports it **red ❌ right there**. The generator
+   never loosens an assertion to go green, and a wrong expectation isn't a product bug, so it stops
+   and reports red. `/qa-warden:run mode=smoke` then shows it red too.
 
 It goes **red ❌**, with the failing step and a link to a **[trace](glossary.md)** — open it at
 [trace.playwright.dev](https://trace.playwright.dev) (no install) and *see* every step and where
@@ -157,7 +164,10 @@ re-run step 3 (`/qa-warden:gen` again), and it's green again.
 > the red output). The **[healer](glossary.md)** reads the trace and:
 > - if a button just moved or was renamed (**locator drift**), it patches the [locator](glossary.md)
 >   and the test goes green — *it never changes what you asserted*;
-> - if the app itself is genuinely broken, it **files a bug and leaves the test red on purpose**;
+> - if the app itself is genuinely broken, it never "fixes" the test to hide the bug: a defect the
+>   spec already documents (`must_fail_when`/`fail_if`) stays **red on purpose**; a new, undocumented
+>   bug is **filed in `bugs/`** and the test is marked as a known, tracked failure (an *expected
+>   failure*, not green);
 > - if your app's wording changed on purpose, it hands the spec back to the planner to update the
 >   oracle — it will **not** silently rewrite your check.
 >
@@ -183,7 +193,7 @@ unsure, that's the signal to ask a developer.
 - **Test your own feature:** `/qa-warden:new-spec <your-area>/<your-feature>`, then repeat steps 3–6.
 - **Not a coder, but you're the one signing off?** Read **[reviewing-without-code.md](reviewing-without-code.md)** — how to judge a test by its oracle + video (never the code), and the moments the plugin stops for your decision.
 - **You already have manual test cases?** Run `/qa-warden:import-cases <area/feature>` with your export — see **[how-to-import-manual-cases.md](how-to-import-manual-cases.md)** for the full walkthrough.
-- **A P1 / money / compliance flow?** Use the **[rigor lane](glossary.md)**: `/qa-warden:intake` →
-  `/qa-warden:ideate` → `/qa-warden:approve` before `/qa-warden:new-spec` — it pins *what correct means* first.
+- **A P1 / money / compliance flow?** Use the **[rigor lane](glossary.md)**:
+  `/qa-warden:explore mode=area site=<id> area=<area>` → `/qa-warden:intake` → `/qa-warden:ideate` → `/qa-warden:approve` before `/qa-warden:new-spec` — it pins *what correct means* first.
 - **Stuck / what's next?** Ask `/qa-warden:help` from inside your project.
 - **Every command, in full:** the repo's `DOCUMENTATION.md` — or, from inside a project, ask `/qa-warden:help <command>` (every command self-documents; use this if you only have the installed plugin and not the repo checkout). **Why it works this way:** `DESIGN.md` (beside this file).

@@ -92,9 +92,12 @@ no paired spec, no `bugs/` tree, no Playwright run, no judgment call.
 
 Two things clear that bar. `spec-lint.sh` denies the four lexical reviewer FAILs (Check 1's
 assertion-on-a-literal, Check 5's `waitForTimeout`/`networkidle`, Check 9's raw CSS/XPath,
-Check 11's `.only`), which only moves an existing FAIL earlier. `assertion-contract.sh` is the
+Check 11's `.only`/`routeFromHAR`), which only moves an existing FAIL earlier. `assertion-contract.sh` is the
 one that matters: it denies the **healer** and the **verifier** any edit that removes or
-rewrites an assertion that existed before it. Those two prohibitions — `healer.md`'s
+rewrites an assertion that existed before it. It also guards `tests/**/*.oracle.ts`, where the
+generator keeps expected values (no code line there may be removed or rewritten), and has a
+healer-only arm that denies introducing a `page.route`/`context.route` network stub or a
+`page.clock.*` call (see [`hooks/README.md`](../hooks/README.md)). The two assertion prohibitions — `healer.md`'s
 "assertion contract is sacred" and `verifier.md`'s Hard rule 1, the rule the whole
 generator→verifier split rests on — were prose-only until then, and a prose-only rule is one
 trim pass from vanishing.
@@ -263,7 +266,7 @@ delete them to make the toolkit sound more complete than it is.
   its instrumentation assumes Node execution and it ships no browser runner. For browser
   tests, `must_fail_when:` is optional to *declare* — but once declared it IS enforced:
   reviewer Check 2b FAILs a spec whose invariant isn't reified as an oracle, and the
-  the verifier's step-8b negative control fault-injects it to prove the oracle goes red
+  verifier's step-8b negative control fault-injects it to prove the oracle goes red
   (see below); the agent-driven mutation skill was removed to keep the toolkit lean.
   Automated mutation coverage for browser tests is an open gap, not a shipped feature.
 - **Visual regression needs a specialist past the obvious.** Self-hosted Playwright
@@ -278,7 +281,7 @@ delete them to make the toolkit sound more complete than it is.
   at write time, and three more were examined and deliberately left with the reviewer. The
   reviewer remains the backstop for everything needing repository state or judgment, which
   is most of it.
-- **Non-vacuity of ordinary oracles is LLM-judgment, not mechanical.** The generator's
+- **Non-vacuity of ordinary oracles is LLM-judgment, not mechanical.** The verifier's
   step-8b negative-control injection proves an assertion *actually fails on the defect* —
   but it runs **only** for declared `must_fail_when:`/`fail_if:` invariants. A plain
   happy-path oracle is *counted* (present, in-vocab, non-orphan) but never falsification-
@@ -325,7 +328,7 @@ delete them to make the toolkit sound more complete than it is.
   A-04's advisory survives in reduced form: it now names the five checks as LLM-reasoned and WARNs
   only if the pin appears to have been overridden. The durable fix is to lift the prose "broken
   if…" statement into `must_fail_when:` (planner) so step-8b covers it.
-- **The prod-guard rails are prose, so they are guarded by coverage, not by wording.** Ten skills
+- **The prod-guard rails are prose, so they are guarded by coverage, not by wording.** Eight skills
   carry the rail in two deliberately different lead forms with materially different bodies (each
   names the specific hole it plugs). Prose mirrors cannot `source` a file, so the copies can only
   be compared — but comparing the TEXT would fire on every edit and get the check disabled. What
@@ -491,7 +494,7 @@ delete them to make the toolkit sound more complete than it is.
   **(a) it is blind for exactly one upgrade** — every project today has no receipt, so the first run can
   only record what it delivers and start honouring deletions from the run after; and **(b) `allow` and
   `deny` are not symmetric.** Honouring an `allow` deletion costs a permission prompt. Honouring a `deny`
-  deletion permanently removes one of the 58 rails that make writable-path separation real (the
+  deletion permanently removes one of the deny rails that make writable-path separation real (the
   `Edit(scripts/prod-guard.sh)` / `Edit(playwright.config.ts)` class) — silently, for a decision made
   once, and a `deny` cannot be restored by any other settings file because deny always wins. The
   defensible split is to honour `allow` deletions and, for `deny`, keep re-adding but **say so** — a

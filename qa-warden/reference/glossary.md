@@ -73,7 +73,7 @@ wrong, and checking the right value).
 
 **page object (POM)** — a reusable file (`page-objects/<area>/<page>.page.ts`) holding a
 shared UI flow (login, checkout) so a change to that flow is a one-file fix, not an
-N-test grind. The verifier writes them; the healer maintains them.
+N-test grind. The generator writes them; the healer maintains them.
 
 **Playwright** — the open-source browser-automation framework the compiled tests run on and
 replay nightly. You never write it — the AI does; it's named in these docs only because that's
