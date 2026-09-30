@@ -59,7 +59,9 @@ The scaffold ships `.github/workflows/qa-nightly.yml.example`. Arming it is a **
 2. Add the secrets that mirror your `.env` (`QA_BASE_URL_APP`, `QA_USER_EMAIL`/`QA_USER_PASSWORD` if the app has a login, …).
    The prod-guard **fails closed** on a missing/placeholder/prod URL — a workflow armed before its
    secrets exist goes **red, never silently green**.
-3. On failure: download the `qa-nightly-<n>` artifact and triage locally with `/qa-warden:heal <test-id>`.
+3. On failure: on a **private** repo, download the `qa-nightly-<n>` artifact; on a **public** repo nothing is
+   uploaded (traces hold credentials in plain text), so re-run the failing spec locally. Then triage with
+   `/qa-warden:heal <test-id>`.
 
 Details (secrets table, sharding): see **`DOCUMENTATION.md`
 §16.1** at the root of the toolkit's marketplace repo — read it on the repo, not via a

@@ -6,6 +6,9 @@ on:
   schedule:
     - cron: '30 2 * * *'        # 02:30 UTC nightly — adjust to your off-peak window
   workflow_dispatch: {}          # manual trigger for debugging the workflow itself
+# Least privilege (GitHub's hardening guide): the run only reads the repo and the repo's metadata.
+permissions:
+  contents: read
 jobs:
   nightly:
     runs-on: ubuntu-latest
@@ -46,8 +49,24 @@ jobs:
       # fully DISABLED v3 in Jan 2025 rather than merely deprecating it, so a stale major here is a
       # nightly that stops uploading traces one day with no warning. Only `name`/`path`/
       # `retention-days` are used below, all stable across these majors.
-      - uses: actions/upload-artifact@v7
+      # Traces and the HTML report hold CREDENTIALS IN PLAIN TEXT: a Playwright trace records the
+      # browser context options (the httpCredentials password, the extraHTTPHeaders values), every
+      # fill() value, and the Cookie/Authorization headers. GitHub redacts secrets in logs only,
+      # never inside artifacts, and anyone with read access can download an artifact — on a PUBLIC
+      # repo that is everyone. Playwright's CI docs: upload reports and traces "only to trusted
+      # artifact stores". So the upload runs only on a PRIVATE repo. A `schedule` run has no event
+      # payload (github.event.repository is unset), so ask the API; if the lookup fails, `private`
+      # stays empty and nothing is uploaded (fail closed).
+      - name: Repo visibility (gates the artifact upload)
+        id: visibility
         if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          private=$(gh api "repos/$GITHUB_REPOSITORY" --jq .private 2>/dev/null || true)
+          echo "private=$private" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() && steps.visibility.outputs.private == 'true' }}
         with:
           name: qa-nightly-${{ github.run_number }}
           retention-days: 14
@@ -57,4 +76,4 @@ jobs:
             artifacts/test-results/**/trace.zip
       - name: Failure breadcrumb
         if: failure()
-        run: echo "::error title=qa-nightly red::Nightly run failed — download the qa-nightly artifact (trace.zip + last-run.json), then triage locally with /qa-warden:heal <test-id>."
+        run: echo "::error title=qa-nightly red::Nightly run failed — on a private repo download the qa-nightly artifact (trace.zip + last-run.json); on a public repo no artifact is uploaded (traces carry credentials), so re-run the failing spec locally. Then triage with /qa-warden:heal <test-id>."

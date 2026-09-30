@@ -1286,6 +1286,21 @@ if [ -d bugs ]; then
       fi
     done < <(grep -oE 'artifacts/test-results/[^ )`"'"'"']+\.(png|zip|md)' "$bf" 2>/dev/null | sort -u)
   done < <(find bugs -maxdepth 1 -name '*.md' -type f 2>/dev/null)
+  # The copied bugs/<slug>/trace.zip is LOCAL evidence only. A Playwright trace stores the
+  # browser context options (the httpCredentials password, the extraHTTPHeaders values), every
+  # fill() value and the Cookie/Authorization headers in plain text. templates/gitignore ignores
+  # `bugs/**/trace.zip`, but .gitignore is outside the resync set, so a project scaffolded before
+  # that rule shipped only hears about it here. Read-only: git ls-files / check-ignore write nothing.
+  if [ -n "$(find bugs -mindepth 2 -name trace.zip -type f 2>/dev/null | head -1)" ] \
+     && command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
+    tracked_traces=$(git ls-files -- 'bugs/*/trace.zip' 2>/dev/null | tr '\n' ' ')
+    if [ -n "$tracked_traces" ]; then
+      echo "⚠️  bug trace committed to git: ${tracked_traces% } — a trace holds credentials in plain text (basic-auth password, extra headers, typed values, cookies). Run: git rm --cached <each path>, add 'bugs/**/trace.zip' to .gitignore, and rotate any QA credential that was pushed"; warn=$((warn+1))
+    fi
+    if ! git check-ignore -q "bugs/qa-probe/trace.zip" 2>/dev/null; then
+      echo "⚠️  bugs/<slug>/trace.zip is not gitignored — the next 'git add bugs/' commits credentials in plain text. Add 'bugs/**/trace.zip' to .gitignore (it ships in the template since 0.5.4)"; warn=$((warn+1))
+    fi
+  fi
 fi
 
 # 11c. Parked-marker <-> bug lifecycle cross-check (P-14) — a test.fail()/test.fixme() parks a scenario

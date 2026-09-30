@@ -8,8 +8,8 @@ line, with no breaking change to the spec format or the `/qa:*` surface. **`0.4.
 the rename on top of it, and that one IS breaking (see its section). **`0.4.1`** is
 documentation fixes only; **`0.5.0`** fixes what a fresh-install test and a re-check of the
 2026-09-26 end-to-end run found; **`0.5.1`** is a one-line wording fix on top, **`0.5.2`** fixes what a full end-to-end run
-of the README walkthrough found, and **`0.5.3`** fixes what a whole-plugin code review found.
-`.claude-plugin/plugin.json` reads `0.5.3`; tag the build with `claude plugin tag ./qa-warden`.
+of the README walkthrough found, **`0.5.3`** fixes what a whole-plugin code review found, and **`0.5.4`** fixes what a
+security review found. `.claude-plugin/plugin.json` reads `0.5.4`; tag the build with `claude plugin tag ./qa-warden`.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/). Versions are the
 number in `plugin.json`, which is also the key the installer caches under
@@ -17,6 +17,26 @@ number in `plugin.json`, which is also the key the installer caches under
 never carry the same number**, or the second one has no way to announce itself.
 
 ---
+
+## 0.5.4 — fixes from a whole-plugin security review (2026-09-30)
+
+Each item was confirmed by a local reproduction and against the official docs before it was fixed.
+
+- **Bug traces no longer get committed.** The healer copies a failure's `trace.zip` into
+  `bugs/<slug>/`, which is tracked. A Playwright trace stores the browser context options
+  (the `httpCredentials` password, the `extraHTTPHeaders` values), every `fill()` value and
+  the Cookie/Authorization headers in plain text (checked by recording a 1.63.0 trace and
+  grepping it). `templates/gitignore` now ignores `bugs/**/trace.zip`; the healer, generator
+  and CLAUDE.md Bug-report schema call the copy local-only.
+  - **Existing projects:** `.gitignore` is outside the resync set, so add
+    `bugs/**/trace.zip` by hand. `/qa-warden:doctor` Check 11b now warns when that rule is
+    missing, and when a trace is already tracked (`git rm --cached` it, and rotate any QA
+    credential that was pushed).
+- **The nightly example uploads traces and the HTML report on private repos only.** GitHub
+  redacts secrets in logs, not in artifacts, and anyone who can read a public repo can
+  download its artifacts. A new step reads the repo's visibility from the API (a `schedule`
+  run has no event payload, so `github.event.repository.private` is not available) and the
+  upload is skipped when the lookup fails. The workflow also sets `permissions: contents: read`.
 
 ## 0.5.3 — fixes from a whole-plugin code review (2026-09-30)
 

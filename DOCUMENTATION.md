@@ -840,9 +840,13 @@ workflow armed before its secrets exist goes **red, never silently green**.
 **What a run produces:** `artifacts/last-run.json` (the run-of-record — the workflow
 sets `QA_RUN_OF_RECORD=1`), an HTML report built from the blob report, and
 `trace.zip` per failure — all uploaded as one `qa-nightly-<n>` artifact
-(14-day retention).
+(14-day retention), **on private repos only**. A Playwright trace stores the basic-auth
+password, extra header values, typed values and cookies in plain text, and anyone who can
+read a public repo can download its artifacts. So on a public repo the upload step is
+skipped (the workflow checks the repo's visibility through the API and fails closed).
 
-**On failure:** download the artifact, then triage **locally** with
+**On failure:** download the artifact (private repo) or re-run the failing spec locally
+(public repo), then triage **locally** with
 `/qa-warden:heal <test-id>` from the trace. Claude never runs in CI: the nightly stays
 **$0 LLM**, and triage is always a local, human-started step.
 

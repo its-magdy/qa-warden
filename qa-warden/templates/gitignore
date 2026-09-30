@@ -60,6 +60,11 @@ reports/regression.json
 # them from `test.fixme(...)`, so they are the durable defect record, not throwaway
 # drafts — do NOT gitignore them. (A former `bugs/auto/` ignore rule was dead: no agent
 # ever wrote there, and ignoring it contradicted the tracked-bugs model.)
+# The ONE exception is the trace the healer copies next to a bug (HEAL03). A Playwright
+# trace stores the browser context options (the httpCredentials password, the
+# extraHTTPHeaders values), every fill() value, and the Cookie/Authorization headers in
+# plain text, so it stays on disk as local evidence and is never committed.
+bugs/**/trace.zip
 
 # Playwright storageState — auth cookies. NEVER commit.
 # The seed writes per-site files: fixtures/auth.app.json, fixtures/auth.admin.json
