@@ -33,7 +33,7 @@ timing of four lint FAILs and the enforcement of one contract.
 |---|---|---|
 | `assertion-contract.sh` | `agent_type` = `healer` or `verifier`, editing `tests/**/*.spec.ts` | An edit that **removes or rewrites** an assertion that existed before it |
 | `assertion-contract.sh` | `agent_type` = `healer` or `verifier`, editing `tests/**/*.oracle.ts` | An edit that **removes or rewrites** any code line of the oracle module (the expected values the spec imports, generator.md F-33). Adding an export stays allowed |
-| `assertion-contract.sh` | `agent_type` = `healer` **only** | An edit that **introduces** a `page.route`/`context.route` network stub or a `page.clock.*` call where the before-text had none |
+| `assertion-contract.sh` | `agent_type` = `healer` **only** | An edit that **introduces** a network stub (`.route` / `.routeFromHAR` / `.routeWebSocket`, on a page or a context) or a `.clock.*` call where the before-text had none |
 | `spec-lint.sh` | any write to `tests/**/*.ts` or `page-objects/**/*.ts` | reviewer Check 1 (assert on a literal), Check 5 (`waitForTimeout` / `networkidle`), Check 9 (raw CSS/XPath), Check 11 (`.only`, `routeFromHAR`) |
 
 The healer stub/clock arm is the newest and is a **different shape** from the others: it guards

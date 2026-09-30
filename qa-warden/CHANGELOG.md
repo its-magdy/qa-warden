@@ -7,14 +7,55 @@ the repository since then as **`0.3.0`**: a feature release on the published `0.
 line, with no breaking change to the spec format or the `/qa:*` surface. **`0.4.0`** adds only
 the rename on top of it, and that one IS breaking (see its section). **`0.4.1`** is
 documentation fixes only; **`0.5.0`** fixes what a fresh-install test and a re-check of the
-2026-09-26 end-to-end run found; **`0.5.1`** is a one-line wording fix on top, and **`0.5.2`** fixes what a full end-to-end run
-of the README walkthrough found.
-`.claude-plugin/plugin.json` reads `0.5.2`; tag the build with `claude plugin tag ./qa-warden`.
+2026-09-26 end-to-end run found; **`0.5.1`** is a one-line wording fix on top, **`0.5.2`** fixes what a full end-to-end run
+of the README walkthrough found, and **`0.5.3`** fixes what a whole-plugin code review found.
+`.claude-plugin/plugin.json` reads `0.5.3`; tag the build with `claude plugin tag ./qa-warden`.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/). Versions are the
 number in `plugin.json`, which is also the key the installer caches under
 (`~/.claude/plugins/cache/<marketplace>/qa-warden/<version>/`) — so **two different builds must
 never carry the same number**, or the second one has no way to announce itself.
+
+---
+
+## 0.5.3 — fixes from a whole-plugin code review (2026-09-30)
+
+Every item below was reproduced before it was fixed, and each hook fix has `bin/qa-hooktest`
+cases, both deny and allow (34 → 57).
+
+- **The assertion-contract hook** (healer/verifier) could be walked past four ways, now closed:
+  - It stripped every `{...}` options object, so `toBeVisible({ visible: false })`, a looser
+    `maxDiffPixelRatio`, an added `ignoreCase`, and the verifier renaming a locator's
+    `{ name }` all passed. Only the `timeout` key is ignored now.
+  - It compared line by line, so a Prettier-wrapped assertion's expected value (on its own
+    line) could be retyped. It now compares whole `expect(...)` statements, including a
+    `.matcher` on the next line; re-wrapping alone still passes.
+  - `comm` ran in the user's locale on `LC_ALL=C`-sorted input, so under `en_US.UTF-8` adding a
+    barrier assert could be denied as "removed". Now `LC_ALL=C comm`.
+  - The healer's no-new-stub check missed `page.context().route`, `routeFromHAR`,
+    `routeWebSocket` and `context.clock`. It now keys on the method, whatever the receiver.
+- **Both hooks were off in a QA project under a directory named `tests/`** (`/repo/tests/qa/`):
+  the root was cut at the first `/tests/` in the path. It is now found by walking up.
+- **Claude no longer runs in CI.** `qa-review.yml.example` (the PR reviewer workflow) is removed,
+  and so are the nightly's commented opt-in AI-heal step, the `CLAUDE_CODE_OAUTH_TOKEN` block in
+  `.env.example`, and the `/qa-warden:review` "CI wiring" section. The review found the PR gate
+  could never fail anyway: `claude-code-action` does not fail a job because the model was asked
+  to. The review gate is local (`/qa-warden:review` marker + doctor Check 15), and the nightly
+  stays plain Playwright at $0 LLM. If an earlier `/qa-warden:init` stamped
+  `.github/workflows/qa-review.yml.example` (or you renamed it to `.yml`), delete it by hand:
+  `--resync` never delivered it and does not remove it.
+- **Stamped settings**: `Read(.env)` is denied (it also covers `cat .env` in Bash; scripts that
+  load `.env` are unaffected), and the `/etc` deny is now `Read(//etc/**)`. A single leading
+  `/` anchors at the project, so `Read(/etc/**)` never covered the system `/etc`. `--resync`
+  merges both in.
+- **`/qa-warden:impact route=`** now matches `:id` / `{id}` / `[id]` as one parameter and a
+  concrete path (`/rooms/42`) against a recorded template, as `/qa-warden:coverage` does. It
+  compared exactly, so an affected spec could read as not impacted.
+- **`/qa-warden:run`**: `mode=single` no longer reports a run as done when
+  `check-last-run.sh` returns an unexpected code (e.g. missing script), and `mode=repeat`
+  stops with exit 2 on an empty or aborted report instead of printing nothing.
+- **`cli-fill-env.sh`** treats any `*PASS*` name as a secret, which covers the toolkit's own
+  `QA_BASIC_AUTH_PASS` and `QA_CLIENT_CERT_PASSPHRASE`.
 
 ---
 

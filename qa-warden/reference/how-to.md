@@ -51,13 +51,6 @@ a relative link.) **Plugin-only reader (no repo checkout)?** Ask `/qa-warden:hel
 (Check 15) then flags any test with no marker, or whose spec or code changed since — so a
 forgotten review shows up the next time anyone runs doctor.
 
-**In CI — optional hardening for teams.** A local marker is written by an agent, so it catches
-*forgotten* reviews, not forged ones. If you need a gate nobody can skip, the scaffold ships
-`.github/workflows/qa-review.yml.example`: rename it, add an `ANTHROPIC_API_KEY` secret, point
-`plugin_marketplaces` at a **Git URL** of the marketplace repo (the `reviewer` ships inside the
-plugin — a runner that cannot install it has no reviewer, and a local-directory marketplace
-cannot be used from CI), then make the job a required status check.
-
 ## Run the suite nightly in CI (~$0, no AI)
 
 The scaffold ships `.github/workflows/qa-nightly.yml.example`. Arming it is a **deliberate act**:
@@ -68,7 +61,7 @@ The scaffold ships `.github/workflows/qa-nightly.yml.example`. Arming it is a **
    secrets exist goes **red, never silently green**.
 3. On failure: download the `qa-nightly-<n>` artifact and triage locally with `/qa-warden:heal <test-id>`.
 
-Details (secrets table, the opt-in in-CI heal step, sharding): see **`DOCUMENTATION.md`
+Details (secrets table, sharding): see **`DOCUMENTATION.md`
 §16.1** at the root of the toolkit's marketplace repo — read it on the repo, not via a
 `../` path (an installed plugin can't follow one). No repo checkout? Ask
 `/qa-warden:help ci` / `/qa-warden:help nightly` from inside your project for the in-plugin summary.

@@ -19,7 +19,7 @@ QA Warden is a Claude Code plugin that turns a Markdown spec into a Playwright `
 - [Usage](#usage)
   - [Try it on a demo app](#try-it-on-a-demo-app)
 - [Troubleshooting](#troubleshooting)
-  - [Running headless or in CI](#running-headless-or-in-ci)
+  - [Running headless](#running-headless)
 - [Commands reference](#commands-reference)
 - [How it differs from Playwright's test agents](#how-it-differs-from-playwrights-test-agents)
 - [Scope and limits](#scope-and-limits)
@@ -238,7 +238,7 @@ If product copy changed, the healer does not absorb it. It routes the question (
 - **`/qa-warden:doctor` reports `substrate drift` after a plugin update.** A template changed, and the stamped copy in the project is older. Run `/qa-warden:init --resync`. Changed files are backed up to `<file>.qa-bak`.
 - **`/qa-warden:doctor` says "Setup is NOT ready yet — fill in .env".** `BASE_URL_APP` is empty, or a `BASE_URL_*` still holds a placeholder. Set it to your staging or local URL. Empty `QA_USER_*` is not flagged, because a site without a login has none.
 
-### Running headless or in CI
+### Running headless
 
 - **`claude -p` ignores the project's permission rules in a folder that was never opened interactively.** It logs "Ignoring N permissions.allow entries" because the folder has not been trusted. Pass `--settings .claude/settings.json`: the warning still prints (it is about the project's own copy), but the rules passed with `--settings` apply. Or open the folder once in interactive Claude Code and trust it.
 - **Some skills read reference files inside the plugin:** `/qa-warden:report` (its template), `/qa-warden:help` (its knowledge map), `/qa-warden:heal` and `/qa-warden:batch-fix` (the sentinel actions), `/qa-warden:doctor --verify-invariants`, and `/qa-warden:gen` (its verifier reads `verify-invariants.md` to break the app on purpose). Interactively, Claude Code asks once to allow the read. Headless, pass the plugin directory with `--add-dir`. The installed copy is under `~/.claude/plugins/cache/qa-warden/qa-warden/<version>/`; the `installPath` in `~/.claude/plugins/installed_plugins.json` names the exact directory. A skill cannot pre-approve that read.
@@ -349,7 +349,7 @@ Run before every plugin commit:
 
 ```bash
 qa-warden/bin/qa-selfcheck            # 8 consistency checks over agents/ skills/ hooks/ reference/
-qa-warden/bin/qa-hooktest             # 34 real payloads through the two PreToolUse hooks
+qa-warden/bin/qa-hooktest             # 57 real payloads through the two PreToolUse hooks
 claude plugin validate --strict ./qa-warden   # mandatory after any frontmatter edit
 ```
 
@@ -357,7 +357,7 @@ Expected tail:
 
 ```
 qa-selfcheck: ✅ plugin is self-consistent — all 8 checks passed
-qa-hooktest: ✅ all 34 cases passed
+qa-hooktest: ✅ all 57 cases passed
 ```
 
 When you change `qa-warden/agents/reviewer.md`, also run the behavioural evals. They make real model calls (on 2026-09-30, about $0.4 and 2 minutes per case; all five cost $1.97), so run them per change, not per commit. Details are in [`qa-warden/evals/README.md`](qa-warden/evals/README.md).
@@ -374,7 +374,7 @@ claude --plugin-dir ./qa-warden
 
 ### Versioning and releasing
 
-The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.5.2`. Users receive an update only when that string changes.
+The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.5.3`. Users receive an update only when that string changes.
 
 > **Bump `version` in the same commit as every user-visible change.** If you push without a bump, nothing ships, and `/plugin update` tells users they are already current. No error warns you.
 

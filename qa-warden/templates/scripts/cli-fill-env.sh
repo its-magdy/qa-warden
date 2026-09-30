@@ -20,7 +20,7 @@
 #
 # Guarantees / refusals (exit 2, nothing typed):
 #   - exactly three arguments; ENV_VAR must be a plain UPPER_SNAKE name that is set and non-empty
-#   - a secret-looking variable (PASSWORD / _PW / SECRET / TOKEN / KEY) is typed ONLY into an
+#   - a secret-looking variable (PASS[WORD/PHRASE] / _PW / SECRET / TOKEN / KEY) is typed ONLY into an
 #     <input type="password"> — so it cannot be parked in a visible field and read back by snapshot
 #   - playwright-cli's own output is suppressed (it echoes the generated fill() call, value included)
 set -u
@@ -58,7 +58,7 @@ if [ -z "$VALUE" ]; then
 fi
 
 case "$VAR" in
-  *PASSWORD*|*_PW|*_PW_*|*SECRET*|*TOKEN*|*KEY*)
+  *PASS*|*_PW|*_PW_*|*SECRET*|*TOKEN*|*KEY*)
     TYPE=$(npx playwright-cli -s="$SESSION" eval "el => el.type" "$TARGET" 2>/dev/null)
     case "$TYPE" in
       *password*) : ;;

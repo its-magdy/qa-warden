@@ -239,7 +239,7 @@ Running the suite = `npx playwright test` — plain Playwright, zero LLM.
 entry for `qa-warden` (`github` source `its-magdy/qa-warden`; a value your file already
 sets wins). Claude Code applies it only after a teammate trusts the folder; a teammate
 who clones and trusts it gets the plugin from that marketplace, otherwise they run the
-two install commands. Headless / CI caveats: README §Running headless or in CI.
+two install commands. Headless / CI caveats: README §Running headless.
 
 **Local plugin development** (no marketplace): `claude --plugin-dir ./qa-warden`, then
 `/reload-plugins` after edits. **Validate before pushing:**
@@ -747,7 +747,8 @@ every test that uses it.
   lockfile, and both `prod-guard.*` — which is *why* substrate fixes need
   `/qa-warden:init --resync` rather than an in-place agent patch. Dangerous Bash (`rm`,
   `git clean`, `git push --force`, `git reset --hard`, `curl | sh`) is denied too.
-- **Credentials via env only** — agents cannot write `.env`; passwords are always
+- **Credentials via env only** — agents can neither read nor write `.env` (`Read(.env)` is
+  denied, which also covers `cat .env` in Bash); passwords are always
   referenced as `password_env`, never as literals; secrets are never logged.
 - **`/qa-warden:batch-fix` has high blast radius** — it proposes one pattern and waits for
   explicit confirmation before applying across many files.
@@ -800,7 +801,6 @@ copies every file), so new templates never strand.
 | **`fixtures/`** | `test.ts` (the `test`/`expect` barrel; the generator adds one fixture per promoted page object), plus `schemas/` + `factories/` `.ts.example` illustrations (real schemas/factories are generated **on demand, grounded in the real app**, on first `factory:` use). |
 | **`specs/_context/_templates/`** | `app.context.md` (hot-tier skeleton), `area.md` (specialist skeleton), `basis.md` (the Example-Map test-basis template), `cases.md` (the SFDIPOT candidate-case checklist template). |
 | **`.github/workflows/qa-nightly.yml.example`** | The **disarmed** nightly CI workflow — rename to `qa-nightly.yml` to arm it ([§16.1](#161-nightly-in-ci)). |
-| **`.github/workflows/qa-review.yml.example`** | **Optional** — the local gate is `/qa-warden:review` + doctor Check 15. The **disarmed** PR workflow that runs the `reviewer` on every PR touching `tests/`/`specs/`/`page-objects/`/`fixtures/` — rename to `qa-review.yml`, point `plugin_marketplaces` at a Git URL of the marketplace (the runner must install the plugin or the `reviewer` subagent does not exist there), then make the job a **required status check**. |
 | **runtime dirs** | `artifacts/ bugs/ fixtures/ page-objects/ reports/ specs/_context/ steps/ tests/` |
 
 **Pinned dependencies** (`package.json`, exact at time of writing):
@@ -843,13 +843,8 @@ sets `QA_RUN_OF_RECORD=1`), an HTML report built from the blob report, and
 (14-day retention).
 
 **On failure:** download the artifact, then triage **locally** with
-`/qa-warden:heal <test-id>` from the trace. The workflow also carries a commented **opt-in
-AI-heal step** for triage in CI itself — off by default because the nightly is **$0
-LLM by design**; enabling it puts a model (and an `ANTHROPIC_API_KEY` secret) in the
-failure path, so treat it as a cost decision, not a default. A headless `claude -p` in a
-never-trusted checkout ignores the project's `permissions.allow` unless given
-`--settings .claude/settings.json`, and needs `--add-dir <plugin path>` for skills that
-read plugin reference files (README §Running headless or in CI).
+`/qa-warden:heal <test-id>` from the trace. Claude never runs in CI: the nightly stays
+**$0 LLM**, and triage is always a local, human-started step.
 
 **Sharding:** the single-job workflow needs no merge step. If you shard later, use
 the matrix + `merge-reports` recipe in the stamped CLAUDE.md §Reporting pipeline.

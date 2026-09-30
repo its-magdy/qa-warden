@@ -87,6 +87,7 @@ case "$MODE" in
       3) echo "run(single): no/unparseable-as-missing JSON — startup error (prod-guard/config), not a green run."; exit 2 ;;
       4) echo "run(single): unparseable JSON — do NOT report a pass."; exit 2 ;;
       5) echo "run(single): resolved no tests — a resolution error, not a pass."; exit 2 ;;
+      *) echo "run(single): check-last-run.sh returned $lr_rc (missing script? re-run /qa-warden:init --resync) — NOT a pass."; exit 2 ;;
     esac
     echo "run(single): report at reports/headless-$name.json (log: reports/headless-$name.log)"
     bash scripts/post-run-checks.sh --only bugs
@@ -165,6 +166,14 @@ case "$MODE" in
     # probe) is safe ONLY because $TEST is pre-verified.
     npx playwright test "$TEST" --repeat-each="$N" --workers=1 --retries=0 --reporter=json \
       > "artifacts/flake-$name.json" 2> "artifacts/flake-$name.log" || true
+    # An aborted run (prod-guard throw in globalSetup, config error) leaves an empty or
+    # stats-less report; both jq passes below would then print NOTHING and exit 0. Gate it
+    # through the same check-last-run.sh the other modes use (3 missing, 4 corrupt, 5 zero-test).
+    bash scripts/check-last-run.sh "artifacts/flake-$name.json" 900 >/dev/null; lr_rc=$?
+    if [ "$lr_rc" -ne 0 ]; then
+      echo "run(repeat): the probe did not produce a usable report (check-last-run rc=$lr_rc) — no stability measured; inspect artifacts/flake-$name.log."
+      exit 2
+    fi
 
     # Each repeat is a separate test entry in ONE report: stats.expected = passed
     # executions, stats.unexpected = failed. Zero executions means the path resolved

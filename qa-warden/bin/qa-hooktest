@@ -93,6 +93,77 @@ run assertion-contract.sh allow "generator is out of scope"              "$(edit
 run assertion-contract.sh allow "no agent_type (main session/human)"     "$(edit "" tests/auth/login.oracle.ts "$ORA" "export const EXPECTED_TOTAL = '\$53.00';")"
 run assertion-contract.sh allow "other non-spec helper is out of scope"  "$(edit healer tests/auth/helpers.ts "$ORA" "export const EXPECTED_TOTAL = '\$53.00';")"
 
+echo "assertion-contract.sh — matcher options are contract; only timeout is not (2026-09-30 review)"
+S="tests/auth/login.spec.ts"
+run assertion-contract.sh deny  "healer inverts toBeVisible via { visible: false }" "$(edit healer $S "await expect(p).toBeVisible();" "await expect(p).toBeVisible({ visible: false });")"
+run assertion-contract.sh deny  "healer loosens maxDiffPixelRatio"         "$(edit healer $S "await expect(page).toHaveScreenshot('a.png', { maxDiffPixelRatio: 0.01 });" "await expect(page).toHaveScreenshot('a.png', { maxDiffPixelRatio: 0.9 });")"
+run assertion-contract.sh deny  "healer adds { ignoreCase: true }"         "$(edit healer $S "await expect(p).toHaveText('Save');" "await expect(p).toHaveText('Save', { ignoreCase: true });")"
+run assertion-contract.sh deny  "verifier renames a locator { name }"      "$(edit verifier $S "await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();" "await expect(page.getByRole('button', { name: 'Delete' })).toBeVisible();")"
+run assertion-contract.sh allow "healer adds a sole { timeout }"           "$(edit healer $S "await expect(p).toBeVisible();" "await expect(p).toBeVisible({ timeout: 10_000 });")"
+run assertion-contract.sh allow "healer adds timeout beside other options" "$(edit healer $S "await expect(page).toHaveScreenshot('a.png', { maxDiffPixelRatio: 0.01 });" "await expect(page).toHaveScreenshot('a.png', { timeout: 15000, maxDiffPixelRatio: 0.01 });")"
+run assertion-contract.sh allow "healer widens an existing timeout"        "$(edit healer $S "await expect(p).toBeVisible({ visible: false, timeout: 5000 });" "await expect(p).toBeVisible({ visible: false, timeout: 15000 });")"
+
+echo "assertion-contract.sh — multi-line (Prettier-wrapped) assertions"
+W1="await expect(page.getByRole('status')).toHaveText(
+  'Order placed',
+);"
+run assertion-contract.sh deny  "healer retypes a wrapped expected string" "$(edit healer $S "$W1" "await expect(page.getByRole('status')).toHaveText(
+  'Anything',
+);")"
+run assertion-contract.sh deny  "healer swaps a matcher on a chained line" "$(edit healer $S "await expect(page.getByRole('status'))
+  .toHaveText('Order placed');" "await expect(page.getByRole('status'))
+  .toContainText('Order');")"
+run assertion-contract.sh allow "healer re-points a wrapped locator"       "$(edit healer $S "$W1" "await expect(page.getByTestId('order-status')).toHaveText(
+  'Order placed',
+);")"
+run assertion-contract.sh allow "healer only re-wraps (Prettier reformat)" "$(edit healer $S "$W1" "await expect(page.getByRole('status')).toHaveText('Order placed');")"
+run assertion-contract.sh allow "a quoted paren does not swallow the next assertion's heal" "$(edit healer $S "await expect(a).toHaveText('(1 item');
+await expect(page.getByRole('x')).toHaveText('B');" "await expect(a).toHaveText('(1 item');
+await expect(page.getByTestId('x')).toHaveText('B');")"
+
+# A long test body must not become one giant "statement": the test(...) paren stays open for
+# the whole body, and a joiner that followed it would chunk the file at arbitrary line counts,
+# so a healer adding one line would shift every chunk and false-deny.
+LONG="test('checkout', async ({ page }) => {"
+for i in $(seq 1 40); do LONG="$LONG
+  await page.getByRole('button', { name: 'Step $i' }).click();
+  await expect(page.getByRole('heading')).toHaveText('Step $i');"; done
+LONG="$LONG
+});"
+printf '%s\n' "$LONG" > "$P/tests/auth/long.spec.ts"
+run assertion-contract.sh allow "healer Write adds one wait line to an 80-line test" "$(jq -nc --arg p "$P/tests/auth/long.spec.ts" --arg d "$P" --arg c "$(printf '%s\n' "$LONG" | sed '2i\
+  await page.getByRole('"'"'main'"'"').waitFor();')" \
+  '{hook_event_name:"PreToolUse",tool_name:"Write",agent_type:"healer",cwd:$d,tool_input:{file_path:$p,content:$c}}')"
+run assertion-contract.sh deny  "healer Write retypes one value deep in an 80-line test" "$(jq -nc --arg p "$P/tests/auth/long.spec.ts" --arg d "$P" --arg c "$(printf '%s\n' "$LONG" | sed "s/toHaveText('Step 33')/toHaveText('Step 34')/")" \
+  '{hook_event_name:"PreToolUse",tool_name:"Write",agent_type:"healer",cwd:$d,tool_input:{file_path:$p,content:$c}}')"
+
+echo "assertion-contract.sh — the subset test is locale-independent"
+A2="await expect(a).toHaveText('Bob');
+await expect(b).toHaveText('alice');"
+LC_ALL=en_US.UTF-8 run assertion-contract.sh allow "healer adds a barrier assert (en_US collation)" "$(edit healer $S "$A2" "$A2
+await expect(c).toHaveText('Zoe');")"
+
+echo "assertion-contract.sh — healer stubs and clocks, any receiver"
+G="await page.goto('/');"
+run assertion-contract.sh deny  "healer adds page.context().route"   "$(edit healer $S "$G" "await page.context().route('**/api', r => r.fulfill({ status: 200 }));
+$G")"
+run assertion-contract.sh deny  "healer adds page.routeWebSocket"    "$(edit healer $S "$G" "await page.routeWebSocket('ws://x', ws => {});
+$G")"
+run assertion-contract.sh deny  "healer adds context.routeFromHAR"   "$(edit healer $S "$G" "await context.routeFromHAR('a.har');
+$G")"
+run assertion-contract.sh deny  "healer adds context.clock"          "$(edit healer $S "$G" "await context.clock.runFor(2000);
+$G")"
+run assertion-contract.sh deny  "healer adds browserContext.route"   "$(edit healer $S "$G" "await browserContext.route('**/api', r => r.abort());
+$G")"
+
+echo "hook_qa_root — a QA project nested under a directory named tests/"
+N="$P/mono/tests/qa"
+mkdir -p "$N/tests/auth" "$N/scripts"
+cp "$here/templates/playwright.config.ts" "$N/" && cp "$here/templates/scripts/prod-guard.ts" "$N/scripts/"
+run spec-lint.sh deny "nested project: waitForTimeout" "$(write mono/tests/qa/tests/a.spec.ts "await page.waitForTimeout(500);")"
+run assertion-contract.sh deny "nested project: healer retype" "$(edit healer mono/tests/qa/tests/auth/login.spec.ts "$OLD" "await expect(page.getByRole('alert')).toHaveText('Nope');")"
+run spec-lint.sh allow "nested project: non-test dir stays out of scope" "$(write mono/tests/qa/src/a.ts "await page.waitForTimeout(500);")"
+
 echo "escape hatch"
 out=$(printf '%s' "$(write tests/a.spec.ts "await page.waitForTimeout(500);")" | QA_HOOKS_OFF=1 CLAUDE_PROJECT_DIR="$P" bash "$HK/spec-lint.sh" 2>/dev/null)
 if [ -z "$out" ]; then pass=$((pass+1)); echo "  ok    allow QA_HOOKS_OFF=1 disables the layer"; else bad=$((bad+1)); echo "  FAIL  QA_HOOKS_OFF=1 did not disable spec-lint"; fi

@@ -23,10 +23,10 @@
 # may not INTRODUCE a network stub or a fake-clock call (healer.md §"Anti-drift rule"). Both are
 # ways to make a red test green without touching a single assertion, so the subset test below
 # cannot see either of them:
-#   page.route(...)  - a genuinely broken backend is the most valuable signal the nightly
-#                      produces; stubbing it green converts a real outage into a test that
-#                      passes forever.
-#   page.clock.*     - runFor(2000) is a sleep that the waitForTimeout ban does not lexically
+#   *.route(...)     - also routeFromHAR / routeWebSocket, on a page or a context. A genuinely
+#                      broken backend is the most valuable signal the nightly produces;
+#                      stubbing it green converts a real outage into a test that passes forever.
+#   *.clock.*        - runFor(2000) is a sleep that the waitForTimeout ban does not lexically
 #                      catch, i.e. the cheapest green on a timing flake.
 # Scoped to the HEALER ALONE, deliberately: the verifier's step-8b fault injection IS a
 # page.route, so extending this arm to the verifier would deny the negative control that the
@@ -105,37 +105,85 @@ fi
 #   MASK=0 (verifier) nothing is masked. The verifier may not touch any part of an
 #                     expect, locator and asserted value included.
 #
-# In both readings an options object — `{ timeout: 10_000 }` — is stripped before
-# comparing, because widening a matcher's own timeout is the sanctioned alternative to
-# inserting a sleep (healer.md step 5) and must not read as a rewrite.
+# In both readings the `timeout` KEY of an options object is stripped before comparing,
+# because widening a matcher's own timeout is the sanctioned alternative to inserting a
+# sleep (healer.md step 5) and must not read as a rewrite. ONLY that key: every other
+# option changes what the assertion proves - `toBeVisible({ visible: false })` inverts it,
+# `ignoreCase`, `useInnerText`, `maxDiffPixelRatio`, `threshold` and `mask` loosen it, and a
+# locator's `{ name: 'Save' }` IS the locator. An earlier version dropped the whole `{...}`
+# and let all of those through.
 #
 # What survives masking is therefore: which matcher is called, in what order, with what
-# asserted literal. That is exactly the surface healer.md §"Never change the assertion
-# contract" forbids — matcher swaps and .not flips (its bullet 2) AND changed strings,
-# ranges and regexes (its bullet 1). The matcher-only version of this hook caught the
-# first and missed the second, which is the more common weakening: the app's wording
+# asserted literal and options. That is exactly the surface healer.md §"Never change the
+# assertion contract" forbids — matcher swaps and .not flips (its bullet 2) AND changed
+# strings, ranges and regexes (its bullet 1). The matcher-only version of this hook caught
+# the first and missed the second, which is the more common weakening: the app's wording
 # drifts, and the cheapest green is to retype the expected string. That is the
 # changed-text bucket — escalate to the planner, never patch.
 #
-# Paren-balance is counted naively, so a quoted string containing an unmatched paren
-# leaves the line unmaskable. Those lines are DROPPED from both sides rather than compared
-# unmasked, which would false-deny a legitimate locator heal. Fail-open, as everywhere here.
+# The unit compared is a STATEMENT, not a line. Prettier wraps a long assertion so the
+# expected value sits on its own line (`toHaveText(\n  'Order placed',\n)`) or the matcher
+# starts one (`\n  .toHaveText(...)`); read line by line, that value was never compared and
+# could be retyped freely. `statements` starts a join only on a line holding `expect(` and
+# continues it while a paren opened AT OR AFTER that expect is still open, or the next line
+# continues a `.` chain; parens are counted outside quotes and `//` comments only. Starting
+# at the expect is load-bearing: a join that followed `test('x', async () => {` would swallow
+# the whole test body, and one added line would re-chunk it and false-deny a legitimate heal. A runaway join
+# (an unclosed paren the counter misreads) is cut at 30 lines, so it degrades to dropping
+# lines, never to a hang.
+#
+# A statement whose parens still do not balance under maskexpects is DROPPED from both sides
+# rather than compared unmasked, which would false-deny a legitimate locator heal. Fail-open,
+# as everywhere here.
+statements() {
+  awk '
+    BEGIN { SQ = sprintf("%c", 39); BT = sprintf("%c", 96); DQ = "\"" }
+    function delta(s,   i, ch, q, d) {
+      d = 0; q = ""
+      for (i = 1; i <= length(s); i++) {
+        ch = substr(s, i, 1)
+        if (q != "") { if (ch == "\\") i++; else if (ch == q) q = ""; continue }
+        if (ch == SQ || ch == DQ || ch == BT) { q = ch; continue }
+        if (ch == "/" && substr(s, i + 1, 1) == "/") break
+        if (ch == "(") d++; else if (ch == ")") d--
+      }
+      return d
+    }
+    function flush() { print buf; buf = ""; n = 0; depth = 0 }
+    {
+      if (buf != "") {
+        if (depth > 0 || $0 ~ /^[ \t]*\./) {
+          buf = buf " " $0; n++; depth += delta($0)
+          if (n >= 30) flush()
+          next
+        }
+        flush()
+      }
+      if (match($0, /expect[.a-zA-Z]*\(/) > 0) { buf = $0; n = 1; depth = delta(substr($0, RSTART)); next }
+      print
+    }
+    END { if (buf != "") flush() }'
+}
+
 assertions() {
   local mask="$1"
-  awk -v mask="$mask" '
-    function maskexpects(s,   out, head, rest, depth, n, ch, ok) {
+  statements | awk -v mask="$mask" '
+    BEGIN { SQ = sprintf("%c", 39); BT = sprintf("%c", 96); DQ = "\"" }
+    function maskexpects(s,   out, head, rest, depth, n, ch, ok, q) {
       out = ""
       while (match(s, /expect[.a-zA-Z]*\(/) > 0) {
         head = substr(s, RSTART, RLENGTH)
         out  = out substr(s, 1, RSTART - 1) head
         rest = substr(s, RSTART + RLENGTH)
-        depth = 1; n = 0; ok = 0
+        depth = 1; n = 0; ok = 0; q = ""
         while (n < length(rest)) {
           n++; ch = substr(rest, n, 1)
-          if (ch == "(") depth++
+          if (q != "") { if (ch == "\\") n++; else if (ch == q) q = ""; continue }
+          if (ch == SQ || ch == DQ || ch == BT) q = ch
+          else if (ch == "(") depth++
           else if (ch == ")") { depth--; if (depth == 0) { ok = 1; break } }
         }
-        if (!ok) return ""            # unbalanced — drop the line
+        if (!ok) return ""            # unbalanced — drop the statement
         out = out "#)"
         s = substr(rest, n + 1)
       }
@@ -144,10 +192,16 @@ assertions() {
     /expect[.a-zA-Z]*\(/ {
       line = $0
       if (mask == 1) { line = maskexpects(line); if (line == "") next }
-      gsub(/,[ \t]*\{[^}]*\}/, "", line)     # trailing options object: toHaveText("x", { timeout })
-      gsub(/\([ \t]*\{[^}]*\}[ \t]*\)/, "()", line)  # sole options arg: toBeVisible({ timeout })
-      gsub(/^[ \t]+|[ \t]+$/, "", line)
+      gsub(/,[ \t]*timeout[ \t]*:[ \t]*[^,})]+/, "", line)          # { a: 1, timeout: 5 } -> { a: 1 }
+      gsub(/\{[ \t]*timeout[ \t]*:[ \t]*[^,})]+,?[ \t]*/, "{", line)  # { timeout: 5, a: 1 } / { timeout: 5 }
+      gsub(/,[ \t]*\{[ \t]*\}/, "", line)                           # now-empty trailing options object
+      gsub(/\([ \t]*\{[ \t]*\}[ \t]*\)/, "()", line)                # now-empty sole options object
       gsub(/[ \t]+/, " ", line)
+      gsub(/^ | $/, "", line)
+      gsub(/\( /, "(", line); gsub(/ \)/, ")", line)                # Prettier wrap whitespace
+      gsub(/\{ /, "{", line); gsub(/ \}/, "}", line)
+      gsub(/, ?\)/, ")", line)                                      # Prettier trailing comma
+      gsub(/\) \./, ").", line)                                     # chained .matcher on its own line
       if (line != "") print line
     }' | LC_ALL=C sort
 }
@@ -166,7 +220,7 @@ oracle_lines() {
 }
 
 if [ "${abs%.oracle.ts}" != "$abs" ]; then
-  lost=$(comm -23 <(printf '%s\n' "$before" | oracle_lines) <(printf '%s\n' "$after" | oracle_lines))
+  lost=$(LC_ALL=C comm -23 <(printf '%s\n' "$before" | oracle_lines) <(printf '%s\n' "$after" | oracle_lines))
   rule="${abs##*/} is the spec's oracle module (agents/generator.md F-33): it pins the expected
 values the spec's assertions import. Changing or removing one changes what every test that
 imports it proves, without touching a single expect(...) line. That is the canonical
@@ -176,7 +230,7 @@ If the expected value is now wrong, this is a contract-change or a product bug, 
 classify it, file bugs/<slug>.md, leave the test red, and kick the oracle back to the planner.
 Adding a new export (a constant a twin needs) stays allowed."
 elif [ "$agent" = "verifier" ]; then
-  lost=$(comm -23 <(printf '%s\n' "$before" | assertions 0) <(printf '%s\n' "$after" | assertions 0))
+  lost=$(LC_ALL=C comm -23 <(printf '%s\n' "$before" | assertions 0) <(printf '%s\n' "$after" | assertions 0))
   rule="Hard rule 1 in agents/verifier.md — you may NOT edit any expect(...), locator, matcher or
 asserted value in the parent spec. You did not choose them, and the whole reason you exist as an
 agent separate from the generator is that you have no authorship to defend.
@@ -186,7 +240,7 @@ Hand it back instead:
   - a decorative or under-specified oracle              -> the PLANNER
 Record the invariant as BLIND and withhold the route manifest. Do not make the probe land."
 else
-  lost=$(comm -23 <(printf '%s\n' "$before" | assertions 1) <(printf '%s\n' "$after" | assertions 1))
+  lost=$(LC_ALL=C comm -23 <(printf '%s\n' "$before" | assertions 1) <(printf '%s\n' "$after" | assertions 1))
   rule="agents/healer.md §\"Never change the assertion contract\" — you patch selectors and waits.
 Changing WHICH matcher is called (toHaveText -> toContainText, anything -> toBeVisible), flipping a
 .not, retyping an expected string, number or regex, or dropping an assertion weakens what the
@@ -210,6 +264,10 @@ if [ "$agent" = "healer" ]; then
   }
   n_occurrences() { printf '%s\n' "$1" | strip_comments | grep -cE "$2" || true; }
 
+  # Keyed on the METHOD, not the receiver: page.route, context.route, page.context().route and
+  # browserContext.route are one stub, and routeFromHAR / routeWebSocket are the same move by
+  # another name (Playwright exposes all three on Page and BrowserContext, and clock on both).
+  #
   # Two probes, spelled out rather than looped over packed "regex:label" strings: every
   # obvious delimiter is already a regex metacharacter here, and `[[:space:]]` contains a
   # colon, so a ${probe%%:*} split would silently truncate the pattern to `page\.route[[`
@@ -217,11 +275,11 @@ if [ "$agent" = "healer" ]; then
   probe_re=''; probe_what=''
   for n in 1 2; do
     if [ "$n" = 1 ]; then
-      probe_re='page\.route[[:space:]]*\(|context\.route[[:space:]]*\('
-      probe_what='a network stub (page.route)'
+      probe_re='\.(route|routeFromHAR|routeWebSocket)[[:space:]]*\('
+      probe_what='a network stub (route / routeFromHAR / routeWebSocket)'
     else
-      probe_re='page\.clock[[:space:]]*\.'
-      probe_what='a fake-clock call (page.clock)'
+      probe_re='\.clock[[:space:]]*\.'
+      probe_what='a fake-clock call (clock.*)'
     fi
     re=$probe_re; what=$probe_what
     b=$(n_occurrences "$before" "$re"); a=$(n_occurrences "$after" "$re")

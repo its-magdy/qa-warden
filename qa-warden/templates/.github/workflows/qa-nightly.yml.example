@@ -58,20 +58,3 @@ jobs:
       - name: Failure breadcrumb
         if: failure()
         run: echo "::error title=qa-nightly red::Nightly run failed — download the qa-nightly artifact (trace.zip + last-run.json), then triage locally with /qa-warden:heal <test-id>."
-      # Optional AI triage in CI (OFF by default — nightly stays $0 LLM). Requires an
-      # ANTHROPIC_API_KEY secret; uses the same entrypoint as skills/review/SKILL.md's CI snippet
-      # (anthropics/claude-code-action@v1, or the CLI: npm i -g @anthropic-ai/claude-code && claude -p).
-      # The runner needs the plugin installed (qa-review.yml.example shows plugin_marketplaces/plugins),
-      # and heal reads the plugin's reference/sentinel-actions.md, so a CLI run also needs
-      # --add-dir <plugin install path> and --settings .claude/settings.json (README §Running headless or in CI).
-      # - name: AI heal (opt-in)
-      #   if: failure()
-      #   env: { ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} }
-      #   run: |
-      #     FAILED="$(jq -r '[.. | objects | .specs? // empty | .[] | select(.ok==false)][0].title // empty' artifacts/last-run.json 2>/dev/null || true)"
-      #     # if/fi, NOT `[ -n ... ] && …`: GH runs steps under `bash -e {0}` and takes the last
-      #     # command's exit code — with FAILED empty (jq shape miss, no last-run.json after a
-      #     # prod-guard/npm-ci failure) the bare && chain exits 1 and this heal step reports
-      #     # itself failed, burying the real cause. (Not `|| true` either — that would also
-      #     # swallow a genuine heal failure.)
-      #     if [ -n "$FAILED" ]; then npx @anthropic-ai/claude-code -p "/qa-warden:heal $FAILED" --permission-mode acceptEdits; fi

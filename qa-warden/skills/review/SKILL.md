@@ -57,45 +57,6 @@ then PASS summary. It fixes nothing; on a FAIL, kick the spec back to the
 `generator` (or planner) named in the finding. It reruns no product tests beyond
 the twins and hits no network.
 
-**CI wiring (optional — the local gate is the `.reviewed` marker below + doctor Check 15).** The reviewer's competence is not the gap — its
-*triggering* is. Run it on every PR that touches the QA suite. A FRESH `/qa-warden:init` stamps this
-workflow as `.github/workflows/qa-review.yml.example` — rename it to enable. (`/qa-warden:init --resync`
-deliberately does NOT deliver it — it is optional, so it is kept out of the resync set; on a
-project scaffolded before it existed, copy it from
-`${CLAUDE_PLUGIN_ROOT}/templates/.github/workflows/qa-review.yml.example`.) **The runner
-must install the plugin** (`plugins:` + `plugin_marketplaces:`, the latter a Git URL): the
-`reviewer` subagent ships inside the plugin, so on a bare runner the prompt below names a
-subagent that does not exist. The shape:
-
-```yaml
-# .github/workflows/qa-review.yml
-on:
-  pull_request:
-    paths: ['tests/**', 'specs/**', 'page-objects/**']
-jobs:
-  qa-review:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }        # full history so origin/main...HEAD resolves
-      - uses: anthropics/claude-code-action@v1
-        with:
-          plugin_marketplaces: "https://github.com/<your-org>/<marketplace-repo>.git"
-          plugins: "qa-warden@qa-warden"
-          prompt: "Use the reviewer subagent to review the PR diff and its imported page objects. Fail the job on any reviewer FAIL, and also fail the job if the reviewer's report contains no explicit verdict line (a report cut off before a verdict is written is not a PASS)."
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-```
-
-Mark this job a **required status check** in branch protection — that is the only
-attestation an agent cannot forge. Non-GitHub CI: install the CLI on the runner
-(`npm install -g @anthropic-ai/claude-code`) and invoke `claude -p "…"` with
-`ANTHROPIC_API_KEY` (or a `claude setup-token`-generated `CLAUDE_CODE_OAUTH_TOKEN`)
-in the job env. The load-bearing part is that a PR touching `tests/`/`specs/`
-cannot merge without the reviewer having run.
-
 **Attestation marker (feeds `/qa-warden:doctor` Check 15).** After the reviewer returns,
 **first check that its report contains an explicit verdict line** (`PASS`, or
 `FAIL` in any form including `FAIL (inconclusive-partial)`) for the reviewed pair.

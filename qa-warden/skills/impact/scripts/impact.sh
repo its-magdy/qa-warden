@@ -103,6 +103,10 @@ if [ "$MANIFESTS" -eq 0 ]; then
 fi
 
 echo "### MATCHES"
+# route= is matched the way /qa-warden:coverage reads the same manifests (its PARAM_NORM):
+# `:id`, `{id}` and `[id]` are one parameter, and a concrete path (`/rooms/42`) matches a
+# recorded template (`/rooms/{id}`) and vice versa. The manifest format does not fix which
+# form the verifier records, so an exact compare let an affected spec read as not impacted.
 (
   set -o pipefail
   # Surface jq parse errors (a malformed manifest silently skipped is the dangerous failure
@@ -115,8 +119,15 @@ echo "### MATCHES"
   # still flags the bad file.
   find artifacts/route-manifests -name '*.json' -print0 |
     xargs -0 -n1 jq -r --arg key "$KEY" --arg val "$VAL" \
-      'if ($key == "area") then
+      'def pnorm: gsub("/(:[^/]+|\\{[^}/]+\\}|\\[[^\\]/]+\\])"; "/:param");
+       def pre: "^" + (pnorm | gsub("\\."; "\\.") | gsub("/:param"; "/[^/]+")) + "/?$";
+       def rmatch($a; $b): ($a | pnorm) == ($b | pnorm)
+         or (try ($b | test($a | pre)) catch false)
+         or (try ($a | test($b | pre)) catch false);
+       if ($key == "area") then
          select(.area == $val) | "\(.area)\t\(.spec)"
+       elif ($key == "routes") then
+         select(any(.routes[]?; rmatch(.; $val))) | "\(.area)\t\(.spec)"
        else
          select((.[$key] // []) | index($val)) | "\(.area)\t\(.spec)"
        end' 2> >(sed 's/^/[jq parse error — malformed manifest] /' >&2) |

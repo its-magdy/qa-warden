@@ -65,9 +65,11 @@ substrate) that a plugin cannot carry on its own.
   (the deny can't be bypassed inline — see F-031) — force-push, `git reset --hard`,
   `curl … | sh`, writes to
   `package.json` / `playwright.config.ts` / `package-lock.json` / `prod-guard.*`,
-  reading `/etc`). `.env` is not hard-denied — it is simply outside the
-  write-allowlist, so an agent write to it needs explicit per-prompt human
-  approval (gitignored + human-owned, not blocked). Reading product source
+  reading `/etc`, and reading `.env`). `Read(.env)` also blocks `cat`/`head`/`sed`
+  of it in Bash, so no agent can print the credentials into the transcript; the
+  scripts that need them (`prod-guard.sh --list-targets`, `cli-fill-env.sh`,
+  Playwright's dotenv) load it as subprocesses, which the rule does not touch.
+  `.env` stays human-edited: agents cannot Read it, so they cannot Edit it either. Reading product source
   outside the QA repo is allowed (grey-box locator disambiguation); writes are
   scoped to the QA repo dirs.
 - This command writes project files. The first time, the user may need to

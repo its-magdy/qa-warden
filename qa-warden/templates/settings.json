@@ -86,7 +86,8 @@
       "WebFetch(domain:code.claude.com)"
     ],
     "deny": [
-      "Read(/etc/**)",
+      "Read(//etc/**)",
+      "Read(.env)",
       "Edit(playwright.config.ts)",
       "Edit(package.json)",
       "Edit(package-lock.json)",

@@ -250,8 +250,7 @@ does not fix anything — each finding names its repair:
   `reports/review/<area>/<feature>.reviewed` marker (or was never reviewed), or a
   `// verified: must_fail_when "…"` stamp no longer matches the spec's invariant text —
   re-run `/qa-warden:review` (and `--verify-invariants` for a stale stamp). Markers are
-  agent-writable convenience; the unforgeable layer is the CI required-status
-  (see `/qa-warden:review` §CI wiring) — this catches *forgotten* reviews, not malicious ones.
+  agent-writable convenience — this catches *forgotten* reviews, not malicious ones.
 - **Check 16 (smoke-tagged spec with no test, WARN):** a spec declares a `tags: [… smoke …]`
   scenario but was never compiled — `/qa-warden:run mode=smoke`'s `--grep @smoke` is blind to that P1 flow, so a
   fully-broken governed path (admin RBAC, checkout charge==total) passes the smoke gate because no

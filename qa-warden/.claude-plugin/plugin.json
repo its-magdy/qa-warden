@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "qa-warden",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "displayName": "QA Warden",
   "description": "AI-written Playwright E2E tests. The healer can fix selectors, never assertions. AI-authored, Playwright-replayed E2E QA suite. Exploration/planner/ideation/generator/verifier/reviewer/healer subagents + oracle-defense skills + an AI-maintained page-object reuse layer (change a shared flow in one place; heal it once). AI authors specs, Playwright replays nightly at $0 LLM cost, AI triages only on failure. Run /qa-warden:init in a fresh project to stamp the runtime substrate.",
   "author": {

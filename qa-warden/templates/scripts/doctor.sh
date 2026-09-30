@@ -1084,8 +1084,8 @@ EOF
       echo "⚠️  cannot read the stub/clock arm's agent scope out of hooks/assertion-contract.sh — Check 9i arm 2 is blind; re-anchor it if the script was restructured"; warn=$((warn+1))
     elif [ "$sarm" != "healer" ]; then
       echo "❌ the stub/clock arm in hooks/assertion-contract.sh scopes to '$sarm', not 'healer' — if that is the verifier, its step-8b fault injection (which IS a page.route) is now denied and the negative control the oracle-defense layer rests on cannot run"; fail=$((fail+1))
-    elif ! grep -q 'page\\.clock' "$ach"; then
-      echo "❌ hooks/assertion-contract.sh has a healer-scoped arm but no page.clock probe — the healer can introduce a fake-clock settle, which is a sleep the waitForTimeout ban does not lexically catch"; fail=$((fail+1))
+    elif ! grep -qF '.clock[[:space:]]*' "$ach"; then   # the probe regex keys on the method (0.5.3), so page.clock and context.clock alike
+      echo "❌ hooks/assertion-contract.sh has a healer-scoped arm but no clock probe — the healer can introduce a fake-clock settle, which is a sleep the waitForTimeout ban does not lexically catch"; fail=$((fail+1))
     fi
   fi
 

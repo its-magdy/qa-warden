@@ -46,7 +46,7 @@ hook_require_jq() { command -v jq >/dev/null 2>&1 || exit 0; return 0; }
 #
 # Two conditions must BOTH hold, and neither is about the file being edited:
 #   1. the path sits under a `tests/` or `page-objects/` directory, and
-#   2. the directory above that one is a scaffolded QA project.
+#   2. the nearest scaffolded QA project above the file is the one that directory belongs to.
 #
 # The marker pair is `playwright.config.ts` + `scripts/prod-guard.ts`. Both are stamped by
 # bin/qa-scaffold on every /qa-warden:init and both are in scripts/resync-set.txt, so they exist
@@ -57,17 +57,27 @@ hook_require_jq() { command -v jq >/dev/null 2>&1 || exit 0; return 0; }
 #
 # Deliberately NOT keyed on specs/_context/app.context.md: that file is written by
 # /qa-warden:explore, not by the scaffold, so a freshly-initialised project would be unguarded.
+#
+# The root is found by walking UP from the file to the nearest directory holding the marker
+# pair, not by cutting the path at its first `/tests/`: that cut made a project that itself
+# lives under a directory named `tests` (`/repo/tests/qa/`, a common monorepo layout) resolve
+# to `/repo`, and both hooks silently stopped firing there.
 hook_qa_root() {
-  local abs="$1" root
-  case "$abs" in
-    */tests/*)        root="${abs%%/tests/*}" ;;
-    */page-objects/*) root="${abs%%/page-objects/*}" ;;
-    *) return 1 ;;
-  esac
-  [ -n "$root" ] || return 1
-  [ -f "$root/playwright.config.ts" ] || return 1
-  [ -f "$root/scripts/prod-guard.ts" ] || return 1
-  printf '%s\n' "$root"
+  local abs="$1" dir next
+  case "$abs" in */tests/*|*/page-objects/*) : ;; *) return 1 ;; esac
+  dir="${abs%/*}"
+  while [ -n "$dir" ]; do
+    if [ -f "$dir/playwright.config.ts" ] && [ -f "$dir/scripts/prod-guard.ts" ]; then
+      case "${abs#"$dir"/}" in
+        tests/*|page-objects/*) printf '%s\n' "$dir"; return 0 ;;
+        *) return 1 ;;
+      esac
+    fi
+    next="${dir%/*}"
+    [ "$next" = "$dir" ] && break   # a relative path with no slash left — stop, never spin
+    dir="$next"
+  done
+  return 1
 }
 
 # --- path resolution ----------------------------------------------------------------
