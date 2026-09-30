@@ -26,24 +26,17 @@ First time? Follow ${CLAUDE_PLUGIN_ROOT}/reference/tutorial-first-test.md (a ~10
 path is only the first bare (non-`key=val`) token; everything of the form
 `site=…` is a flag, not part of the filename. Building `specs/$ARGUMENTS.md`
 verbatim produces a broken name like `specs/checkout/coupon site=app.md` when a
-flag is passed inline:
+flag is passed inline.
+Split `$ARGUMENTS` yourself (no shell loop — a `for`/`VAR=` block matches no allow rule and
+is denied headless, and each Bash call is a fresh shell so a variable never reaches the next
+call): `site=<id>` → SITE, `basis=<area>/<feature>` → BASIS (parent checklist of a fanned spec,
+from /qa-warden:approve), the **first bare token** → the `<area/feature>` argument. Then resolve
+it with the canonical resolver as its own call (accepts bare `<area>/<feature>`,
+`<area>/<feature>.md`, or a full `specs/…` path; missing script → re-run /qa-warden:init):
 ```bash
-# zsh (this host's default Bash-tool shell) doesn't word-split unquoted vars —
-# force it so the site= flag separates from the path; no-op in bash.
-[ -n "${ZSH_VERSION:-}" ] && setopt shwordsplit 2>/dev/null
-set -- $ARGUMENTS
-FEATURE=""; SITE=""; BASIS=""
-for tok in "$@"; do
-  case "$tok" in
-    site=*)  SITE="${tok#site=}" ;;
-    basis=*) BASIS="${tok#basis=}" ;;   # parent checklist of a fanned spec (from /qa-warden:approve)
-    *)      [ -z "$FEATURE" ] && FEATURE="$tok" ;;   # first bare token = <area/feature>
-  esac
-done
-# Canonical resolver accepts bare <area>/<feature>, <area>/<feature>.md, or a full
-# specs/… path (missing script → re-run /qa-warden:init to stamp it).
-SPEC_PATH=$(bash scripts/resolve-spec-path.sh spec "$FEATURE")   # e.g. specs/checkout/coupon.md
+bash scripts/resolve-spec-path.sh spec "<area/feature>"   # prints e.g. specs/checkout/coupon.md
 ```
+The printed line is the **spec path** — use that literal string in every later step.
 So `/qa-warden:new-spec admin/refund-partial site=admin` → `specs/admin/refund-partial.md` with
 `site=admin` handed to the planner, never baked into the filename. With no `site=`, the planner
 infers from the story and raises an Open Question if ambiguous. `basis=<area>/<feature>` names the
@@ -73,11 +66,10 @@ correctly. Group admin specs under an `admin/` area only for organization
 (Why routing is tag-based, and the trap in re-introducing a path-routed project:
 `reference/DESIGN.md` §"Site routing is tag-based, not path-based".)
 
-**Existing spec? Delegate it as a REVISION (⛔ data loss).** After `SPEC_PATH` resolves:
-```bash
-[ -f "$SPEC_PATH" ] && echo "EXISTS — revision, not authoring: $SPEC_PATH"
-```
-If it exists, say so in the delegation — tell the planner it is **revising `$SPEC_PATH`** and
+**Existing spec? Delegate it as a REVISION (⛔ data loss).** Once the spec path is printed,
+check it exists — `Glob` on that literal path (or `ls specs/checkout/coupon.md`, substituting
+the printed path); a match means EXISTS — revision, not authoring.
+If it exists, say so in the delegation — tell the planner it is **revising `<spec path>`** and
 name the specific change. Its Process 4c then takes the `Read`+`Edit` path instead of
 overwriting: a one-pass rewrite silently drops hand-added scenarios, `# waived:` lines and the
 `basis:` pairing with every downstream check still green. Same path `.healer-needs-spec-update`

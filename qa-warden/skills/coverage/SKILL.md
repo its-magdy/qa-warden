@@ -3,7 +3,7 @@ description: "Honest test-coverage report — 9 dimensions (0–6, plus 1b and 5
 argument-hint: "[area=<name>] [site=<id>]"
 context: fork
 background: false
-allowed-tools: Bash(bash ${CLAUDE_SKILL_DIR}/scripts/coverage.sh *)
+allowed-tools: Bash(bash "${CLAUDE_SKILL_DIR}/scripts/coverage.sh" *)
 ---
 
 Report **honest** test coverage for this suite — *flow / requirement coverage, never line
@@ -49,7 +49,7 @@ All nine dimensions are computed by ONE bundled script. Run it from the **projec
 (every path it reads is project-relative) and pass `$ARGUMENTS` through verbatim:
 
 ```bash
-bash ${CLAUDE_SKILL_DIR}/scripts/coverage.sh "$ARGUMENTS"
+bash "${CLAUDE_SKILL_DIR}/scripts/coverage.sh" "$ARGUMENTS"
 ```
 
 The script is the single source of the extraction recipes and their rationale — **do not

@@ -17,7 +17,9 @@ QA Warden is a Claude Code plugin that turns a Markdown spec into a Playwright `
   - [Uninstall](#uninstall)
 - [Configuration](#configuration)
 - [Usage](#usage)
+  - [Try it in 5 minutes](#try-it-in-5-minutes)
 - [Troubleshooting](#troubleshooting)
+  - [Running headless or in CI](#running-headless-or-in-ci)
 - [Commands reference](#commands-reference)
 - [How it differs from Playwright's test agents](#how-it-differs-from-playwrights-test-agents)
 - [Scope and limits](#scope-and-limits)
@@ -46,15 +48,17 @@ Run these inside Claude Code, from the project that will hold the tests:
 # 1. Register the marketplace (this GitHub repo)
 /plugin marketplace add its-magdy/qa-warden
 
-# 2. Install at project scope. This records the plugin in .claude/settings.json,
-#    so teammates who clone and trust the repo are prompted to install it too.
+# 2. Install at project scope. This records the plugin under enabledPlugins
+#    in .claude/settings.json.
 /plugin install qa-warden@qa-warden --scope project
 
 # 3. Stamp the runtime substrate into this project and install dependencies
 /qa-warden:init
 ```
 
-`/qa-warden:init` copies every file in the plugin's `templates/` into the project and skips any file that already exists: `package.json` (with `@playwright/test` pinned to `1.63.0`), `playwright.config.ts`, `tsconfig.json`, `CLAUDE.md`, `.mcp.json`, `.mcp.explore.json`, `.gitignore`, `.env.example`, `scripts/`, `fixtures/`, `page-objects/`, `specs/_context/_templates/` and two CI examples in `.github/workflows/*.yml.example`. It also creates `.env` from `.env.example` and merges its permission rules into `.claude/settings.json`. Then it runs `npm install` and installs the Playwright browsers.
+`/qa-warden:init` copies every file in the plugin's `templates/` into the project and skips any file that already exists: `package.json` (with `@playwright/test` pinned to `1.63.0`), `playwright.config.ts`, `tsconfig.json`, `CLAUDE.md`, `.mcp.json`, `.mcp.explore.json`, `.gitignore`, `.env.example`, `scripts/`, `fixtures/`, `page-objects/`, `specs/_context/_templates/` and two CI examples in `.github/workflows/*.yml.example`. It also creates `.env` from `.env.example` and merges its permission rules and a `qa-warden` entry under `extraKnownMarketplaces` into `.claude/settings.json`. Then it runs `npm install` and installs the Playwright browsers.
+
+**Teammates.** With `enabledPlugins` (from the install) and the marketplace entry (from `/qa-warden:init`) in the committed `.claude/settings.json`, a teammate who clones the repo and trusts the folder gets the plugin from that marketplace. Claude Code applies `extraKnownMarketplaces` only after the folder is trusted. A teammate who doesn't get it runs the two install commands above.
 
 | Flag | Effect |
 |---|---|
@@ -64,26 +68,26 @@ Run these inside Claude Code, from the project that will hold the tests:
 What the plugin changes in your session:
 
 - **Two `PreToolUse` hooks run automatically on every `Edit` and `Write`.** `assertion-contract.sh` stops the healer and the verifier from removing or rewriting an assertion in `tests/**/*.spec.ts` or an expected value in `tests/**/*.oracle.ts`. `spec-lint.sh` blocks lexical reviewer FAILs (such as `waitForTimeout`, raw CSS/XPath or `.only`) in writes to `tests/**/*.ts` and `page-objects/**/*.ts`. Details are in [`qa-warden/hooks/README.md`](qa-warden/hooks/README.md).
-- **Permission rules go into `.claude/settings.json`.** They are merged, not overwritten: your own rules and other keys stay. The merge needs `jq`. Without it, init writes the rules to `.claude/settings.qa-suggested.json` for you to merge by hand.
+- **Permission rules go into `.claude/settings.json`.** They are merged, not overwritten: your own rules and other keys stay, and where your file already sets a key the template also sets (such as your own `extraKnownMarketplaces` entries), your value wins. The merge needs `jq`. Without it, init writes the rules to `.claude/settings.qa-suggested.json` for you to merge by hand.
 
 ### Uninstall
 
 ```bash
-/plugin uninstall qa-warden@qa-warden
+/plugin uninstall qa-warden@qa-warden --scope project
 /plugin marketplace remove qa-warden   # optional: also drop the marketplace
 ```
 
-Uninstalling removes the plugin, its commands and its hooks. It does not touch what `/qa-warden:init` stamped into the project: `package.json`, `playwright.config.ts`, `CLAUDE.md`, `.mcp.json`, `.mcp.explore.json`, `scripts/`, `fixtures/`, `page-objects/`, `specs/_context/_templates/`, `.github/workflows/*.yml.example`, `.env.example` and `.env` all stay. So do the permission rules merged into `.claude/settings.json`. Remove them by hand if you no longer want them.
+Uninstalling at project scope removes the plugin, its commands and its hooks, and drops its `enabledPlugins` entry from `.claude/settings.json`. The hooks stay active in the current session until you run `/reload-plugins` or restart Claude Code. It does not touch what `/qa-warden:init` stamped into the project: `package.json`, `playwright.config.ts`, `CLAUDE.md`, `.mcp.json`, `.mcp.explore.json`, `scripts/`, `fixtures/`, `page-objects/`, `specs/_context/_templates/`, `.github/workflows/*.yml.example`, `.env.example` and `.env` all stay. So do the permission rules and the `extraKnownMarketplaces` entry `/qa-warden:init` merged into `.claude/settings.json`. Remove them by hand if you no longer want them.
 
 ---
 
 ## Configuration
 
-`/qa-warden:init` created `.env` from `.env.example`. Open `.env` and set the target app and test account:
+`/qa-warden:init` created `.env` from `.env.example`. Open `.env` and set the target app and, if the app has a login, the test account:
 
 ```bash
 BASE_URL_APP=http://localhost:3000     # staging or localhost, never prod
-QA_USER_EMAIL=member@example.test      # an account that already exists
+QA_USER_EMAIL=member@example.test      # an account that already exists (leave blank if the app has no login)
 QA_USER_PASSWORD=your-test-password
 QA_ADMIN_EMAIL=                        # optional: admin-role tests
 QA_ADMIN_PASSWORD=
@@ -92,6 +96,7 @@ QA_ADMIN_PASSWORD=
 - `BASE_URL_APP` ships as `CHANGEME`. The prod-guard **fails closed** until you replace it.
 - Specs never contain passwords. They reference the variable name (`password_env: "QA_USER_PASSWORD"`).
 - Each additional site under test gets its own `BASE_URL_<SITE>` variable.
+- A site with no login is recorded as `auth_mode: none` in `specs/_context/app.context.md`. Its tests run unauthenticated, and `QA_USER_*` stays empty. When `/qa-warden:explore` sees no login and no `QA_USER_*` credentials, it drafts `auth_mode: none` with a `# REVIEW:` line for you to confirm.
 
 Confirm the setup (read-only and offline; it never contacts `BASE_URL_APP`):
 
@@ -99,11 +104,48 @@ Confirm the setup (read-only and offline; it never contacts `BASE_URL_APP`):
 /qa-warden:doctor
 ```
 
-A healthy project prints a summary with no ❌ blockers.
+A healthy project prints a summary with no ❌ blockers. While `BASE_URL_APP` is still empty or a placeholder, doctor prints a ⚠️ for it and the verdict reads "Setup is NOT ready yet — fill in .env" instead of "Setup looks healthy".
 
 ---
 
 ## Usage
+
+### Try it in 5 minutes
+
+This walkthrough targets Playwright's public TodoMVC demo, so you need no app of your own and no account. In a new, empty folder, install the plugin as in [Installation](#installation), then:
+
+```bash
+/qa-warden:init
+```
+
+Set one line in `.env` and leave `QA_USER_*` and `QA_ADMIN_*` empty:
+
+```bash
+BASE_URL_APP=https://demo.playwright.dev/todomvc/
+```
+
+Keep the trailing slash. Without it, the app's relative `goto('./')` lands on a 404.
+
+```bash
+/qa-warden:doctor                    # the .env ⚠️ should be gone
+/qa-warden:explore                   # drafts app.context.md with auth_mode: none
+/qa-warden:new-spec todos/add-todo   # describe: "add two todos; both are listed and the counter reads '2 items left'; tag it smoke"
+/qa-warden:gen specs/todos/add-todo.md
+/qa-warden:review
+/qa-warden:run mode=smoke
+```
+
+- After `/qa-warden:explore`, open `specs/_context/app.context.md`, check it, and delete the `draft:` line to confirm it.
+- `/qa-warden:new-spec` runs the area explore itself if it needs one.
+- The oracle should look something like this. The demo's rows carry `data-testid="todo-item"`, and a test id is justified here because the `listitem` role also matches the filter links:
+
+```yaml
+oracle:
+  text_visible: "2 items left"
+  count_equals: { locator: "getByTestId('todo-item')", n: 2 }
+```
+
+The demo is public and shared, so it may change or be down. The walkthrough makes real model calls: the authoring pass (`explore` through `gen`) is the expensive part, while `/qa-warden:run` has no LLM cost.
 
 ### Fast lane: your first test
 
@@ -194,6 +236,13 @@ If product copy changed, the healer does not absorb it. It routes the question (
 - **`/qa-warden:doctor` reports `❌ jq not installed`.** Install `jq` and re-run `/qa-warden:init`. If init ran without `jq`, it left the permission rules in `.claude/settings.qa-suggested.json`, and the re-run merges them and deletes that file.
 - **`/qa-warden:intake` stops and asks you to run `explore` first.** Intake needs the area context file `specs/_context/<site>/<area>.md`, and a bare `/qa-warden:explore` writes only `app.context.md`. Run `/qa-warden:explore mode=area site=<id> area=<area>`, then intake again.
 - **`/qa-warden:doctor` reports `substrate drift` after a plugin update.** A template changed, and the stamped copy in the project is older. Run `/qa-warden:init --resync`. Changed files are backed up to `<file>.qa-bak`.
+- **`/qa-warden:doctor` says "Setup is NOT ready yet — fill in .env".** `BASE_URL_APP` is empty, or a `BASE_URL_*` still holds a placeholder. Set it to your staging or local URL. Empty `QA_USER_*` is not flagged, because a site without a login has none.
+
+### Running headless or in CI
+
+- **`claude -p` ignores the project's permission rules in a folder that was never opened interactively.** It logs "Ignoring N permissions.allow entries" because the folder has not been trusted. Pass `--settings .claude/settings.json`, or open the folder once in interactive Claude Code and trust it.
+- **Some skills read reference files inside the plugin:** `/qa-warden:report` (its template), `/qa-warden:help` (its knowledge map), `/qa-warden:heal` and `/qa-warden:batch-fix` (the sentinel actions), and `/qa-warden:doctor --verify-invariants`. Interactively, Claude Code asks once to allow the read. Headless, pass the plugin directory with `--add-dir`. The installed copy is under `~/.claude/plugins/cache/qa-warden/qa-warden/<version>/`; the `installPath` in `~/.claude/plugins/installed_plugins.json` names the exact directory. A skill cannot pre-approve that read.
+- The agents resolve target URLs with `bash scripts/prod-guard.sh --list-targets` and pass them literally, so they need no chained `.env`-loading command, which a headless run would deny.
 
 ---
 
@@ -325,7 +374,7 @@ claude --plugin-dir ./qa-warden
 
 ### Versioning and releasing
 
-The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.4.1`. Users receive an update only when that string changes.
+The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.5.0`. Users receive an update only when that string changes.
 
 > **Bump `version` in the same commit as every user-visible change.** If you push without a bump, nothing ships, and `/plugin update` tells users they are already current. No error warns you.
 

@@ -152,7 +152,7 @@ Playwright config, etc.). So the toolkit is deliberately split:
 |---|---|
 | agents, skills (incl. every `/qa-warden:*`), `reference/DESIGN.md` | `package.json`, `playwright.config.ts`, `tsconfig.json` |
 | | `CLAUDE.md` (the per-project policy / source-of-truth) |
-| | `.claude/settings.json` permission rules (writable-path + deny-list) |
+| | `.claude/settings.json` permission rules (writable-path + deny-list) + the `qa-warden` `extraKnownMarketplaces` entry |
 | | `.mcp.json` + `.mcp.explore.json` (the two-config MCP pattern) |
 | | `scripts/`, `fixtures/`, `.env.example`, `.gitignore` |
 
@@ -214,7 +214,8 @@ generating untracked files its own output tells you to review.
 
 Then **edit `.env`** — set `BASE_URL_APP` to a real **staging/QA** host (never a prod
 host — a prod-guard fails *closed* until you replace the shipped `CHANGEME`
-placeholder) and fill `QA_USER_*` credentials. Then:
+placeholder) and, if the app has a login, fill `QA_USER_*` credentials (a site with no
+login is `auth_mode: none` and needs none). Then:
 
 **Fast lane** (a first test today):
 
@@ -232,6 +233,13 @@ anything is generated. **Right-sizing:** the fast lane skips no FAIL-level gate
 (Check 14 / coverage only WARN), so use it for everything that isn't P1/money/compliance.
 
 Running the suite = `npx playwright test` — plain Playwright, zero LLM.
+
+**Teammates.** The project-scope install records the plugin under `enabledPlugins` in
+`.claude/settings.json`, and `/qa-warden:init` merges in an `extraKnownMarketplaces`
+entry for `qa-warden` (`github` source `its-magdy/qa-warden`; a value your file already
+sets wins). Claude Code applies it only after a teammate trusts the folder; a teammate
+who clones and trusts it gets the plugin from that marketplace, otherwise they run the
+two install commands. Headless / CI caveats: README §Running headless or in CI.
 
 **Local plugin development** (no marketplace): `claude --plugin-dir ./qa-warden`, then
 `/reload-plugins` after edits. **Validate before pushing:**
@@ -385,7 +393,7 @@ What *is* new is that each skill declares **who may invoke it** — see
 | **`/qa-warden:review url=<url>`** | `url=<url> [site=<id>]` | Full a11y + visual + closed-vocab audit of a URL → `reports/audit-<ts>.md`. Direct snapshot, no exploration. Also drives the page's documented **error/failure states** (invalid-submit alert, opened menu/modal) before the axe scan — a state-dependent violation (a low-contrast error alert) never renders in the pristine default state. | **reviewer** + **axe-a11y** + **visual-regression** |
 | **`/qa-warden:report`** | *(none)* | Aggregate `last-run.json` + `reports/*.json` → PR/Slack summary → `reports/summary.md`. Pure aggregation, reruns nothing. Leads with the run **scope** read from the record (`--grep @smoke` → "N smoke tests"), so a green smoke subset is never presented as full-suite green — then a **qualified go/no-go verdict** that must stay qualified while any `bugs/*.md` is open, an audit reported violations, or the scope could not be established. Also surfaces passed-with-retries (flaky ≠ passing), a11y/visual audit headlines, and the running value ledger. | — (self-contained) |
 | **`/qa-warden:coverage`** | `[area=<name>] [site=<id>]` | Honest **requirement/assertion/lens/flow/case/a11y-need** coverage (NOT line coverage), computed statically across 9 dimensions (0–6 plus 1b and 5b) — incl. dim-0 (route plan vs actual footprint), **dim-1b spec-without-test** (an authored spec never compiled, invisible to the smoke gate/doctor/impact), **dim-5b waiver destinations** (an approved case fanned to a sibling spec that must exist), and dim-6 (declared-a11y-need → oracle). **WARN-only, names gaps, not a %** — but a bogus `area=` that matches nothing now errors (a `site=` typo warns and degrades — basis files are optional) instead of rendering a false gap-free report. | — |
-| **`/qa-warden:doctor`** | `[--verify-invariants specs/<f>.md]` | Read-only health check (script-extracted, checks 0–21): freshness / zero-test / vocab-drift / smoke-tag (vacuous gate **and** smoke-tagged-spec-with-no-test) / spec-with-no-compiled-test (any tag) / abandoned authoring chain (`.cases.md` with no spec) / unattested interview (`[human-answered]` basis with no `interview:` count) / bug Status + durable-evidence / staleness / pin+lockfile / prod-guard-lockstep / substrate-drift and more. `--verify-invariants` proves each `must_fail_when` is executable. | — |
+| **`/qa-warden:doctor`** | `[--verify-invariants specs/<f>.md]` | Read-only health check (script-extracted, checks 0–21): unconfigured `.env` target (21a — empty/placeholder `BASE_URL_*` withholds the "setup looks healthy" verdict) / freshness / zero-test / vocab-drift / smoke-tag (vacuous gate **and** smoke-tagged-spec-with-no-test) / spec-with-no-compiled-test (any tag) / abandoned authoring chain (`.cases.md` with no spec) / unattested interview (`[human-answered]` basis with no `interview:` count) / bug Status + durable-evidence / staleness / pin+lockfile / prod-guard-lockstep / substrate-drift and more. `--verify-invariants` proves each `must_fail_when` is executable. | — |
 | **`/qa-warden:help`** | `["free-form question" \| <area/feature>]` | Ask anything about the plugin, or "what's next" — inspects your project state to give a situated answer with the exact next command. Pass an `<area>/<feature>` (e.g. `/qa-warden:help checkout/coupon`) to scope the "what's next" read to **one feature** — it resolves that feature's basis → cases → spec → test and names the single next command with the path filled in, instead of walking project-wide state. Read-only. | — |
 
 ---
@@ -500,6 +508,13 @@ Checks 2c/2e/7/12/14/15 are WARN-level (2c has two mechanically-decidable FAIL s
 | 14 — approved-case traceability | WARN | an approved `.cases.md` case with no scenario and no waiver (green-but-**incomplete**) — **also** a `# waived: … → specs/x.md` whose destination spec does not exist (phantom coverage: the case is unbuilt AND its stated home is missing) |
 | 15 — healed-locator drift | WARN | a heal that broadened a locator (`.first()`/`getByText` downgrade) — diff-aware; with no git baseline, falls back to a stale-testid full-scan (a spec/`_context` `getByTestId('X')` **used as an assertion/locator** whose `X` no POM/test uses — the healed-but-not-back-propagated case; testids that appear only inside a `stable_testids:` hint catalog are excluded — a deliberately-shunned hint is not drift) |
 
+**Scope.** The reviewer reviews the diff against the first of `origin/main`,
+`origin/master`, `main`, `master` that has a merge-base with `HEAD`, unioned with the
+working tree and untracked files (`git ls-files --others --exclude-standard`), so a
+freshly generated, uncommitted spec is in scope. It runs these as separate single git
+commands, which match the allow list (`git ls-files *` among them) and so also work
+headless in CI. With no baseline it reviews the whole tree.
+
 Fail-closed on inconclusive runs. Escape hatch: a `// reviewer-skip-check-<N>:
 bugs/…` comment. Tools: `Read, Bash` (read-only by contract).
 
@@ -511,8 +526,13 @@ Two modes, one artifact per run. **Hot mode** *verifies* the human-owned
 authenticates, walks *only* that area's routes (depth-2 BFS, no full crawl), snapshots
 the AX tree for **domain vocabulary** (not selectors), records stable `data-testid`s
 as grey-box hints, and writes a dated `<site>/<area>.md` with a `volatility:` tier.
-Discipline: an inaccurate-but-fresh file is worse than a stale one. Tools: `Bash,
-Read, Write, Edit`.
+Discipline: an inaccurate-but-fresh file is worse than a stale one. Base URLs come
+from `bash scripts/prod-guard.sh --list-targets` (one allow-listed call that loads
+`.env` itself) and are passed literally — agents never chain a `.env` load with a
+command, which needs a rule per subcommand and is denied headless. A site with no login
+is drafted as **`auth_mode: none`** (no `login_route`/`storage_state_path`/`creds`;
+tests run unauthenticated) when the app shows no login and `QA_USER_*` is unset, with a
+`# REVIEW:` line for a human to confirm. Tools: `Bash, Read, Write, Edit`.
 
 ### 8.6 ideation — enumerate what to test
 
@@ -814,7 +834,7 @@ workflow armed before its secrets exist goes **red, never silently green**.
 | Secret | Mirrors |
 |---|---|
 | `QA_BASE_URL_APP` | `BASE_URL_APP` (staging/QA host — the guard rejects prod and `CHANGEME`) |
-| `QA_USER_EMAIL` / `QA_USER_PASSWORD` | `QA_USER_*` creds |
+| `QA_USER_EMAIL` / `QA_USER_PASSWORD` | `QA_USER_*` creds (not needed for an `auth_mode: none` site) |
 | *(as needed)* `BASE_URL_ADMIN` / `QA_ADMIN_*` / seed-API vars | whatever else your suite reads |
 
 **What a run produces:** `artifacts/last-run.json` (the run-of-record — the workflow
@@ -826,7 +846,10 @@ sets `QA_RUN_OF_RECORD=1`), an HTML report built from the blob report, and
 `/qa-warden:heal <test-id>` from the trace. The workflow also carries a commented **opt-in
 AI-heal step** for triage in CI itself — off by default because the nightly is **$0
 LLM by design**; enabling it puts a model (and an `ANTHROPIC_API_KEY` secret) in the
-failure path, so treat it as a cost decision, not a default.
+failure path, so treat it as a cost decision, not a default. A headless `claude -p` in a
+never-trusted checkout ignores the project's `permissions.allow` unless given
+`--settings .claude/settings.json`, and needs `--add-dir <plugin path>` for skills that
+read plugin reference files (README §Running headless or in CI).
 
 **Sharding:** the single-job workflow needs no merge step. If you shard later, use
 the matrix + `merge-reports` recipe in the stamped CLAUDE.md §Reporting pipeline.

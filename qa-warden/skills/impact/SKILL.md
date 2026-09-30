@@ -3,7 +3,7 @@ description: Test-impact analysis — given a route, field, factory, area, Graph
 argument-hint: "<route=<path> | field=<name> | factory=<name> | area=<name> | operation=<name> | source=<name>>"
 context: fork
 background: false
-allowed-tools: Bash(bash ${CLAUDE_SKILL_DIR}/scripts/impact.sh *)
+allowed-tools: Bash(bash "${CLAUDE_SKILL_DIR}/scripts/impact.sh" *)
 ---
 
 Find every spec affected by a change to `$ARGUMENTS` by intersecting against
@@ -29,7 +29,7 @@ Run from the **project root** (every path it reads is project-relative) and pass
 `$ARGUMENTS` through verbatim:
 
 ```bash
-bash ${CLAUDE_SKILL_DIR}/scripts/impact.sh "$ARGUMENTS"
+bash "${CLAUDE_SKILL_DIR}/scripts/impact.sh" "$ARGUMENTS"
 ```
 
 The script is the single source of the query recipes and their rationale — **do not
@@ -40,7 +40,7 @@ re-derive, re-implement, or inline any of it here.** It is pre-approved by this 
 **Non-interactive fallback (F-29):** `$ARGUMENTS` is interpolated for a real typed
 slash-command, but when this skill is reached via the Skill tool / a subagent it can arrive
 **empty**. On that path pass the literal key=val as the script's argument instead
-(`bash ${CLAUDE_SKILL_DIR}/scripts/impact.sh route=/login`) — otherwise you get a usage
+(`bash "${CLAUDE_SKILL_DIR}/scripts/impact.sh" route=/login`) — otherwise you get a usage
 error, not a result.
 
 **Exit codes:** `2` = usage error or a missing `scripts/spec-links.sh` (relay the ERROR line), `3` = no manifests on disk (run `/qa-warden:gen` on a spec

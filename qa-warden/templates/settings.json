@@ -62,6 +62,7 @@
       "Bash(git log *)",
       "Bash(git rev-parse *)",
       "Bash(git merge-base *)",
+      "Bash(git ls-files *)",
       "Bash(jq *)",
       "Bash(grep *)",
       "Bash(rg *)",
@@ -126,5 +127,13 @@
       "Bash(sed *e'*)",
       "Bash(sed *e\"*)"
     ]
+  },
+  "extraKnownMarketplaces": {
+    "qa-warden": {
+      "source": {
+        "source": "github",
+        "repo": "its-magdy/qa-warden"
+      }
+    }
   }
 }

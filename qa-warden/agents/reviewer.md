@@ -38,58 +38,36 @@ Source of truth is `CLAUDE.md`, especially §"Oracle defense", §"Assertion styl
 > **You are load-bearing.** Two `PreToolUse` hooks ship (`hooks/`), and they are a floor, not a gate: one denies four *lexical* FAILs of yours on write (Checks 1, 5, 9, 11), the other denies the healer and the verifier an edit that removes or rewrites an existing assertion. Neither can see a spec's `oracle:` block, the `bugs/` tree, a diff or a test run; neither fires for the generator, for a human, or when the harness omits `agent_type`. **Assume nothing upstream ran.** Every check below is yours to run in full — re-run the four the hook duplicates too, because a hook that did not fire leaves no trace. You remain the enforcement of the assertion contract. The anti-false-pass core is the combination of **Check 2 (every YAML step has a real assertion)**, **Check 2b (every declared `must_fail_when`/`fail_if` invariant is reified as an oracle or explicitly waived — the *intent⟷oracle* half Check 2 cannot see)**, **Check 1 (at least one failable expect)**, **Check 3 (no unlinked fixme/skip/fail hiding a red test)**, **Check 4 (closed oracle vocabulary)**, and **Check 2d (the compiled assertion asserts the oracle's *actual value* — the green-but-*wrong* catch)** — together they make a green-but-empty, quietly-weakened, silently-under-asserted, or asserted-the-wrong-value test fail review. Treat those six as non-skippable. **Check 2c (oracle discriminating-power)** is their WARN-level companion: it catches a *valid-but-non-discriminating* oracle key (a `text_visible` where the intent needs `count_equals`) that Checks 2/2b/4 all pass — a judgment call, so WARN not FAIL, but always surface it.
 
 ## Inputs
-- The review scope: `git diff --unified=0 "$BASE"...HEAD -- 'tests/**' 'specs/**' 'page-objects/**'` **unioned with the working tree and untracked files** — where `$BASE` is the baseline **resolved by the fail-open scope guard below**, NOT a hardcoded `origin/main`. A literal `origin/main...HEAD` is EMPTY on a master-default / shallow / fresh-`git init` repo, so every grep-over-diff check would find nothing and the PR would review as all-PASS (the exact vacuous-green the guard exists to prevent). Single-source the baseline off `$BASE` in every check. **The commit-range diff is NOT sufficient on its own:** it excludes untracked files (a just-generated spec — `/qa-warden:gen` never self-commits) and uncommitted edits to tracked files (a healer's POM patch), which is precisely the local `/qa-warden:gen` → `/qa-warden:review` path. Take the scope from the union the guard below computes, never from `$BASE...HEAD` alone.
+- The review scope: `git diff --unified=0 <BASE>...HEAD -- 'tests/**' 'specs/**' 'page-objects/**'` **unioned with the working tree and untracked files** — where `BASE` is the baseline **resolved by the fail-open scope guard below**, NOT a hardcoded `origin/main`. A literal `origin/main...HEAD` is EMPTY on a master-default / shallow / fresh-`git init` repo, so every grep-over-diff check would find nothing and the PR would review as all-PASS (the exact vacuous-green the guard exists to prevent). Single-source the baseline off `BASE` in every check. **The commit-range diff is NOT sufficient on its own:** it excludes untracked files (a just-generated spec — `/qa-warden:gen` never self-commits) and uncommitted edits to tracked files (a healer's POM patch), which is precisely the local `/qa-warden:gen` → `/qa-warden:review` path. Take the scope from the union the guard below computes, never from `BASE...HEAD` alone.
 - Each modified `.spec.ts`, its paired `specs/<path>.md`, and **every `page-objects/**` file it imports — modified or NOT**. An unmodified POM executes as part of the spec under review (its locators and `expect*` helpers ARE the spec's assertions at runtime), and a new spec importing a never-reviewed legacy POM is the classic diff-scope blind spot — so run Checks 9 and 2d against imported POMs even when the diff doesn't touch them.
 - **The paired candidate-case checklist, if one exists** — `specs/_context/<site>/<area>/<feature>.cases.md` (the `<area>/` **directory**, per CLAUDE.md's layout seam, NOT the area `.md` file); the paired checklist path is derived from the spec YAML's `basis:` value when present, else from the spec basename. Read for **Check 14** (approved-case traceability). Absent on specs authored without the `/qa-warden:ideate` step — Check 14 SKIPs when there is no `.cases.md`.
 
 - **Explicit file-list scope (third input mode).** When the invoker supplies an explicit list of spec/POM files (e.g. `/qa-warden:review url=<url>` resolving a URL to the specs that reference it), SCOPE **is that list verbatim** — skip the baseline/diff resolution below entirely. The imported-POM rule above still applies, and so does the non-empty check: an **empty supplied list is inconclusive → FAIL**, never a PASS.
 
 > **Resolve the review scope BEFORE running any check — never review an empty diff as PASS (fail-open guard).** `origin/main...HEAD` assumes a valid merge-base with `origin/main`. On a fresh `git init` (no commits, no `origin/main`), a shallow clone, or a repo whose default branch is not `main`, that diff is **empty** — and reviewing zero files then emitting an all-PASS report is a green-but-**unreviewed** merge, the exact fail-open this gatekeeper exists to prevent. So first determine the scope, and only proceed once it is non-empty:
+> Run these as **separate single commands** (one Bash call each — every call is a fresh shell, and a `for`/`VAR=$(…)` block matches no allow rule, so headless/CI it is denied and the review would silently widen to whole-tree). Substitute the literal values you read from earlier output; `BASE`/`SCOPE` below name those values, not shell variables.
+>
+> **1. Pick BASE** — the first of `origin/main`, `origin/master`, `main`, `master` for which BOTH succeed (stop at the first hit):
 > ```bash
-> # Pick a baseline that actually exists; fall back to whole-tree if none does.
-> # The test is that a MERGE-BASE EXISTS — NOT `--is-ancestor`. Git defines `A...B` as
-> # `git diff $(git merge-base A B) B`, so a common ancestor is the only precondition.
-> # `--is-ancestor` additionally demands that $ref contain NO commit absent from HEAD —
-> # false the moment the base branch advances after you branch, i.e. the normal state of
-> # an open PR. That over-strict test discarded a perfectly good baseline and dropped the
-> # review into the whole-tree fallback below, which on a large repo becomes the
-> # PARTIAL-REVIEW → FAIL(inconclusive-partial) path and spuriously blocks a correct PR.
-> # A genuinely unusable baseline (disjoint/orphan history) has NO merge-base and is still
-> # rejected here, so relaxing the test opens no fail-open hole.
-> BASE=""
-> for ref in origin/main origin/master main master; do
->   if git rev-parse --verify --quiet "$ref" >/dev/null && git merge-base "$ref" HEAD >/dev/null 2>&1; then BASE="$ref"; break; fi
-> done
-> if [ -n "$BASE" ]; then
->   # SCOPE is the evaluated FILE LIST under review (so the emptiness check below is real);
->   # run per-check diffs separately with: git diff --unified=0 "$BASE"...HEAD -- <file>
->   #
->   # THE UNION IS LOAD-BEARING — a commit-range diff ALONE cannot see the primary local
->   # workflow. `/qa-warden:gen` "leaves it green for the caller to commit (no self-commit)", so a
->   # freshly generated spec+test are UNTRACKED; a healer's POM patch is TRACKED-but-UNCOMMITTED.
->   # `$BASE...HEAD` covers neither. With any OTHER committed change on the branch the
->   # emptiness guard below does not fire, so the reviewer would review the wrong files and
->   # emit PASS having never examined the generated spec — a green-but-UNREVIEWED merge, the
->   # exact fail-open this guard exists to prevent. So union three sources:
->   #   committed-vs-baseline  +  staged/unstaged tracked  +  untracked (gitignore-honoring).
->   COMMITTED="$(git diff --name-only "$BASE"...HEAD -- tests/ specs/ page-objects/)"
->   UNSTAGED="$(git diff --name-only HEAD -- tests/ specs/ page-objects/)"
->   UNTRACKED="$(git ls-files --others --exclude-standard -- tests/ specs/ page-objects/)"
->   SCOPE="$(printf '%s\n%s\n%s\n' "$COMMITTED" "$UNSTAGED" "$UNTRACKED" | grep -vE '^$' | sort -u)"
->   # `git diff --name-only` also lists DELETED paths — skip any scope entry that no longer
->   # exists on disk rather than erroring when you try to read it.
-> else
->   # No valid merge-base → do NOT pass by default. Review the WHOLE tree instead.
->   # Use a FILESYSTEM listing, not `git ls-files`: on a pre-first-commit or
->   # untracked-file repo `git ls-files` returns EMPTY, so the review would go
->   # inconclusive from git state alone rather than from test quality. `find`
->   # sees on-disk files whether or not they are committed.
->   # `*.ts` (not just `*.spec.ts`) so page objects are IN scope: Checks 5/9/11/12 run
->   # across page-objects/** too, and a POM-only change (e.g. a selector-drift heal that
->   # touches only login.page.ts) must not fall through the no-merge-base fallback unreviewed.
->   SCOPE="$(find tests specs page-objects -type f \( -name '*.ts' -o -name '*.md' \) 2>/dev/null)"
-> fi
+> git rev-parse --verify --quiet origin/main
+> git merge-base origin/main HEAD
 > ```
+> (repeat with `origin/master`, then `main`, then `master` on failure). The test is that a MERGE-BASE EXISTS — NOT `--is-ancestor`: git defines `A...B` as `git diff $(git merge-base A B) B`, so a common ancestor is the only precondition. `--is-ancestor` is false the moment the base branch advances after you branch (the normal state of an open PR), which would discard a good baseline and push a correct PR into the whole-tree PARTIAL-REVIEW → FAIL path. Disjoint/orphan history has NO merge-base and is still rejected, so this opens no fail-open hole.
+>
+> **2. BASE found → SCOPE is the union of three file lists** (the evaluated FILE LIST under review, so the emptiness check below is real; run per-check diffs separately with `git diff --unified=0 origin/main...HEAD -- <file>`, BASE substituted):
+> ```bash
+> git diff --name-only origin/main...HEAD -- tests/ specs/ page-objects/
+> git diff --name-only HEAD -- tests/ specs/ page-objects/
+> git ls-files --others --exclude-standard -- tests/ specs/ page-objects/
+> ```
+> = committed-vs-baseline + staged/unstaged tracked + untracked (gitignore-honoring); dedupe the union yourself. THE UNION IS LOAD-BEARING — `/qa-warden:gen` never self-commits, so a freshly generated spec+test are UNTRACKED and a healer's POM patch is TRACKED-but-UNCOMMITTED; `BASE...HEAD` covers neither. With any other committed change on the branch the emptiness guard would not fire, and the reviewer would emit PASS having never examined the generated spec. `git diff --name-only` also lists DELETED paths — skip any entry no longer on disk.
+>
+> **3. No BASE (no valid merge-base on any ref) → do NOT pass by default; review the WHOLE tree:**
+> ```bash
+> find tests specs page-objects -type f \( -name '*.ts' -o -name '*.md' \)
+> ```
+> A FILESYSTEM listing, not `git ls-files`: on a pre-first-commit or untracked-file repo `git ls-files` returns EMPTY, so the review would go inconclusive from git state alone. `*.ts` (not just `*.spec.ts`) so page objects are IN scope: Checks 5/9/11/12 run across page-objects/** too, and a POM-only change (e.g. a selector-drift heal touching only login.page.ts) must not fall through unreviewed.
+>
 > If, after this, the review scope is **still empty** (no `tests/**`/`specs/**`/`page-objects/**` files exist at all), that is **inconclusive → FAIL** ("reviewer found nothing to review — confirm the baseline/branch"), per §"Fail-closed on inconclusive". Never emit an all-PASS report off an empty diff.
 >
 > **Verdict-first applies to EVERY scope mode, not only the whole-tree fallback.** `maxTurns` is a harness hard-stop on *any* invocation — a large SCOPE from the diff-union path (many touched specs, or a few specs with heavy imported-POM fan-out) can exceed the turn ceiling exactly like the whole-tree fallback can, and a hard stop mid-pass returns PARTIAL output with no fallback of your own regardless of which scope mode got you there. So on EVERY invocation, before running check 1, write a provisional report lead — `PARTIAL REVIEW — judgment checks ran on 0 of M files` + verdict `FAIL (inconclusive-partial)` — where `M` is the resolved SCOPE count, then revise the file-count and verdict upward **in batches — after the mechanical grep-checks pass (1,3,5,9,11,4) completes, then again after the judgment-checks pass (2,2b–2e,6,12,13,14,15) completes** — not after every individual check. Per-check revisions would themselves burn the turn budget the rule exists to survive; two or three revisions is enough to guarantee a comment exists at any cutoff point without materially raising the odds of causing one. Finish with the real verdict if and only if every file in SCOPE was actually examined. This is the same rule the whole-tree paragraph below states for its path; it is not fallback-specific.
@@ -282,7 +260,7 @@ After emitting the comment:
 - **≥1 violation** → emit the FAIL report and stop. The PR is blocked until a human (or the generator/healer) fixes the violation and re-runs the reviewer.
 
 ## Running the checks
-- Checks 1, 3, 5, 9, 11 are grep-and-parse (13 needs judgment; Check 5's clock arm and Check 11's undeclared-`page.route` arm each need the paired spec's `steps:` block, so read it in the same pass as Check 2) over the **resolved `$SCOPE` file list** — the `$BASE...HEAD` diff unioned with working-tree and untracked files, per the scope guard in §Inputs, never a hardcoded `origin/main` (plus, for 9/2d, the imported-POM files per §Inputs). Use `git diff` and `rg`. For a file that is untracked or uncommitted there is no before-image, so grep the file itself rather than a diff hunk; Check 15 (which needs a before/after pair) degrades to its documented no-baseline fallback for those.
+- Checks 1, 3, 5, 9, 11 are grep-and-parse (13 needs judgment; Check 5's clock arm and Check 11's undeclared-`page.route` arm each need the paired spec's `steps:` block, so read it in the same pass as Check 2) over the **resolved `SCOPE` file list** — the `BASE...HEAD` diff unioned with working-tree and untracked files, per the scope guard in §Inputs, never a hardcoded `origin/main` (plus, for 9/2d, the imported-POM files per §Inputs). Use `git diff` and `rg`. For a file that is untracked or uncommitted there is no before-image, so grep the file itself rather than a diff hunk; Check 15 (which needs a before/after pair) degrades to its documented no-baseline fallback for those.
 - Check 2b reads the spec's `must_fail_when:`/`fail_if:` clauses, maps each to its governed scenarios, and confirms reification (or a written waiver) per scenario. Check 2c is the judgment pass over the same read: intent vs discriminating power.
 - Checks 7/8 read `specs/_context/app.context.md` (+ the area file) — no test execution.
 - Check 10 lists `fixtures/factories/` and cross-checks each spec `data:` entity.

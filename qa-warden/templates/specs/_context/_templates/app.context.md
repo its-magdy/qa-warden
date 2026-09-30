@@ -19,8 +19,10 @@ sites:
     login_route: "<login route, e.g. /login>"
     storage_state_path: fixtures/auth.app.json
     auth_shape: "<jwt | cookie | session>"   # the single most useful stable auth fact
-    auth_mode: "form"   # form | totp | magic-link | sso-redirect | manual
+    auth_mode: "form"   # none | form | totp | magic-link | sso-redirect | manual
       # HOW login happens (orthogonal to auth_shape = where the token lives):
+      #   none         — the site has no login; tests run unauthenticated. OMIT login_route,
+      #                  storage_state_path, auth_shape, token_storage and creds for this site.
       #   form         — email/password form (default). Setup project REGENERATES storageState per run.
       #   totp         — form + TOTP second factor. STILL regenerated per run: the setup file
       #                  computes the 6-digit code from QA_TOTP_SECRET (otpauth lib).

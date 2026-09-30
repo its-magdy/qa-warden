@@ -6,13 +6,63 @@ The **last published build was `0.2.0` (2026-07-24)**. The `[Unreleased]` sectio
 the repository since then as **`0.3.0`**: a feature release on the published `0.1.0 → 0.2.0`
 line, with no breaking change to the spec format or the `/qa:*` surface. **`0.4.0`** adds only
 the rename on top of it, and that one IS breaking (see its section). **`0.4.1`** is
-documentation fixes only.
-`.claude-plugin/plugin.json` reads `0.4.1`; tag the build with `claude plugin tag ./qa-warden`.
+documentation fixes only; **`0.5.0`** fixes what a fresh-install test and a re-check of the
+2026-09-26 end-to-end run found.
+`.claude-plugin/plugin.json` reads `0.5.0`; tag the build with `claude plugin tag ./qa-warden`.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/). Versions are the
 number in `plugin.json`, which is also the key the installer caches under
 (`~/.claude/plugins/cache/<marketplace>/qa-warden/<version>/`) — so **two different builds must
 never carry the same number**, or the second one has no way to announce itself.
+
+---
+
+## 0.5.0 — apps without a login, headless-safe prompts, teammate install (2026-09-30)
+
+No change to the spec format or the oracle vocabulary. Run `/qa-warden:init --resync` to pick
+up the script fixes (`doctor.sh`, `init.sh`, `post-run-checks.sh`) and the new permission
+rules; `.env` and customized files are left alone.
+
+**Added**
+- **`auth_mode: none`** for a site with no login. Tests run unauthenticated: no `storageState`,
+  no login setup file, no credentials needed. `/qa-warden:explore` drafts `none` (flagged for
+  review) when it finds no login form and no `QA_USER_*` credentials. Before this, a public app
+  got a login setup with empty credentials that failed every run. An absent `auth_mode` still
+  means `form`.
+- **Teammate install:** `/qa-warden:init` adds the `qa-warden` marketplace to the project's
+  `.claude/settings.json` (`extraKnownMarketplaces`), so a teammate who clones and trusts the
+  folder gets the plugin. Your own entries win in the merge.
+- **doctor Check 21a:** warns, offline, when `BASE_URL_APP` is empty or still a placeholder, and
+  the verdict reads "Setup is NOT ready yet" instead of "healthy".
+
+**Fixed**
+- **`/qa-warden:new-spec` overwrite guard never fired.** It stored the spec path in a shell
+  variable and tested it in a later call, which runs in a fresh shell. A revision could be
+  treated as new authoring. It now checks the resolved literal path.
+- **Permission prompts and headless denials** from commands the allow list cannot match:
+  agents no longer load `.env` and drive the browser in one chained command (they resolve the
+  URL with `bash scripts/prod-guard.sh --list-targets` and type it literally); the reviewer's PR
+  scope, `/qa-warden:report` and `/qa-warden:new-spec` use single allowlisted commands instead of
+  variables and loops. New allow rule: `Bash(git ls-files *)`. In CI the reviewer now reviews
+  the PR diff instead of silently widening to the whole tree.
+- **`doctor.sh` run directly** compared against the wrong installed copy: it ignored
+  `CLAUDE_CONFIG_DIR` and did not recognise `--scope project` installs, so it could print false
+  "substrate drift" warnings that suggested a downgrading `--resync`. `/qa-warden:doctor` was
+  not affected.
+- `npm run init` printed only the rigor lane; it now prints the fast lane first, like
+  `/qa-warden:init`.
+- Open-bug lines in run output showed an empty title; they now use the H1, else the first
+  Summary line, else the file slug.
+- `run`, `coverage` and `impact` quote the plugin path in their pre-approved commands, so a
+  plugin path containing a space no longer breaks them.
+- Stamped `CLAUDE.md`: bug evidence may read "trace not retained — <reason>" when Playwright
+  kept none (a parked test); `QA_ADMIN_*` is an elevated role on the same or a separate site;
+  the planner's YAML check is a read-back, not a parser command. `--resync` does not rewrite
+  `CLAUDE.md`; existing projects keep the old wording unless edited by hand.
+
+**Known limit:** skills that read reference files inside the plugin (`report`, `help`, `heal`,
+`batch-fix`, `doctor --verify-invariants`) ask once for the read interactively; a headless run
+needs `--add-dir <plugin path>`. No skill rule can pre-approve a read outside the project.
 
 ---
 

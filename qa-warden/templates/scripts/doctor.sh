@@ -483,25 +483,30 @@ fi
 #    still catches a stock variable being DELETED from it.
 # Resolve the plugin templates dir: prefer $CLAUDE_PLUGIN_ROOT (inline-substituted when run via
 # /qa-warden:doctor — the env var is NOT exported to bash subprocesses, F-069), else the ACTIVE install
-# recorded in ~/.claude/plugins/installed_plugins.json (this project's entry, else the user-scope
-# entry, else the most recently updated), else — last resort — newest cached qa/*/templates by
+# recorded in $CLAUDE_CONFIG_DIR (default ~/.claude)/plugins/installed_plugins.json (this
+# project's entry — scope "local" OR "project" (the documented `--scope project` install) with
+# projectPath == this dir, compared against both the logical `pwd` and the physical `pwd -P`
+# since e.g. /tmp is /private/tmp on macOS — else the user-scope entry, else the most recently
+# updated), else — last resort — newest cached qa-warden/*/templates (then qa/*) by
 # mtime. Side-by-side version dirs are EXPECTED in the cache (an orphaned version lingers ~7 days
 # after an update), so a blind mtime pick can compare against a STALE plugin; always NAME the dir
 # used so a wrong pick is visible. (Do NOT prefer a semver-named dir over 'unknown' — in
 # commit-SHA mode from a non-git directory source, 'unknown' IS the active install.)
 TMPL="${CLAUDE_PLUGIN_ROOT:+${CLAUDE_PLUGIN_ROOT}/templates}"
+CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 if [ -z "$TMPL" ] || [ ! -d "$TMPL" ]; then
   TMPL=""
-  IPJ="$HOME/.claude/plugins/installed_plugins.json"
+  IPJ="$CFG/plugins/installed_plugins.json"
   if command -v jq >/dev/null && [ -f "$IPJ" ]; then
     # The plugin id was `qa` before 0.4.0 and is `qa-warden` since. A project mid-upgrade can
     # still have the old record, so accept both, and rank EVERY qa-warden install ahead of any
     # old qa one: after a reinstall the old record is the stale one.
-    TMPL="$(jq -r --arg pwd "$PWD" '
+    TMPL="$(jq -r --arg pwd "$(pwd)" --arg pwdp "$(pwd -P)" '
       def installs($prefix):
         [ .plugins // {} | to_entries[] | select(.key | startswith($prefix)) | .value[] ];
       def ranked:
-        map(select(.scope=="local" and .projectPath==$pwd))
+        map(select((.scope=="local" or .scope=="project")
+                   and (.projectPath==$pwd or .projectPath==$pwdp)))
         + map(select(.scope=="user"))
         + (sort_by(.lastUpdated) | reverse);
       (installs("qa-warden@") | ranked) + (installs("qa@") | ranked)
@@ -515,10 +520,10 @@ if [ -z "$TMPL" ] || [ ! -d "$TMPL" ]; then
   fi
 fi
 if [ -z "$TMPL" ]; then
-  TMPL="$(ls -dt "$HOME"/.claude/plugins/cache/*/qa-warden/*/templates 2>/dev/null | head -1)"
+  TMPL="$(ls -dt "$CFG"/plugins/cache/*/qa-warden/*/templates 2>/dev/null | head -1)"
   # Pre-0.4.0 cache dirs are named after the old `qa` id; fall back to them only if no
   # qa-warden install is cached at all.
-  [ -n "$TMPL" ] || TMPL="$(ls -dt "$HOME"/.claude/plugins/cache/*/qa/*/templates 2>/dev/null | head -1)"
+  [ -n "$TMPL" ] || TMPL="$(ls -dt "$CFG"/plugins/cache/*/qa/*/templates 2>/dev/null | head -1)"
   if [ -n "$TMPL" ]; then
     echo "⚠️  substrate-drift baseline GUESSED by newest mtime: $TMPL — orphaned plugin versions linger ~7 days beside the active one, so this may be STALE; run via /qa-warden:doctor (resolves CLAUDE_PLUGIN_ROOT) to be sure"; warn=$((warn+1))
   fi
@@ -955,11 +960,14 @@ fi
 #     message from "unmerged" to "which rules".
 #     WARN, not FAIL, matching arm 2: an under-permissioned project prompts and stalls, it does
 #     not produce a wrong test result, and the repair is one command.
+#     The comparison also counts the extraKnownMarketplaces entry NAMES the template ships (the
+#     qa-warden marketplace, so teammates who trust the folder get the plugin): a hand-merge of
+#     the permission arrays alone would otherwise read as STALE while teammates still lack it.
 if [ -f .claude/settings.qa-suggested.json ]; then
   unmerged=""; counted=0
   if command -v jq >/dev/null 2>&1 && [ -f .claude/settings.json ]; then
-    sug=$(jq -r '(.permissions.allow[]?|"allow "+.),(.permissions.deny[]?|"deny "+.)' .claude/settings.qa-suggested.json 2>/dev/null | sort -u)
-    cur=$(jq -r '(.permissions.allow[]?|"allow "+.),(.permissions.deny[]?|"deny "+.)' .claude/settings.json 2>/dev/null | sort -u)
+    sug=$(jq -r '(.permissions.allow[]?|"allow "+.),(.permissions.deny[]?|"deny "+.),(.extraKnownMarketplaces // {} | keys[] | "marketplace "+.)' .claude/settings.qa-suggested.json 2>/dev/null | sort -u)
+    cur=$(jq -r '(.permissions.allow[]?|"allow "+.),(.permissions.deny[]?|"deny "+.),(.extraKnownMarketplaces // {} | keys[] | "marketplace "+.)' .claude/settings.json 2>/dev/null | sort -u)
     if [ -n "$sug" ]; then
       counted=1
       unmerged=$(comm -23 <(printf '%s\n' "$sug") <(printf '%s\n' "$cur") | grep . || true)
@@ -969,7 +977,7 @@ if [ -f .claude/settings.qa-suggested.json ]; then
     echo "⚠️  .claude/settings.qa-suggested.json is STALE — every rule in it is already present in .claude/settings.json. Delete it; while it sits there it reads as an outstanding manual merge."; warn=$((warn+1))
   else
     n_txt="its rules"; [ "$counted" = "1" ] && n_txt="$(printf '%s\n' "$unmerged" | wc -l | tr -d ' ') of its rules"
-    echo "⚠️  .claude/settings.qa-suggested.json exists — qa-scaffold could not merge permissions (jq missing, or an unparseable settings.json) and left them here instead, so $n_txt never reached .claude/settings.json. Agents will PROMPT on tool calls the toolkit means to pre-approve, and the Write/Edit denies guarding the substrate are absent. Install jq and re-run /qa-warden:init (the merge is additive and deletes this file), or hand-merge the arrays and delete it."; warn=$((warn+1))
+    echo "⚠️  .claude/settings.qa-suggested.json exists — qa-scaffold could not merge permissions (jq missing, or an unparseable settings.json) and left them here instead, so $n_txt never reached .claude/settings.json. Agents will PROMPT on tool calls the toolkit means to pre-approve, and the Write/Edit denies guarding the substrate are absent. Install jq and re-run /qa-warden:init (the merge is additive and deletes this file), or hand-merge the arrays (and the extraKnownMarketplaces entry) and delete it."; warn=$((warn+1))
   fi
 fi
 
@@ -1487,8 +1495,37 @@ fi
 #     purely because nothing is authored yet (no app.context.md, 0 specs), so "OK with warnings"
 #     reads as "something's wrong" when the honest state is "expected at this stage". Name it and
 #     point at the next step so a newcomer knows setup is healthy.
+# 21a. Unconfigured target — BASE_URL_APP still empty or a placeholder (the shipped .env.example
+#      ships `BASE_URL_APP=CHANGEME`). Without this, a freshly scaffolded project whose .env was
+#      copied but never edited got the "Setup looks healthy" verdict below, and the first real
+#      command then STOPped on prod-guard. The placeholder test is NOT re-typed here: doctor runs
+#      scripts/prod-guard.sh itself in its default mode (offline — only `--probe` touches the
+#      network; the default mode screens strings and exits) and keeps only its empty/placeholder
+#      REFUSING lines, so the CHANGEME / <…> / example.com|net|org / *.example sentinels stay
+#      single-sourced in prod-guard (and its .ts lockstep twin). Prod-marker refusals are
+#      deliberately NOT surfaced here: QA_ALLOW_PROD is a per-command override, so doctor cannot
+#      tell a deliberate prod target from a mistake. Empty QA_USER_* is NOT checked either — a
+#      site with no login legitimately has none. WARN, not FAIL: nothing is wrong with the
+#      substrate, but nothing can run until .env names a real staging/QA host.
+tgt_unset=0
+if [ -f scripts/prod-guard.sh ]; then
+  tgt_lines=$(sh scripts/prod-guard.sh 2>/dev/null | grep -E -e '^REFUSING: (BASE_URL_APP is empty|[A-Z0-9_]+ is a placeholder)')
+  if [ -n "$tgt_lines" ]; then
+    tgt_unset=1
+    printf '%s\n' "$tgt_lines" | while IFS= read -r l; do
+      echo "⚠️  .env target not configured — ${l#REFUSING: } (scripts/prod-guard.sh refuses this, so every run/explore command will STOP until it is fixed)"
+    done
+    warn=$((warn+$(printf '%s\n' "$tgt_lines" | wc -l | tr -d ' ')))
+  fi
+fi
+# (21, continued) The readiness verdict itself — withheld while 21a found an unconfigured target,
+#      because "Setup looks healthy" over a CHANGEME .env is exactly the false-green 21a closes.
 if [ ! -f specs/_context/app.context.md ] && [ "$fail" -eq 0 ]; then
-  echo "ℹ️  fresh project — no app.context.md / specs yet, so the context/spec/interview checks are n/a at this stage (not failures). Setup looks healthy — next run /qa-warden:explore to build the context layer."
+  if [ "$tgt_unset" -eq 1 ]; then
+    echo "ℹ️  fresh project — no app.context.md / specs yet, so the context/spec/interview checks are n/a at this stage (not failures). Setup is NOT ready yet — fill in .env (see the ⚠️ above), then run /qa-warden:explore to build the context layer."
+  else
+    echo "ℹ️  fresh project — no app.context.md / specs yet, so the context/spec/interview checks are n/a at this stage (not failures). Setup looks healthy — next run /qa-warden:explore to build the context layer."
+  fi
 fi
 
 # Rollup reflects EVERY ❌/⚠️ above. `fail`/`warn` are real counts (incremented,

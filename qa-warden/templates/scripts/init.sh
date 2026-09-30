@@ -66,7 +66,7 @@ else
   # print ✓ ".env created" while creating nothing (false-green bootstrap).
   if cp .env.example .env 2>/dev/null; then
     ok ".env created from template"
-    warn "Edit .env: set BASE_URL_APP (or BASE_URL) + QA_USER_EMAIL/QA_USER_PASSWORD before running tests"
+    warn "Edit .env: set BASE_URL_APP (or BASE_URL) before running tests — and QA_USER_EMAIL/QA_USER_PASSWORD if the app has a login"
   else
     warn ".env.example missing — no .env created. Restore it (re-run /qa-warden:init) or write .env by hand before running tests"
   fi
@@ -105,20 +105,22 @@ cat <<'NEXT'
 
 Next steps:
   1. Edit .env — set BASE_URL_APP (must NOT be a production host; the guard matches
-     a `prod`/`production` marker at a word boundary) and QA_USER_* creds.
+     a `prod`/`production` marker at a word boundary) — and QA_USER_* creds if the app has a login.
   2. Run `claude` to start an interactive session.
-  3. Inside Claude Code (same chain bin/qa-scaffold prints — keep the two in step):
-       /qa-warden:explore                          # build app context (site/auth map)
-       /qa-warden:explore mode=area site=app area=auth
-                                            # area context — REQUIRED before intake
-       /qa-warden:intake auth/login                # interview -> basis.md (pins the oracle)
-       /qa-warden:ideate auth/login                # SFDIPOT checklist -> cases.md
-       /qa-warden:approve auth/login               # record approve/prune — REQUIRED before new-spec
-       /qa-warden:new-spec auth/login              # draft your first spec
-       /qa-warden:gen specs/auth/login.md          # compile spec -> .spec.ts
-       /qa-warden:review                           # reviewer gates the assertion contract
-       /qa-warden:run mode=smoke                        # run the @smoke suite
-     New to these terms (oracle, basis, SFDIPOT, assertion contract)? Run /qa-warden:help.
+  3. Inside Claude Code (same steps bin/qa-scaffold prints — keep the two in step):
+       /qa-warden:explore                              build specs/_context/app.context.md (site/auth map) — review it, clear draft: true
+       /qa-warden:new-spec auth/login                  draft your first spec (explores the area itself if needed)
+       /qa-warden:gen specs/auth/login.md              compile spec -> .spec.ts (+ independent verifier)
+       /qa-warden:review                               reviewer gates the assertion contract (run on every PR)
+       /qa-warden:run mode=smoke                       run the @smoke suite
+
+     Rigor lane (P1 / money / compliance) — insert between explore and new-spec to pin what "correct" means first:
+       /qa-warden:explore mode=area site=app area=auth   area context (intake hard-gates on it)
+       /qa-warden:intake auth/login                      interview -> basis.md
+       /qa-warden:ideate auth/login                      SFDIPOT checklist -> cases.md
+       /qa-warden:approve auth/login                     approve/prune — once a cases.md exists, new-spec STOPs until it is approved
+
+     New to these terms (oracle, basis, SFDIPOT, assertion contract)? Run /qa-warden:help — e.g. "/qa-warden:help what is an oracle".
   4. Run the suite: `npx playwright test` (plain Playwright, no LLM cost).
 
 Read CLAUDE.md for policy.

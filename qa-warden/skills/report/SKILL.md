@@ -25,24 +25,17 @@ Inputs:
   # logic in prose and drifted). Its total = expected+unexpected+skipped+flaky —
   # every RESOLVED test — so an all-red run reads as fresh, never as zero-test
   # (`expected` alone counts only PASSED tests).
-  if [ -f scripts/check-last-run.sh ]; then
-    # CAPTURE the line — the SCOPE block below needs the recorded test count, and re-running the
-    # whole script later just to `sed` `total=` back out of it re-parsed the same JSON a second
-    # time (plus a bash fork). One read, reused.
-    LR=$(bash scripts/check-last-run.sh artifacts/last-run.json 900); lr_rc=$?
-    echo "$LR"
-    NRUN=$(printf '%s' "$LR" | sed -nE 's/.*total=([0-9-]+).*/\1/p')
-    case $lr_rc in
-      0) : ;;                                                                     # fresh — summarize it
-      3) echo "no last-run.json — use reports/*.json or refresh" ;;
-      4) echo "WARN: last-run.json unparseable — the run-of-record is corrupt; do NOT summarize it" ;;
-      5) echo "WARN: recorded 0 tests — do NOT report this as green" ;;
-      6) echo "WARN: >15min old — confirm it is the run you intend to summarize" ;;
-    esac
-  else
-    echo "WARN: scripts/check-last-run.sh missing — substrate predates it; re-run /qa-warden:init --resync (do NOT summarize an unverified last-run.json)"
-  fi
+  # ONE bare call, its own Bash invocation — no `LR=$(…)` capture (matches no allow rule, and
+  # the next call is a fresh shell anyway). Read the printed line; the SCOPE step below reuses its
+  # status word and `total=` instead of re-running the script.
+  bash scripts/check-last-run.sh artifacts/last-run.json 900
   ```
+  It prints `last-run: <status> total=<N> startTime=… age=…s`. By status:
+  `fresh` → summarize it · `missing` → no last-run.json — use reports/*.json or refresh ·
+  `corrupt` → WARN: the run-of-record is corrupt; do NOT summarize it · `zero-test` → WARN:
+  recorded 0 tests — do NOT report this as green · `stale` → WARN: >15min old — confirm it is the
+  run you intend to summarize. No such file → WARN: scripts/check-last-run.sh missing — substrate
+  predates it; re-run /qa-warden:init --resync (do NOT summarize an unverified last-run.json).
   If the recorded count / age don't match the run you meant to summarize, either
   (a) prefer the per-command `reports/*.json` / `artifacts/flake-*.json`, or
   (b) refresh via `/qa-warden:run mode=smoke` or `QA_RUN_OF_RECORD=1 npx playwright test`
@@ -78,11 +71,11 @@ Inputs:
   verifier's BLIND/unverified records — not app defects):
 
   ```bash
-  # Guarded like check-last-run.sh above — an older scaffold predates this script, and an
-  # unguarded call errors out mid-skill instead of degrading to a named gap.
-  if [ -f scripts/post-run-checks.sh ]; then bash scripts/post-run-checks.sh
-  else echo "WARN: scripts/post-run-checks.sh missing — substrate predates it; re-run /qa-warden:init --resync. Open defects / sentinels / stray specs are UNCHECKED: do not issue an unqualified go."; fi
+  bash scripts/post-run-checks.sh
   ```
+  No such file (an older scaffold predates it) → WARN: "scripts/post-run-checks.sh missing —
+  substrate predates it; re-run /qa-warden:init --resync. Open defects / sentinels / stray specs
+  are UNCHECKED: do not issue an unqualified go."
 - **Run metadata is NOT in the report** — commit SHA, branch, triggered-by and workflow are
   absent from a Playwright JSON report unless CI explicitly injects them into `config.metadata`.
   Render the template's `## Run metadata` section only when that key is present, and omit the
@@ -106,39 +99,26 @@ Output:
     always reads as an empty object and cannot be inspected. A run scoped that way therefore still
     looks like "all" — so the "all" branch below QUALIFIES its claim rather than asserting a proven
     full-suite pass:
+    Only a `fresh` or `stale` status from the freshness line above means the record is readable;
+    take N from its `total=` (do NOT re-run check-last-run.sh to re-scrape it). On
+    `missing`/`corrupt`/`zero-test` there is no trustworthy count — write "SCOPE: NOT ESTABLISHED
+    — no readable run-of-record (check-last-run: <status>). Do NOT state a pass/fail count from
+    last-run.json; summarize from reports/*.json and name the lane they cover, or refresh first."
+    and skip the jq call (a blank count on this line is how a subset reads as full-suite green).
+    Otherwise read the filter — Playwright accepts THREE grep spellings (`--grep @smoke`,
+    `--grep=@smoke`, `-g @smoke`); matching only the first sent the others down the "all" branch:
     ```bash
-    # $NRUN comes from the freshness block above — do NOT re-run check-last-run.sh to re-scrape it.
-    # Run this in the SAME Bash invocation as that block (the Bash tool starts a fresh shell per
-    # call, so a split loses $NRUN AND $lr_rc). If you must split, re-derive BOTH from the printed
-    # `last-run:` line — losing $lr_rc alone makes the guard below report "NOT ESTABLISHED" for a
-    # perfectly fresh record:
-    #   case "$LR" in *fresh*) lr_rc=0 ;; *stale*) lr_rc=6 ;; *) lr_rc=3 ;; esac
-    # Only rc 0/6 mean the record is readable. On rc 3/4/5 there is no trustworthy count, and
-    # interpolating an unset $NRUN silently emitted "SCOPE: no --grep filter —  tests (treated as
-    # full suite)" — a blank where the count belongs, on the ONE line whose whole job is stopping a
-    # subset from reading as full-suite green. Say there is no record instead.
-    if [ "${lr_rc:-3}" = 0 ] || [ "${lr_rc:-3}" = 6 ]; then
-        # Playwright accepts THREE grep spellings and only one is two-token: `--grep @smoke`,
-      # `--grep=@smoke` (a single argv element), and `-g @smoke`. Matching just the first sent the
-      # other two down the "all" branch — printing "no --grep filter … treated as full suite" for a
-      # run that WAS filtered, the exact false-full-suite-green F-27 exists to prevent (and that
-      # branch's CAVEAT only warns about config-level grep, so it would not alert the reader).
-      SCOPE=$(jq -r '(.config.argv // []) as $a
-        | ($a | index("--grep")) as $i | ($a | index("-g")) as $j
-        | ( if $i then $a[$i+1]
-            elif $j then $a[$j+1]
-            else ([$a[] | select(startswith("--grep="))] | first | if . then ltrimstr("--grep=") else null end)
-            end ) // "all"' artifacts/last-run.json 2>/dev/null || echo "?")
-      NRUN=${NRUN:-?}   # belt-and-braces: never interpolate an empty count
-      case "$SCOPE" in
-        "@smoke"|*smoke*) echo "SCOPE: smoke run-of-record — $NRUN smoke tests. This is a SUBSET; a full 'npx playwright test' was NOT measured here. Do NOT report this as full-suite green — say 'N smoke tests passed', and if a merge decision needs whole-suite proof, run 'QA_RUN_OF_RECORD=1 npx playwright test' first." ;;
-        "all") echo "SCOPE: no --grep filter — $NRUN tests (treated as full suite). CAVEAT: a config-level grep/grepInvert is invisible in the JSON report (a RegExp serializes to {}), so if this record came from a CI shard scoped inside playwright.config.ts it is NOT the whole suite — confirm the run command before reporting full-suite green." ;;
-        *)      echo "SCOPE: filtered run ('$SCOPE') — $NRUN tests. Qualify the go/no-go: only the matching subset ran." ;;
-      esac
-    else
-      echo "SCOPE: NOT ESTABLISHED — no readable run-of-record (check-last-run rc=${lr_rc:-3}). Do NOT state a pass/fail count from last-run.json; summarize from reports/*.json and name the lane they cover, or refresh first."
-    fi
+    jq -r '(.config.argv // []) as $a
+      | ($a | index("--grep")) as $i | ($a | index("-g")) as $j
+      | ( if $i then $a[$i+1]
+          elif $j then $a[$j+1]
+          else ([$a[] | select(startswith("--grep="))] | first | if . then ltrimstr("--grep=") else null end)
+          end ) // "all"' artifacts/last-run.json
     ```
+    (jq error → filter `?`, treat as filtered.) Then write the SCOPE line, N substituted (never blank — `?` if unknown):
+    - `@smoke` / contains `smoke` → "SCOPE: smoke run-of-record — N smoke tests. This is a SUBSET; a full 'npx playwright test' was NOT measured here. Do NOT report this as full-suite green — say 'N smoke tests passed', and if a merge decision needs whole-suite proof, run 'QA_RUN_OF_RECORD=1 npx playwright test' first."
+    - `all` → "SCOPE: no --grep filter — N tests (treated as full suite). CAVEAT: a config-level grep/grepInvert is invisible in the JSON report (a RegExp serializes to {}), so if this record came from a CI shard scoped inside playwright.config.ts it is NOT the whole suite — confirm the run command before reporting full-suite green."
+    - anything else → "SCOPE: filtered run ('<filter>') — N tests. Qualify the go/no-go: only the matching subset ran."
     The headline must name the lane: **"N smoke tests passed"**, not an unqualified **"N passed"** —
     the count describes *what ran*, and a smoke subset is not evidence the other lanes are green.
   - **Everything below the SCOPE line** — totals, the failures table, passed-with-retries,
@@ -155,26 +135,24 @@ Output:
 The full output template — headline, SCOPE line, totals, failures table, passed-with-retries,
 signature grouping, audit findings, parked defects, value ledger and run metadata — lives in
 `${CLAUDE_SKILL_DIR}/reference/report-template.md`. **Read that file and render from it**; it is
-the sole owner of the report shape, so do not reconstruct the sections from memory.
+the sole owner of the report shape, so do not reconstruct the sections from memory. It lives in
+the plugin, outside the project: interactively the `Read` asks once; a headless run needs the
+plugin directory passed with `--add-dir` (no skill rule can pre-approve a read outside the project).
 
 ## Value-ledger derivation (deterministic — reuse, don't re-derive)
 - **Bug counts.** The `post-run-checks.sh` scan above ran `bug-status.sh --list-open`, which by
   design prints ONLY still-open bugs — so it gives you `<O>` but NOT `<FIXED>`. Derive the split
   with the canonical classifier (never re-type the resolved-keyword alternation; that duplication
   is what `bug-status.sh` exists to end):
+  1. `Glob` `bugs/*.md` for the full list (no shell `for` — it matches no allow rule, and under
+     zsh the glob aborts on an empty bugs/). 2. The still-open subset, one call:
   ```bash
-  # <O> open / <FIXED> fixed. --class prints exactly `open` or `resolved` per file.
-  # Verifier test-gap records (`*-blind-*.md`, `*-unverified.md`) are contract gaps, not app
-  # defects — count them on their own line, or the ledger inflates the defect count (run-01, O-49).
-  # One loop over `bugs/*.md` — a second glob such as `bugs/*-unverified.md` aborts under zsh when
-  # nothing matches. Each file is routed by name to `defect` or `gap`, then classified:
-  # `<O>`/`<FIXED>` are the defect rows, `<G>`/`<GF>` the gap rows.
-  for f in bugs/*.md; do
-    [ -e "$f" ] || break
-    case "$f" in *-blind-*.md|*-unverified.md) kind=gap ;; *) kind=defect ;; esac
-    echo "$kind $(bash scripts/bug-status.sh --class "$f")"
-  done | sort | uniq -c        # e.g.  3 defect open · 1 defect resolved · 2 gap open
+  bash scripts/bug-status.sh --list-open
   ```
+  Every globbed file NOT in that list is resolved. Route each by name: verifier test-gap records
+  (`*-blind-*.md`, `*-unverified.md`) are contract gaps, not app defects — count them on their own
+  line, or the ledger inflates the defect count (run-01, O-49). `<O>`/`<FIXED>` are the defect
+  rows, `<G>`/`<GF>` the gap rows (e.g. 3 defect open · 1 defect resolved · 2 gap open).
   **Found-by attribution.** The authored shape is a bolded label with an em-dash and NO colon —
   `- **Found-by** (OPTIONAL) — healer (nightly triage) | generator (authoring) | verifier (authoring) | manual`
   (CLAUDE.md §"Bug-report schema"). Grepping `Found-by:` matches nothing and silently reports every
@@ -184,16 +162,16 @@ the sole owner of the report shape, so do not reconstruct the sections from memo
   the next line. Count both shapes — a tally that reads only the bold form reported 7 of 12 bugs as
   `unrecorded` in run-01 (O-78):
   ```bash
-  { grep -ho '\*\*Found-by\*\*[^—]*—[[:space:]]*[a-z]*' bugs/*.md 2>/dev/null | sed 's/.*—[[:space:]]*//'
-    grep -h -A1 '^## Found-by' bugs/*.md 2>/dev/null | grep -v '^## \|^--' | sed 's/^[[:space:]]*//; s/[[:space:]].*//'
-  } | sort | uniq -c   # bugs with no match in either shape = unrecorded
+  grep -rho --include='*.md' '\*\*Found-by\*\*[^—]*—[[:space:]]*[a-z]*' bugs | sed 's/.*—[[:space:]]*//' | sort
+  grep -rh --include='*.md' -A1 '^## Found-by' bugs | grep -v '^## \|^--' | sed 's/^[[:space:]]*//; s/[[:space:]].*//' | sort
   ```
+  Two separate calls (a `{ …; }` group matches no allow rule); tally both outputs together.
+  Bugs with no match in either shape = unrecorded.
 - **Heal counts** from the healer telemetry log, tolerant of absence:
   ```bash
-  # `|| echo '{}'` matters: a bare `[ -f X ] && jq …` exits 1 when the log is absent (the Bash tool
-  # surfaces that as a failed command), and `add` over an empty log yields `null`, not a usable value.
-  { [ -s artifacts/heal-log.jsonl ] && jq -s 'group_by(.classification) | map({(.[0].classification): length}) | add // {}' artifacts/heal-log.jsonl; } || echo '{}'
+  jq -s 'group_by(.classification) | map({(.[0].classification): length}) | add // {}' artifacts/heal-log.jsonl
   ```
+  Log absent (jq errors) or empty → treat as `{}` (`add // {}` covers empty; never report `null`).
 - **RULE (double-counting guard):** app defects are counted from `bugs/` ONLY — heal-log rows
   classified `product-bug`/`expected-failure`/`env-infra` correspond to bug files and contribute
   ZERO to the defect count. Verifier test-gap records (`bugs/*-blind-*.md`, `bugs/*-unverified.md`)

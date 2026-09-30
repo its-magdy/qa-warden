@@ -63,7 +63,7 @@ cannot be used from CI), then make the job a required status check.
 The scaffold ships `.github/workflows/qa-nightly.yml.example`. Arming it is a **deliberate act**:
 
 1. Rename `qa-nightly.yml.example` → `qa-nightly.yml`.
-2. Add the secrets that mirror your `.env` (`QA_BASE_URL_APP`, `QA_USER_EMAIL`/`QA_USER_PASSWORD`, …).
+2. Add the secrets that mirror your `.env` (`QA_BASE_URL_APP`, `QA_USER_EMAIL`/`QA_USER_PASSWORD` if the app has a login, …).
    The prod-guard **fails closed** on a missing/placeholder/prod URL — a workflow armed before its
    secrets exist goes **red, never silently green**.
 3. On failure: download the `qa-nightly-<n>` artifact and triage locally with `/qa-warden:heal <test-id>`.

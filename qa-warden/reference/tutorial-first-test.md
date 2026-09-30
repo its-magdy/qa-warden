@@ -29,7 +29,8 @@ You need, once:
   `/plugin marketplace add its-magdy/qa-warden`, then
   `/plugin install qa-warden@qa-warden --scope project`,
 - **your app running and reachable** on a **non-production** URL (localhost or staging),
-- a **test account** that already exists in that app (an email + password you can use).
+- a **test account** that already exists in that app (an email + password you can use) — unless
+  your app has no login.
 
 No Playwright knowledge required.
 
@@ -52,7 +53,10 @@ BASE_URL_APP=http://localhost:3000        # your localhost or staging (a URL, no
 QA_USER_EMAIL=member@example.test          # your existing test account
 QA_USER_PASSWORD=your-test-password
 ```
-Check it worked: run `/qa-warden:doctor` — a healthy setup prints a short summary with **no ❌ blockers**. Doctor is read-only and **offline**: it confirms your config files, scripts, and the stock `.env` variables (including `BASE_URL_APP`) are in place — it does **not** reach `BASE_URL_APP` over the network. The next step (`/qa-warden:explore`) is what actually opens your app in a browser and confirms the URL really works.
+No login in your app? Leave `QA_USER_*` blank: explore then drafts the site as `auth_mode: none`
+(tests run signed-out) with a `# REVIEW:` line for you to confirm.
+
+Check it worked: run `/qa-warden:doctor` — a healthy setup prints a short summary with **no ❌ blockers**. If it warns that `BASE_URL_APP` is empty or a placeholder and says "Setup is NOT ready yet — fill in .env", fix `.env` first. Doctor is read-only and **offline**: it confirms your config files, scripts, and the stock `.env` variables (including `BASE_URL_APP`) are in place — it does **not** reach `BASE_URL_APP` over the network. The next step (`/qa-warden:explore`) is what actually opens your app in a browser and confirms the URL really works.
 
 ## Step 2 — let the AI look at your app
 

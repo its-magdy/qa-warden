@@ -47,7 +47,8 @@ with `[human-answered]` rules and no declared business source must carry a non-`
 The method is defined inline below. Design rationale (maintainers, not required to run):
 the plugin's `reference/test-case-ideation.md` §5.
 
-**Safety rail (CLAUDE.md §Environment):** run `bash scripts/prod-guard.sh` first — STOP and ask the user to confirm in-chat if it exits non-zero. The live-snapshot steps below need `$BASE_URL_*` in their own shell — load `.env` in that same invocation (CLAUDE.md §Environment).
+**Safety rail (CLAUDE.md §Environment):** run `bash scripts/prod-guard.sh` first — STOP and ask the user to confirm in-chat if it exits non-zero.
+The live-snapshot steps below get the site's URL from `bash scripts/prod-guard.sh --list-targets` and type it literally — never load `.env` or expand `$BASE_URL_*` in your own shell (CLAUDE.md §Environment).
 
 Parse `$ARGUMENTS` for the `<area/feature>` path, optional `kind=` (default `feature`),
 and optional `site=` (default `app`; must match a `sites[].id` in
@@ -70,17 +71,15 @@ write a basis under an unrecognized area.
    - Take a live snapshot of the feature's routes to pre-fill fields, states, and
      on-screen vocabulary — open the browser first, then navigate to each resolved route:
      ```bash
-     # Load .env in THIS shell first — dotenv in playwright.config.ts only reaches
-     # `playwright test`, not this playwright-cli shell, so ${BASE_URL_APP} is EMPTY
-     # without it and the goto below hits a bare relative path (RD-02). Same invocation,
-     # per CLAUDE.md §Environment (a split load in a separate Bash call is already gone).
-     set -a; [ -f "${CLAUDE_PROJECT_DIR:-.}/.env" ] && . "${CLAUDE_PROJECT_DIR:-.}/.env"; set +a
+     # Resolve the URL first, in its own call — it loads .env itself and prints NAME<TAB>url.
+     # Your shell has no $BASE_URL_* (RD-02), and a chained `.env` load matches no allow rule.
+     bash scripts/prod-guard.sh --list-targets
      # <feature-slug> = the feature BASENAME only — a session id with a slash is treated as a path
      # segment by many session stores, so `/qa-warden:intake auth/login` uses -s=intake-login.
-     # <SITE> = the resolved site: BASE_URL_<SITE> (BASE_URL_ADMIN for site=admin), never a
-     # hardcoded BASE_URL_APP.
+     # <base-url> = the url on the resolved site's BASE_URL_<SITE> line (BASE_URL_ADMIN for
+     # site=admin), typed literally — never a hardcoded BASE_URL_APP.
      npx playwright-cli -s=intake-<feature-slug> open
-     npx playwright-cli -s=intake-<feature-slug> goto "${BASE_URL_<SITE>}/<route>"   # substitute the real route
+     npx playwright-cli -s=intake-<feature-slug> goto "<base-url>/<route>"   # substitute the real url + route
      npx playwright-cli -s=intake-<feature-slug> snapshot
      # …repeat goto+snapshot per route, then ALWAYS close — orphan sessions leak, and the
      # shared `default` session (no -s=) can be mutated by a concurrent run mid-interview:

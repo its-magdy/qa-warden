@@ -42,7 +42,7 @@ Inspect the **current project** (not the plugin) to locate the user on the workf
 | Check | If missing → recommend |
 |---|---|
 | `playwright.config.ts` / `CLAUDE.md` substrate present? | `/qa-warden:init` (bootstrap, run once) |
-| `.env` filled (`BASE_URL_APP`, `QA_USER_*`)? | edit `.env` — replace `BASE_URL_APP=CHANGEME` with a real staging/QA host (never prod); the prod-guard fails-closed until you do |
+| `.env` filled (`BASE_URL_APP`; `QA_USER_*` unless the site is `auth_mode: none`)? | edit `.env` — replace `BASE_URL_APP=CHANGEME` with a real staging/QA host (never prod); the prod-guard fails-closed until you do |
 | `specs/_context/app.context.md` exists & fresh? | `/qa-warden:explore` (hot tier) |
 | Area file `specs/_context/<site>/<area>.md` for the target area? | `/qa-warden:explore mode=area site=<id> area=<name>` |
 | A `<feature>.basis.md` for the feature? — SKIP this row and the next when `specs/<area>/<feature>.md` already exists (the feature took the fast lane; suggest intake/ideate only as an upgrade, not a blocker) | `/qa-warden:intake <area/feature>` (rigor lane: pin the oracle first — recommended for P1/money-path/compliance) |

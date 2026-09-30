@@ -74,14 +74,30 @@ done < <(find tests -name '*.spec.ts' -type f ! -name '_*' ! -path '*/_*/*' 2>/d
 # Verifier test-gap records live in bugs/ too (doctor Check 11 and /qa-warden:report surface them there),
 # but they name a decorative or unprobed ORACLE, not an app defect — counted apart so the ledger
 # does not inflate the defect count (run-01 miscounted the split four times in prose).
+# bug_title <file> — the one-line label printed for a bug. The bug schema (CLAUDE.md §Bug-report
+# schema) has NO `# ` H1 — it opens with `## Status` — so an H1-only read printed "bugs/x.md: ."
+# for every schema-conformant file. Order: an H1 if the author added one; else the first non-empty
+# line under `## Summary` (an inline `## Summary: text` counts too); else the filename slug with
+# the leading YYYY-MM-DD- stripped. awk + sed only, so it parses under bash 3.2.
+bug_title() {
+  t=$(grep -m1 '^# ' "$1" 2>/dev/null | sed 's/^# //')
+  [ -n "$t" ] || t=$(awk '
+    /^##[[:space:]]+Summary[[:space:]]*:/ { sub(/^##[[:space:]]+Summary[[:space:]]*:[[:space:]]*/, ""); if ($0 != "") { print; exit } ; f=1; next }
+    /^##[[:space:]]+Summary[[:space:]]*$/ { f=1; next }
+    f && /^#/ { exit }
+    f && NF { print; exit }' "$1" 2>/dev/null)
+  [ -n "$t" ] || { t=$(basename "$1" .md); t=$(printf '%s' "$t" | sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}-//'); }
+  printf '%s' "$t" | sed -E 's/[.[:space:]]+$//'
+}
+
 enabled bugs && while IFS= read -r bug; do
   [ -n "$bug" ] || continue
   case "$bug" in
     *-blind-*.md|*-unverified.md)
-      echo "$PREFIX open test-contract gap — $bug: $(grep -m1 '^# ' "$bug" 2>/dev/null | sed 's/^# //'). A verifier record, not an app defect: the governed scenario proves less than it looks until the oracle is fixed."
+      echo "$PREFIX open test-contract gap — $bug: $(bug_title "$bug"). A verifier record, not an app defect: the governed scenario proves less than it looks until the oracle is fixed."
       n_gaps=$((n_gaps+1)) ;;
     *)
-      echo "$PREFIX open bug filed — $bug: $(grep -m1 '^# ' "$bug" 2>/dev/null | sed 's/^# //'). If a scenario is parked (test.fail/test.fixme) against it, this green is NOT all-clear."
+      echo "$PREFIX open bug filed — $bug: $(bug_title "$bug"). If a scenario is parked (test.fail/test.fixme) against it, this green is NOT all-clear."
       n_bugs=$((n_bugs+1)) ;;
   esac
 done < <(bash scripts/bug-status.sh --list-open 2>/dev/null)

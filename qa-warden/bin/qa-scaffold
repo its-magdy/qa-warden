@@ -7,7 +7,9 @@
 # Idempotent and non-destructive: every file is created only if missing.
 # Existing files (.env, a customized CLAUDE.md, etc.) are left untouched — with ONE
 # documented exception: `.claude/settings.json`, which is additively jq-MERGED (union of
-# the allow/deny permission arrays, other keys preserved) rather than skipped, so the QA
+# the allow/deny permission arrays, template-only top-level keys such as
+# extraKnownMarketplaces added beneath the project's own values, other keys preserved)
+# rather than skipped, so the QA
 # write-scope rules land even in a project that already has a settings.json. The merge is
 # additive and order-normalizing but it does modify that one file (F-015).
 #
@@ -89,10 +91,16 @@ stamp_permissions() {
     fi
     rm -f "$SUGGESTED"
   elif command -v jq >/dev/null 2>&1; then
-    # union the allow/deny arrays; keep the project's other keys intact
+    # union the allow/deny arrays; keep the project's other keys intact. Template top-level
+    # keys OTHER than permissions (today: extraKnownMarketplaces, so teammates who trust the
+    # folder get the qa-warden marketplace) are deep-merged in UNDER the project's values:
+    # `($tmpl - permissions) * $proj` lets the project win on any key it already sets (a
+    # user's own extraKnownMarketplaces entries — or their own "qa-warden" entry pointing at
+    # a fork — survive untouched), and the outer `$proj * …` keeps the project's key order
+    # with new keys appended, so re-merging its own output stays byte-identical.
     merged="$(jq -s '
       .[0] as $proj | .[1] as $tmpl |
-      $proj * {permissions: {
+      $proj * (($tmpl | del(.permissions)) * $proj) * {permissions: {
         allow: (($proj.permissions.allow // []) + ($tmpl.permissions.allow // []) | unique),
         deny:  (($proj.permissions.deny  // []) + ($tmpl.permissions.deny  // []) | unique)
       }}' "$SETTINGS" "$TMPL_SETTINGS" 2>/dev/null)"
@@ -377,13 +385,15 @@ else
   fi
 fi
 
+# Keep these steps in step with the Next-steps block in templates/scripts/init.sh (the
+# clone-bootstrap path prints the same fast lane + optional rigor lane).
 cat <<'NEXT'
 
 [qa-scaffold] done.
 
 Next:
-  1. Edit .env  — replace BASE_URL_APP=CHANGEME with your staging/QA host (NOT prod) + set QA_USER_* creds.
-        Minimum to start: BASE_URL_APP + one QA_USER_EMAIL / QA_USER_PASSWORD pair. Everything else in .env is optional.
+  1. Edit .env  — replace BASE_URL_APP=CHANGEME with your staging/QA host (NOT prod) — and set QA_USER_* creds if the app has a login.
+        Minimum to start: BASE_URL_APP (+ one QA_USER_EMAIL / QA_USER_PASSWORD pair if the app has a login). Everything else in .env is optional.
   2. /qa-warden:explore                              build specs/_context/app.context.md (site/auth map) — review it, clear draft: true
   3. /qa-warden:new-spec auth/login                  draft your first spec (explores the area itself if needed)
   4. /qa-warden:gen specs/auth/login.md              compile spec -> .spec.ts (+ independent verifier)

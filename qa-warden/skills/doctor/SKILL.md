@@ -280,6 +280,11 @@ does not fix anything — each finding names its repair:
 - **Check 21 (fresh-project readiness, INFO):** not a warning — on a brand-new project (no
   `app.context.md`/specs) it prints a "setup looks healthy — next run `/qa-warden:explore`" verdict so the
   expected empty-project WARNs read as "expected at this stage", not "something's broken".
+  **21a (unconfigured target, WARN):** runs `scripts/prod-guard.sh` in its offline default mode and
+  WARNs on each empty/placeholder refusal (`BASE_URL_APP` empty, or any `BASE_URL_*`/`API_URL` still
+  `CHANGEME`, `<…>`, or an `example.com`/`.example` host) — while one stands, the readiness verdict
+  says "NOT ready yet — fill in .env" instead of "setup looks healthy". Remedy: edit `.env` to a real
+  staging/QA host. Empty `QA_USER_*` is not flagged (a site without a login has none).
 
 ## Optional: `--verify-invariants specs/<area>/<feature>.md` (executable `must_fail_when`)
 
