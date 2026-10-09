@@ -288,7 +288,7 @@ if [ "$agent" = "healer" ]; then
 
 This edit to ${abs##*/} adds an occurrence that was not there before ($b -> $a).
 
-agents/healer.md §"Anti-drift rule": you patch selectors and waits. Neither of these is a patch.
+agents/healer.md §\"Anti-drift rule\": you patch selectors and waits. Neither of these is a patch.
   - page.route  - a red test whose backend is genuinely broken is the most valuable signal the
                   nightly produces. Stubbing that backend green converts a real outage into a
                   test that passes forever. A dependency that is down or flaky is a PRODUCT BUG

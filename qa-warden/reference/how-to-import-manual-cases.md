@@ -14,6 +14,16 @@ ambiguous — and it's usually a one-time, per-onboarding step.
 
 ---
 
+**Contents**
+
+- [The path](#the-path)
+- [1. Import the export](#1-import-the-export)
+- [2. Review what it produced — this is the important part](#2-review-what-it-produced--this-is-the-important-part)
+- [3. Approve — import is not approval](#3-approve--import-is-not-approval)
+- [4. Generate and run](#4-generate-and-run)
+- [Results flow back to your tracker (no re-sync)](#results-flow-back-to-your-tracker-no-re-sync)
+- [Good to know](#good-to-know)
+
 ## The path
 
 ```

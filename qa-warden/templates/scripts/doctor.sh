@@ -996,7 +996,7 @@ fi
 #     never-verified spec ships looking covered — the exact hole the split closes. Compares
 #     GRANT OWNERSHIP, never wording, so a reword stays green and a re-parenting does not.
 if [ -n "$TMPL" ] && [ -d "$TMPL/.." ]; then
-  gen_a="$TMPL/../agents/generator.md"; ver_a="$TMPL/../agents/verifier.md"; gen_s="$TMPL/../skills/gen/SKILL.md"
+  ver_a="$TMPL/../agents/verifier.md"; gen_s="$TMPL/../skills/gen/SKILL.md"
   if [ ! -f "$ver_a" ]; then
     echo "❌ agents/verifier.md is MISSING — /qa-warden:gen's second half (metamorphic twins, step-8b fault injection, the route manifest) has no agent to run it, and the generator would be grading its own expect() again"; fail=$((fail+1))
   elif [ -f "$gen_s" ]; then
@@ -1014,7 +1014,7 @@ if [ -n "$TMPL" ] && [ -d "$TMPL/.." ]; then
     mf_owners=$(printf '%s' "$mf_owners" | sed 's/^ //')
     case " $mf_owners " in
       " verifier ") : ;;
-      "  "|" ") echo "❌ no agent declares Write(artifacts/route-manifests/**) — /qa-warden:impact exits NO MANIFESTS FOUND for every spec"; fail=$((fail+1)) ;;
+      "  ") echo "❌ no agent declares Write(artifacts/route-manifests/**) — /qa-warden:impact exits NO MANIFESTS FOUND for every spec"; fail=$((fail+1)) ;;
       *) echo "❌ route-manifest write is claimed by: $mf_owners — it must be the VERIFIER alone. The manifest is the ship signal and is gated on verification passing; an agent that writes it without running the verification detaches the gate from the gated thing, and a never-verified spec reads to /qa-warden:impact as live coverage"; fail=$((fail+1)) ;;
     esac
   fi

@@ -9,6 +9,8 @@ different way, that doc is wrong; reconcile it to this page.
 
 ---
 
+**Terms:** area · assertion contract · basis · brain / body · case · closed vocabulary · context · fast lane · green-but-empty / green-but-wrong · healer · locator · metamorphic twin · must_fail_when · oracle · page object (POM) · Playwright · reviewer · rigor lane · route manifest · run-of-record · sentinel · SFDIPOT · site · situation step · smoke · spec · test · substrate · trace · waiver
+
 **area** — a product area, the folder your specs group under (`specs/<area>/…`). Examples:
 `auth`, `tasks`, `checkout`. One `area` maps to one specialist-context file
 (`specs/_context/<site>/<area>.md`).

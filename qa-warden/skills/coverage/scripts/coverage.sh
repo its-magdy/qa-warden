@@ -187,7 +187,6 @@ echo "== 1b. Spec-without-test — an authored spec that never compiled to a .sp
 # was never generated is invisible to the smoke gate (--grep @smoke can't run a test that doesn't
 # exist), to doctor Check 15 (which `continue`s past test-less specs), and to /qa-warden:impact. Enumerate
 # it directly and surface it as a NAMED gap: every authored spec whose paired test file is absent.
-gap1b=0
 # site= has no path component in authored specs/<area>/<feature>.md paths (same as dim 2 below), so
 # filter on the area-only AREA_FILTER here. COV_FILTER's /${SITE}/${AREA}/ form matches NO authored
 # spec path, so a site=-only run would silently filter this dimension to empty and print a false

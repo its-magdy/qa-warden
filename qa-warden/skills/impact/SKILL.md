@@ -1,5 +1,5 @@
 ---
-description: Test-impact analysis — given a route, field, factory, area, GraphQL operation, or business source, list every spec that would be affected by a change to it. Reads artifacts/route-manifests/ (and specs/_context for source=).
+description: "Test-impact analysis — lists every spec affected by a change to a route, field, factory, area, GraphQL operation or business source, from artifacts/route-manifests/ (and specs/_context for source=). Use when the user asks which tests a change could break, what to re-run after a change, or what covers a route or field."
 argument-hint: "<route=<path> | field=<name> | factory=<name> | area=<name> | operation=<name> | source=<name>>"
 context: fork
 background: false

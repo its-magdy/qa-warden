@@ -1,5 +1,5 @@
 ---
-description: Run the load-bearing reviewer subagent over the current diff (or a named spec/path) — the shipped trigger for the full assertion-contract check suite. Pass url=<x> instead for a full a11y + visual + closed-vocab audit of a live URL.
+description: "Runs the load-bearing reviewer subagent over the current diff or a named spec/path — the full assertion-contract check suite. With url=<x>, audits a live URL instead (a11y + visual + closed vocab). Use before committing or merging a test, or when the user asks whether a test can actually fail."
 argument-hint: "[spec-or-path — default: the working diff vs origin/main] | url=<url> [site=<id>]"
 ---
 

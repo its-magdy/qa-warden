@@ -15,7 +15,7 @@
 set -uo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$PROJECT_DIR"
+cd "$PROJECT_DIR" || exit 1
 
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -51,6 +51,8 @@ info "Creating directories..."
 # of "keep this list IDENTICAL" comments no code enforced. A missing dir here means the first
 # write into it after `npm run init` hits an approval wall.
 if [ -f scripts/runtime-dirs.txt ]; then
+  # Unquoted on purpose: one mkdir argument per listed directory (the list has no spaces).
+  # shellcheck disable=SC2046
   mkdir -p $(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' scripts/runtime-dirs.txt | grep -v '^$')
   ok "dirs ready"
 else

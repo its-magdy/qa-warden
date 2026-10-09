@@ -1,5 +1,5 @@
 ---
-description: "Honest test-coverage report — 9 dimensions (0–6, plus 1b and 5b): route-footprint, requirement, spec-without-test, assertion, lens, flow, case, waiver-destination, and declared-a11y-need→oracle coverage, computed statically from basis, specs, cases, and route manifests. No test run, no line coverage. WARN-only, never a gate; names the GAPS, not a single gameable %."
+description: "Honest test-coverage report across 9 static dimensions (route footprint, requirement, spec-without-test, assertion, lens, flow, case, waiver destination, a11y need→oracle), from basis, specs, cases and route manifests. No test run, no line coverage, WARN-only. Use when the user asks what is or isn't covered, where the test gaps are, or how complete the suite is."
 argument-hint: "[area=<name>] [site=<id>]"
 context: fork
 background: false
