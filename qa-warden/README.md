@@ -10,6 +10,14 @@ end-to-end suite. **AI authors the specs and tests; Playwright replays them nigh
 $0 LLM cost; AI is invoked again only to triage a failure.** Shared UI flows live in an
 AI-maintained page-object layer, so a flow change is a one-file fix.
 
+**Install** (inside Claude Code, from the project that will hold the tests; Claude Code v2.1.275+).
+Choose **project** scope when asked, then stamp the project:
+
+```
+/plugin install qa-warden --marketplace its-magdy/qa-warden
+/qa-warden:init
+```
+
 **New here?** Start with the **[first-test tutorial](reference/tutorial-first-test.md)** (author one
 test end to end), and keep the **[glossary](reference/glossary.md)** open for any unfamiliar term.
 
