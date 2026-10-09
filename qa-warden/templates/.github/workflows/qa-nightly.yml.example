@@ -1,26 +1,53 @@
 # qa-nightly — the $0-LLM run-of-record. Rename to qa-nightly.yml to arm it, then add the
 # repo secrets below (Settings → Secrets → Actions). prod-guard fails CLOSED on a missing/
 # placeholder BASE_URL — an unarmed workflow goes red, never silently green.
+#
+# Schedule facts (GitHub's "Events that trigger workflows" docs) worth knowing before you rely on it:
+#  - A scheduled run fires ONLY from the default branch. Merged to a feature branch, it never runs.
+#  - On a PUBLIC repo, GitHub disables scheduled workflows after 60 days with no repository
+#    activity. The nightly just stops; re-enable it from the Actions tab.
+#  - The failure email goes to whoever last changed the cron line.
+#  - If your org enforces SHA pinning for actions, the `uses:` lines below must be pinned to full
+#    commit SHAs (`actions/checkout@<sha> # v7.0.1`); Dependabot's github-actions ecosystem keeps
+#    pins and the trailing version comment current.
 name: qa-nightly
 on:
   schedule:
-    - cron: '30 2 * * *'        # 02:30 UTC nightly — adjust to your off-peak window
+    - cron: '30 2 * * *'        # 02:30 UTC nightly — off the top of the hour, when GitHub delays schedules most
   workflow_dispatch: {}          # manual trigger for debugging the workflow itself
 # Least privilege (GitHub's hardening guide): the run only reads the repo and the repo's metadata.
 permissions:
   contents: read
+# One run at a time. A manual run started during the nightly would hit the same site with the same
+# test user and turn real results into flakes. `false` queues it instead of killing the run-of-record.
+concurrency:
+  group: qa-nightly
+  cancel-in-progress: false
 jobs:
   nightly:
+    name: Nightly Playwright run
     runs-on: ubuntu-latest
+    # Backstop only. playwright.config.ts sets globalTimeout to 50 min in CI so Playwright stops
+    # first and the report + artifact steps still run; keep this above it (Playwright's CI docs).
     timeout-minutes: 60
-    env:
-      # Every BASE_URL_* / QA_* the suite reads — mirror your .env (secrets, not committed).
-      BASE_URL_APP: ${{ secrets.QA_BASE_URL_APP }}
-      QA_USER_EMAIL: ${{ secrets.QA_USER_EMAIL }}
-      QA_USER_PASSWORD: ${{ secrets.QA_USER_PASSWORD }}
-      # BASE_URL_ADMIN / QA_ADMIN_* / seed-API vars: add here if your suite uses them.
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The job never pushes; don't leave the token configured for npm ci and the test run.
+          persist-credentials: false
+      # Runs FIRST: plain sh, needs no Node, so a misconfigured nightly fails in seconds and before
+      # any dependency install script runs.
+      # Secrets are set on the two steps that read them, not on the job, so `npm ci` (every
+      # dependency's install scripts) and the browser download never see them. The `&qa-env`
+      # anchor below is reused by the suite step as `*qa-env`: edit the list in ONE place.
+      - name: Prod-guard (fail-closed — same guard the agents run)
+        env: &qa-env
+          # Every BASE_URL_* / QA_* the suite reads — mirror your .env (secrets, not committed).
+          BASE_URL_APP: ${{ secrets.QA_BASE_URL_APP }}
+          QA_USER_EMAIL: ${{ secrets.QA_USER_EMAIL }}
+          QA_USER_PASSWORD: ${{ secrets.QA_USER_PASSWORD }}
+          # BASE_URL_ADMIN / QA_ADMIN_* / seed-API vars: add here if your suite uses them.
+        run: bash scripts/prod-guard.sh
       - uses: actions/setup-node@v7
         with:
           # PINNED to 24, deliberately NOT `lts/*`. package.json pins @types/node to the 24 line on
@@ -33,16 +60,18 @@ jobs:
           cache: npm
       - run: npm ci
       # chromium only — matches the scaffold; the active config projects are all Desktop Chrome.
+      # --only-shell: CI runs headless, so fetch only the headless shell, not full Chromium
+      # (Playwright's browsers docs). Drop it if you add a headed project or a `channel`.
       # Do NOT cache browser binaries (official guidance: restore ≈ download; deps aren't cacheable).
-      - run: npx playwright install --with-deps chromium
-      - name: Prod-guard (fail-closed — same guard the agents run)
-        run: bash scripts/prod-guard.sh
+      - run: npx playwright install --with-deps --only-shell chromium
       - name: Run suite (run-of-record — CI fires the json sink; QA_RUN_OF_RECORD for explicitness)
+        env: *qa-env
         run: QA_RUN_OF_RECORD=1 npx playwright test
       # Single job → no shard merge needed. If you shard later, use the matrix + merge-reports
       # recipe (CLAUDE.md §Reporting pipeline: blob shards → npx playwright merge-reports).
+      # Skipped when the suite never wrote a blob (e.g. prod-guard refused), instead of erroring.
       - name: Build HTML report from blob
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && hashFiles('blob-report/**') != '' }}
         run: npx playwright merge-reports --reporter html ./blob-report
       # Action majors are pinned and bumped DELIBERATELY (checkout/setup-node/upload-artifact were
       # all left on v5 while v7 shipped). upload-artifact is the one with a hard expiry — GitHub
@@ -69,6 +98,9 @@ jobs:
           else
             echo "private=false" >> "$GITHUB_OUTPUT"
           fi
+      # blob-report/ is included so a TCM export can run from the nightly without a rerun
+      # (`npx playwright merge-reports --reporter junit ./blob-report`); it carries the same
+      # traces, so it sits behind the same private-repo gate.
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() && steps.visibility.outputs.private == 'true' }}
         with:
@@ -76,6 +108,7 @@ jobs:
           retention-days: 14
           path: |
             playwright-report/
+            blob-report/
             artifacts/last-run.json
             artifacts/test-results/**/trace.zip
       - name: Failure breadcrumb

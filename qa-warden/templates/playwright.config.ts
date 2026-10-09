@@ -74,7 +74,9 @@ const siteProjectDefaults = {
 };
 
 // QA_WORKERS: staging-capacity slot (a shared staging DB that can't take 4 parallel
-// writers is an environment fact, not policy). Accepts a positive integer or a Playwright
+// writers is an environment fact, not policy). CI default is 2, Playwright's own example
+// (test-parallel docs: `workers: process.env.CI ? 2 : undefined`): a private repo's
+// ubuntu-latest runner has 2 vCPUs, so 4 workers oversubscribed it. Raise it with QA_WORKERS. Accepts a positive integer or a Playwright
 // percent string ('50%'). VALIDATED, not trusted: the old inline `Number(...)` turned a
 // typo (`QA_WORKERS=four`) into `NaN` and `QA_WORKERS=0` into `0`, and handed either to
 // Playwright with no diagnostic — concurrency silently changed on a malformed value. Fall
@@ -82,7 +84,7 @@ const siteProjectDefaults = {
 // reporter; see the dotenv note above).
 function resolveWorkers(): number | string | undefined {
   const raw = process.env.QA_WORKERS;
-  const fallback = isCI ? 4 : undefined;
+  const fallback = isCI ? 2 : undefined;
   if (!raw) return fallback;
   // `[1-9]\d*%`, not `\d+%`: this function exists to stop a degenerate value reaching
   // Playwright, and a bare `\d+%` rejected the integer `0` while waving through `0%` — the
@@ -105,6 +107,10 @@ export default defineConfig({
   // placeholder/empty-target refusals have no env escape). Makes even a bare
   // `npx playwright test` safe — the command-layer shell guards are advisory only (F-012).
   globalSetup: './scripts/prod-guard.ts',
+  // CI only: Playwright stops the run itself after 50 min, so the reporters still write the
+  // report and last-run.json. The nightly's job timeout (60 min) is the backstop above it; if
+  // the job timeout fired first, the run would be killed with no report and no artifact.
+  globalTimeout: isCI ? 50 * 60 * 1000 : undefined,
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,

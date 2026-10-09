@@ -9,7 +9,7 @@ the rename on top of it, and that one IS breaking (see its section). **`0.4.1`**
 documentation fixes only; **`0.5.0`** fixes what a fresh-install test and a re-check of the
 2026-09-26 end-to-end run found; **`0.5.1`** is a one-line wording fix on top, **`0.5.2`** fixes what a full end-to-end run
 of the README walkthrough found, **`0.5.3`** fixes what a whole-plugin code review found, **`0.5.4`** fixes what a
-security review found, and **`0.5.5`** hardens one step of it. `.claude-plugin/plugin.json` reads `0.5.5`; tag the build with `claude plugin tag ./qa-warden`.
+security review found, **`0.5.5`** hardens one step of it, and **`0.5.6`** brings the nightly in line with GitHub's and Playwright's CI guidance. `.claude-plugin/plugin.json` reads `0.5.6`; tag the build with `claude plugin tag ./qa-warden`.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/). Versions are the
 number in `plugin.json`, which is also the key the installer caches under
@@ -17,6 +17,31 @@ number in `plugin.json`, which is also the key the installer caches under
 never carry the same number**, or the second one has no way to announce itself.
 
 ---
+
+## 0.5.6 — nightly CI hardening (2026-10-09)
+
+Each item is backed by GitHub's or Playwright's official docs; the workflow passes actionlint.
+
+- **`playwright.config.ts` sets `globalTimeout` (50 min) in CI.** The nightly job times out at 60 min;
+  before, a long run was killed mid-suite with no report and no artifact. Playwright now stops first,
+  so the reporters still write the report and `last-run.json` (Playwright's CI docs).
+- **CI default workers drop from 4 to 2** (Playwright's own example, `workers: process.env.CI ? 2 :
+  undefined`). A private repo's `ubuntu-latest` runner has 2 vCPUs. `QA_WORKERS` still raises it.
+- **Secrets reach only the two steps that read them** (prod-guard and the suite), through one YAML
+  anchor, instead of every step. `npm ci` install scripts and the browser download no longer see them.
+- **Prod-guard runs right after checkout**, before Node and `npm ci`, so a misconfigured nightly fails
+  in seconds.
+- **Checkout sets `persist-credentials: false`**; the job never pushes.
+- **`concurrency: qa-nightly`** queues a manual run behind a running nightly instead of letting both hit
+  the same site with the same test user.
+- **The browser install uses `--only-shell`** (headless shell only; Playwright's browsers docs).
+- **`blob-report/` is now in the artifact**, so the JUnit export in DOCUMENTATION §16.2 works from the
+  nightly without a rerun. The HTML-report step is skipped, not failed, when no blob was written.
+- Header comments now cover the schedule's limits (default branch only; public repos disable it after
+  60 days with no activity) and orgs that enforce SHA-pinned actions.
+- Run `/qa-warden:init --resync` to pick these up; doctor reports the template drift. Resync refreshes
+  `qa-nightly.yml.example` only: if you already armed it as `qa-nightly.yml`, diff the two and carry
+  the changes over (keep your own secrets in the `&qa-env` block).
 
 ## 0.5.5 — nightly visibility step hardened (2026-09-30)
 

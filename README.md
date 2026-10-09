@@ -33,7 +33,8 @@ It is a test-authoring plugin, not a security or secrets tool. This repo is both
 
 ## Prerequisites
 
-- **Claude Code** with plugin support (`/plugin` commands)
+- **Claude Code** with plugin support (`/plugin` commands). Not claude.ai or Cowork: they don't install a plugin that has a top-level `bin/` directory, and this one does.
+- **macOS, Linux or WSL.** The two hooks are shell scripts; native Windows can't run them.
 - **Node.js `>=22`** and `npm`, for the Playwright project that `/qa-warden:init` stamps
 - **`git`**
 - **`jq`**: required. Without it, `/qa-warden:doctor` reports a ❌ and `.claude/settings.json` can't be auto-merged.
@@ -59,13 +60,21 @@ Run these inside Claude Code, from the project that will hold the tests:
 /qa-warden:init
 ```
 
+To stay on one release, pin the marketplace to its tag with `#<tag>` (tags are `qa-warden--v<version>`):
+
+```bash
+/plugin marketplace add its-magdy/qa-warden#qa-warden--v0.5.6
+```
+
+Updates are manual by default (see [Versioning and releasing](#versioning-and-releasing)). To get them automatically, run `/plugin`, open the **Marketplaces** tab, select `qa-warden` and choose **Enable auto-update**.
+
 ### What `/qa-warden:init` does
 
 - Copies every file in the plugin's `templates/` into the project, skipping any file that already exists:
   - `package.json` (with `@playwright/test` pinned to `1.63.0`), `playwright.config.ts`, `tsconfig.json`
   - `CLAUDE.md`, `.mcp.json`, `.mcp.explore.json`, `.gitignore`, `.env.example`
   - `scripts/`, `fixtures/`, `page-objects/`, `specs/_context/_templates/`
-  - two CI examples in `.github/workflows/*.yml.example`
+  - one CI example, `.github/workflows/qa-nightly.yml.example`
 - Creates `.env` from `.env.example`.
 - Merges its permission rules and a `qa-warden` entry under `extraKnownMarketplaces` into `.claude/settings.json`.
 - Runs `npm install` and installs the Playwright browsers.
@@ -358,8 +367,8 @@ qa-warden/                        the plugin
 ├── reference/  DESIGN.md, tutorial, how-to, glossary, ideation and sentinel references
 ├── templates/  the runtime substrate /qa-warden:init stamps into each project
 ├── bin/qa-scaffold    deterministic substrate installer (used by /qa-warden:init)
-├── bin/qa-selfcheck   plugin consistency checks (not shipped to projects)
-├── bin/qa-hooktest    hook regression tests (not shipped to projects)
+├── bin/qa-selfcheck   plugin consistency checks (not stamped into projects)
+├── bin/qa-hooktest    hook regression tests (not stamped into projects)
 └── evals/             behavioural evals for the reviewer (`claude plugin eval`)
 ```
 
@@ -367,7 +376,7 @@ Agents, skills, hooks and `reference/` update automatically with the plugin. Eve
 
 ### Running the checks
 
-Run before every plugin commit:
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs all of these except the evals on every pull request and push to `main`, on Ubuntu and on macOS (the macOS job is the one that parses every script with bash 3.2). It makes no model calls and needs no secrets; the Claude Code CLI is installed only for `claude plugin validate`. Run them locally before every plugin commit anyway:
 
 ```bash
 qa-warden/bin/qa-selfcheck                    # 8 consistency checks over agents/ skills/ hooks/ reference/
@@ -396,7 +405,7 @@ claude --plugin-dir ./qa-warden
 
 ### Versioning and releasing
 
-The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.5.5`. Users receive an update only when that string changes.
+The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.5.6`. Users receive an update only when that string changes.
 
 > **Bump `version` in the same commit as every user-visible change.** If you push without a bump, nothing ships, and `/plugin update` tells users they are already current. No error warns you.
 

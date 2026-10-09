@@ -837,6 +837,10 @@ workflow armed before its secrets exist goes **red, never silently green**.
 | `QA_USER_EMAIL` / `QA_USER_PASSWORD` | `QA_USER_*` creds (not needed for an `auth_mode: none` site) |
 | *(as needed)* `BASE_URL_ADMIN` / `QA_ADMIN_*` / seed-API vars | whatever else your suite reads |
 
+Add each one to the `env: &qa-env` block on the prod-guard step. The suite step reuses that block
+(`env: *qa-env`), so the list lives in one place, and no other step (`npm ci`, the browser
+download) sees the secrets.
+
 **What a run produces:** `artifacts/last-run.json` (the run-of-record — the workflow
 sets `QA_RUN_OF_RECORD=1`), an HTML report built from the blob report, and
 `trace.zip` per failure — all uploaded as one `qa-nightly-<n>` artifact
