@@ -1,0 +1,58 @@
+name: Bug report
+description: Something in QA Warden doesn't work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security problem? Don't file it here. Use [private vulnerability reporting](https://github.com/its-magdy/qa-warden/security/advisories/new) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of commands that shows it. Remove credentials and internal URLs.
+      placeholder: |
+        1. /qa-warden:init
+        2. /qa-warden:new-spec auth/login
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: QA Warden version
+      description: The `version` in the installed plugin.json, or the version `/plugin` shows.
+      placeholder: 0.5.6
+    validations:
+      required: true
+  - type: input
+    id: cc-version
+    attributes:
+      label: Claude Code version
+      description: Output of `claude --version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - macOS
+        - Linux
+        - Windows (WSL)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: /qa-warden:doctor output
+      description: Optional, but it often shows the cause. Remove credentials and internal URLs.
+      render: text
