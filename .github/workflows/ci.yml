@@ -57,3 +57,24 @@ jobs:
         run: |
           claude plugin validate --strict ./qa-warden
           claude plugin validate --strict .
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The image's shellcheck (0.9.0 on ubuntu-24.04). Each script is checked in its own dialect
+      # from its shebang (#!/bin/sh as POSIX, bash as bash); -x follows `. hook-lib.sh`.
+      # Gate at warning: an unclosed quote in a hook message (SC1078) once cut the healer's deny
+      # reason in half while every hooktest case still passed.
+      - name: shellcheck (warning and above)
+        run: |
+          files=$(for f in $(git ls-files); do
+            head -n 1 "$f" | grep -qE '^#!.*\b(ba)?sh\b' && echo "$f"
+          done)
+          shellcheck --version | sed -n 2p
+          # Unquoted on purpose: one argument per script (no tracked path has a space).
+          # shellcheck disable=SC2086
+          shellcheck -x -S warning $files

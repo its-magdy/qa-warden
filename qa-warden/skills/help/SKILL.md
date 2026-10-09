@@ -1,5 +1,5 @@
 ---
-description: Ask anything about the QA Warden plugin — how it works, what a command/agent/skill does, "what do I do next", or "how do I <goal>". Inspects your project state to give a situated answer.
+description: "Answers any question about the QA Warden plugin — how it works, what a command, agent or skill does, what to do next, or how to reach a goal — using the project's current state to give a situated answer."
 argument-hint: "[free-form question or <area/feature> — e.g. \"what's next\" | checkout/coupon | \"how do I add a test\" | \"what is the healer\"]"
 ---
 

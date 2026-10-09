@@ -156,6 +156,16 @@ $G")"
 run assertion-contract.sh deny  "healer adds browserContext.route"   "$(edit healer $S "$G" "await browserContext.route('**/api', r => r.abort());
 $G")"
 
+echo "assertion-contract.sh — the deny reason reaches the agent whole"
+# hook_deny passes only \$1 to jq. An unescaped double quote inside the message used to end the
+# string early, so the healer got a reason cut off at "healer.md §Anti-drift" (still a deny, so
+# every case above passed). Check the reason's LAST line arrives.
+out=$(printf '%s' "$(edit healer $S "$G" "await context.clock.runFor(2000);
+$G")" | CLAUDE_PROJECT_DIR="$P" CLAUDE_PLUGIN_ROOT="$here" bash "$HK/assertion-contract.sh" 2>/dev/null)
+if printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecisionReason' 2>/dev/null | tail -n 1 | grep -q 'hooks/README.md)\.$'; then
+  pass=$((pass+1)); echo "  ok    deny  healer stub/clock reason is complete (ends with the hooks/README.md pointer)"
+else bad=$((bad+1)); echo "  FAIL  healer stub/clock deny reason is truncated"; fi
+
 echo "hook_qa_root — a QA project nested under a directory named tests/"
 N="$P/mono/tests/qa"
 mkdir -p "$N/tests/auth" "$N/scripts"

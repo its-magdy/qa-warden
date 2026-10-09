@@ -18,9 +18,9 @@ never carry the same number**, or the second one has no way to announce itself.
 
 ---
 
-## 0.5.6 — nightly CI hardening (2026-10-09)
+## 0.5.6 — nightly CI hardening, a truncated hook message, shellcheck cleanup (2026-10-09)
 
-Each item is backed by GitHub's or Playwright's official docs; the workflow passes actionlint.
+Each item is backed by GitHub's, Playwright's or Anthropic's official docs, or by a reproduction.
 
 - **`playwright.config.ts` sets `globalTimeout` (50 min) in CI.** The nightly job times out at 60 min;
   before, a long run was killed mid-suite with no report and no artifact. Playwright now stops first,
@@ -39,6 +39,18 @@ Each item is backed by GitHub's or Playwright's official docs; the workflow pass
   nightly without a rerun. The HTML-report step is skipped, not failed, when no blob was written.
 - Header comments now cover the schedule's limits (default branch only; public repos disable it after
   60 days with no activity) and orgs that enforce SHA-pinned actions.
+- **Fixed: the healer's stub/clock denial reached the agent cut in half.** An unescaped `"` inside
+  the deny message in `hooks/assertion-contract.sh` ended the string at `healer.md §Anti-drift`, so
+  the healer never saw what it may patch instead or how to report a false positive. The edit was
+  still denied, which is why every hooktest case passed. A new hooktest case checks the message
+  arrives whole (58 cases), and shellcheck now gates CI, so this class of slip fails the build.
+- The `coverage`, `impact` and `review` skill descriptions now say when to use them, and `help`'s
+  is in the third person (Anthropic's skill-authoring guidance; the listing grows ~44 tokens).
+- Four reference files over 100 lines (`knowledge-map`, `glossary`, `how-to-import-manual-cases`,
+  `tutorial-first-test`) start with a table of contents.
+- Dead code removed (shellcheck): an unused variable each in `doctor.sh` and `coverage.sh`, and a
+  case pattern in `doctor.sh` that could never match. `init.sh` exits if it can't `cd` to the project.
+  Doctor's output is unchanged.
 - Run `/qa-warden:init --resync` to pick these up; doctor reports the template drift. Resync refreshes
   `qa-nightly.yml.example` only: if you already armed it as `qa-nightly.yml`, diff the two and carry
   the changes over (keep your own secrets in the `&qa-env` block).

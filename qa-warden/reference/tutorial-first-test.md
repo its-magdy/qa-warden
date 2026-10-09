@@ -22,6 +22,19 @@ human-readable test — and you'll have seen the plugin do the thing that makes 
 
 ---
 
+**Contents**
+
+- [Before you start](#before-you-start)
+- [Step 1 — stamp the project](#step-1--stamp-the-project)
+- [Step 2 — let the AI look at your app](#step-2--let-the-ai-look-at-your-app)
+- [Step 3 — draft the spec](#step-3--draft-the-spec)
+- [Step 4 — compile it and run it green](#step-4--compile-it-and-run-it-green)
+- [Step 5 — let the gatekeeper check it](#step-5--let-the-gatekeeper-check-it)
+- [Step 6 — run the smoke gate](#step-6--run-the-smoke-gate)
+- [Step 7 — prove the test doesn't lie (no code needed)](#step-7--prove-the-test-doesnt-lie-no-code-needed)
+- [What just happened](#what-just-happened)
+- [Where to go next](#where-to-go-next)
+
 ## Before you start
 
 You need, once:

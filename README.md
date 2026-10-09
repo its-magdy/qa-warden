@@ -376,11 +376,11 @@ Agents, skills, hooks and `reference/` update automatically with the plugin. Eve
 
 ### Running the checks
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs all of these except the evals on every pull request and push to `main`, on Ubuntu and on macOS (the macOS job is the one that parses every script with bash 3.2). It makes no model calls and needs no secrets; the Claude Code CLI is installed only for `claude plugin validate`. Run them locally before every plugin commit anyway:
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs all of these except the evals, plus shellcheck, on every pull request and push to `main`, on Ubuntu and on macOS (the macOS job is the one that parses every script with bash 3.2). It makes no model calls and needs no secrets; the Claude Code CLI is installed only for `claude plugin validate`. Run them locally before every plugin commit anyway:
 
 ```bash
 qa-warden/bin/qa-selfcheck                    # 8 consistency checks over agents/ skills/ hooks/ reference/
-qa-warden/bin/qa-hooktest                     # 57 real payloads through the two PreToolUse hooks
+qa-warden/bin/qa-hooktest                     # 58 real payloads through the two PreToolUse hooks
 claude plugin validate --strict ./qa-warden   # mandatory after any frontmatter edit
 ```
 
@@ -388,7 +388,7 @@ Expected tail:
 
 ```
 qa-selfcheck: ✅ plugin is self-consistent — all 8 checks passed
-qa-hooktest: ✅ all 57 cases passed
+qa-hooktest: ✅ all 58 cases passed
 ```
 
 When you change `qa-warden/agents/reviewer.md`, also run the behavioural evals. They make real model calls (on 2026-09-30, about $0.4 and 2 minutes per case; all five cost $1.97), so run them per change, not per commit. Details: [`qa-warden/evals/README.md`](qa-warden/evals/README.md).

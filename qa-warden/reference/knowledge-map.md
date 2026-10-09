@@ -9,6 +9,15 @@ context; THIS file is read on demand for catalog / workflow-order / "what does X
 **Maintenance:** the `/qa-warden:<name>` rows below must stay in sync with the directories under
 `skills/`. `bin/qa-selfcheck` Check 9e enforces exactly that — add a row when you add a skill.
 
+**Contents**
+
+- [The workflow (happy path)](#the-workflow-happy-path)
+- [Slash commands (skills you invoke as `/qa-warden:<name>` — all namespaced)](#slash-commands-skills-you-invoke-as-qa-wardenname--all-namespaced)
+- [Agents (the "brain" — triggered by a skill or an event; can't spawn each other)](#agents-the-brain--triggered-by-a-skill-or-an-event-cant-spawn-each-other)
+- [Capability skills (same SKILL.md format; Claude auto-triggers these, most aren't slash-callable)](#capability-skills-same-skillmd-format-claude-auto-triggers-these-most-arent-slash-callable)
+- [Mental model (the load-bearing "why"s)](#mental-model-the-load-bearing-whys)
+- [Safety rails to remind users of](#safety-rails-to-remind-users-of)
+
 ## The workflow (happy path)
 
 ```
