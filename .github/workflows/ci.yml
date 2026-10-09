@@ -71,8 +71,9 @@ jobs:
       # reason in half while every hooktest case still passed.
       - name: shellcheck (warning and above)
         run: |
+          # `if`, not `&&`: under the runner's `bash -e`, a trailing failed grep would exit the step.
           files=$(for f in $(git ls-files); do
-            head -n 1 "$f" | grep -qE '^#!.*\b(ba)?sh\b' && echo "$f"
+            if head -n 1 "$f" | grep -qE '^#!.*\b(ba)?sh\b'; then echo "$f"; fi
           done)
           shellcheck --version | sed -n 2p
           # Unquoted on purpose: one argument per script (no tracked path has a space).
