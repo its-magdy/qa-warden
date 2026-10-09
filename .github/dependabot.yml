@@ -1,0 +1,9 @@
+# Keeps the SHA-pinned actions in .github/workflows current. Only this repo's own workflows:
+# the template under qa-warden/templates/ is copied into user projects and its Playwright pin
+# is exact on purpose (doctor Check 8b), so npm is deliberately not watched here.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly   # first day of each month (Dependabot docs)
