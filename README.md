@@ -123,7 +123,7 @@ QA_ADMIN_PASSWORD=
 
 - `BASE_URL_APP` ships as `CHANGEME`. The prod-guard **fails closed** until you replace it.
 - Specs never contain passwords. They reference the variable name (`password_env: "QA_USER_PASSWORD"`).
-- Each additional site under test gets its own `BASE_URL_<SITE>` variable.
+- Each additional site under test gets its own `BASE_URL_<SITE>` variable. Setting it adds the site's Playwright project; you never edit `playwright.config.ts`.
 - A site with no login is recorded as `auth_mode: none` in `specs/_context/app.context.md`. Its tests run unauthenticated and `QA_USER_*` stays empty. When `/qa-warden:explore` sees no login and no `QA_USER_*` credentials, it drafts `auth_mode: none` with a `# REVIEW:` line for you to confirm.
 
 Check the setup. Doctor is read-only and offline; it never contacts `BASE_URL_APP`:
