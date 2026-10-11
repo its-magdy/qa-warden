@@ -12,6 +12,8 @@ Target ~80 lines (a tunable default, not a hard cap). Delete this comment.
 
 ```yaml
 # Hot-tier app context. Hand-edit sites[] then re-run /qa-warden:explore mode=hot.
+# Each id pairs with base_url_env BASE_URL_<ID> (uppercased, `-`→`_`): playwright.config.ts adds
+# the site's project while that var is set — never edit the config (doctor Check 10).
 sites:
   - id: app
     description: "<one line: what this site is, e.g. 'customer storefront'>"   # optional — orients the agent

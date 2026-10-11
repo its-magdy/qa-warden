@@ -529,6 +529,18 @@ does not match the project path satisfies neither project's full predicate — i
 spec at all, so nothing in the roll-up distinguishes "never ran" from "was never written."
 If a path-routed project is ever added, it must be tag-routed too.
 
+**Site projects are derived, not hand-written.** `playwright.config.ts` is toolkit-owned: it is in
+`scripts/resync-set.txt`, so doctor Check 9 flags any local edit and `/qa-warden:init --resync`
+overwrites it. Doctor Check 10 used to tell a user with a third site to add its project by hand;
+the next resync deleted that project and the site's specs ran in no project. So `app` is the one
+literal site project, and every other site gets its project from the environment: a set, non-empty
+`BASE_URL_<SITE>` registers project `<site>` (lowercased, `_` → `-`) with grep
+`/@site:<site>(?:\s|$)/`. Check 10 holds each `sites[]` entry to the same rule (id lowercase
+`[a-z0-9-]`, `base_url_env` exactly `BASE_URL_<ID>`) instead of grepping the config for a
+`name:`. Env vars rather than parsing `app.context.md`: that file does not exist until
+`/qa-warden:explore` runs, `BASE_URL_*` is already the set both prod-guards screen, and an unset var
+(the single-site default) registers nothing — the gating `admin` already had.
+
 ## Where the operational facts live
 
 Every fact below has exactly one authoritative home. Do not copy them here — point to them.

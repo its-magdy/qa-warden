@@ -3,7 +3,7 @@
 // Triage (LLM) happens elsewhere: healer subagent reads trace.zip on failure.
 
 import { defineConfig, devices } from '@playwright/test';
-import type { ReporterDescription } from '@playwright/test';
+import type { Project, ReporterDescription } from '@playwright/test';
 import * as dotenv from 'dotenv';
 
 // Load .env before defineConfig reads process.env.
@@ -47,7 +47,7 @@ if (isRunOfRecord) {
 // instead of silently driving a live external domain). Set BASE_URL_APP in .env for real runs.
 const APP_BASE_URL = process.env.BASE_URL_APP ?? process.env.BASE_URL ?? 'http://localhost';
 
-// Collection rules shared by EVERY site project (app, admin, and any site added later).
+// Collection rules shared by EVERY site project (app and each derived site below).
 // Spread into each project below rather than re-typed per site: the `_`-prefix pair is the
 // toolkit's most drift-prone invariant (doctor Checks 3/14/15 mirror it, and it has already
 // had to be fixed in lockstep once), so a second hand-kept copy per site is exactly the
@@ -72,6 +72,46 @@ const siteProjectDefaults = {
   testIgnore: ['**/*.setup.ts', '**/_*.spec.ts', '**/_*/**'],
   dependencies: ['setup'],
 };
+
+// Every site except `app` gets its project FROM THE ENVIRONMENT, never from a hand edit. This
+// file is toolkit-owned (scripts/resync-set.txt): doctor Check 9 flags any local change and
+// `/qa-warden:init --resync` overwrites it, so a hand-added project was a standing drift warning
+// that the next resync silently deleted — after which its @site: specs ran in NO project.
+// Rule: a set, non-empty BASE_URL_<SITE> registers a project named <site> that selects
+// @site:<site>. <SITE> maps to the id lowercased with `_` → `-` (BASE_URL_ADMIN → admin,
+// BASE_URL_ADMIN_PORTAL → admin-portal); doctor Check 10 holds each app.context.md sites[]
+// entry to that same mapping. An unset var registers nothing — the zero-config single-site
+// default. A BASE_URL_<X> that is not a site gets a project that selects no tests (harmless),
+// and every BASE_URL_* is screened by the prod-guard either way. `app` and `setup` are reserved:
+// `app` is the explicit default project below (it also takes untagged specs), and a second
+// `setup` would collide with the auth project.
+const SITE_ENV_RE = /^BASE_URL_([A-Z0-9]+(?:_[A-Z0-9]+)*)$/;
+const RESERVED_SITE_IDS = new Set(['app', 'setup']);
+
+function derivedSiteProjects(): Project[] {
+  const projects: Project[] = [];
+  for (const envName of Object.keys(process.env).sort()) {
+    const match = SITE_ENV_RE.exec(envName);
+    const baseURL = process.env[envName];
+    if (!match || !baseURL) continue;
+    const id = match[1].toLowerCase().replace(/_/g, '-');
+    if (RESERVED_SITE_IDS.has(id)) continue;
+    projects.push({
+      name: id,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL,
+      },
+      // Same `(?:\s|$)` boundary as the app grep: an unanchored /@site:admin/ also matched
+      // @site:admin-portal and ran it against the wrong baseURL. The id is [a-z0-9-] only, so
+      // it needs no regex escaping. The app grep excludes every @site: tag, so a spec routes to
+      // exactly one baseURL; a cross-site spec tagged with two sites runs in both projects.
+      grep: new RegExp(`@site:${id}(?:\\s|$)`),
+      ...siteProjectDefaults,
+    });
+  }
+  return projects;
+}
 
 // QA_WORKERS: staging-capacity slot (a shared staging DB that can't take 4 parallel
 // writers is an environment fact, not policy). CI default is 2, Playwright's own example
@@ -232,7 +272,7 @@ export default defineConfig({
     // MUST (a) read its OWN site's BASE_URL_<SITE> env var and navigate by ABSOLUTE
     // URL — never a relative goto — and (b) self-skip (test.skip) when that env var
     // is unset, since setup files still run here even when the site's project
-    // (e.g. admin, gated on BASE_URL_ADMIN) is not registered.
+    // (registered only while its BASE_URL_<SITE> is set) is not.
     { name: 'setup', testMatch: /.*\.setup\.ts/ },
     // site=app — customer-facing storefront. Default project.
     // Runs specs tagged @site:app and any untagged specs (default site).
@@ -248,43 +288,26 @@ export default defineConfig({
       // specs here against the wrong baseURL. (NOT \b — hyphen is a non-word char, so
       // \b still matches @site:app-eu; hyphenated site ids are legal per doctor Check 10.)
       // The untagged-default branch ^(?!.*@site:) stays PREFIX-matched on purpose — it
-      // must reject ANY @site: tag. Keep in lockstep with the admin grep below.
+      // must reject ANY @site: tag. Keep in lockstep with derivedSiteProjects() above.
       grep: /@site:app(?:\s|$)|^(?!.*@site:)/,
       ...siteProjectDefaults,
     },
-    // site=admin — back-office. Skip block when BASE_URL_ADMIN is unset
-    // (single-site forks). Routed by the @site:admin TAG the generator ALWAYS emits
+    // Every other site (admin, …) — one project per set BASE_URL_<SITE>; see
+    // derivedSiteProjects() above. Routed by the @site:<id> TAG the generator ALWAYS emits
     // (agents/generator.md §"Spec tagging"), NOT by file path. Playwright ANDs a
     // project's `testMatch` (file filter) with its `grep` (title/tag filter), so the old
-    // `testMatch: ['**/admin/**', ...]` here silently DROPPED any @site:admin spec the
+    // `testMatch: ['**/admin/**', ...]` silently DROPPED any @site:admin spec the
     // generator wrote under tests/<area>/ where <area> != 'admin' (and not *.cross-site):
     // it matched neither the admin project (fails testMatch) nor the app project (its grep
     // excludes @site:) and ran in NO project — a silent false-green. Tag-only routing
     // matches how the generator resolves baseURL and can't strand a correctly-tagged spec.
-    ...(process.env.BASE_URL_ADMIN
-      ? [
-          {
-            name: 'admin',
-            use: {
-              ...devices['Desktop Chrome'],
-              baseURL: process.env.BASE_URL_ADMIN,
-            },
-            // Select every @site:admin-tagged test, wherever it lives. The app project's
-            // grep (/@site:app(?:\s|$)|^(?!.*@site:)/) already excludes @site:admin, so a
-            // spec routes to exactly one baseURL; a cross-site spec tagged BOTH runs in
-            // both. Same (?:\s|$) boundary as the app grep — an unanchored /@site:admin/
-            // also matched e.g. @site:admin-portal and ran it against the wrong baseURL.
-            grep: /@site:admin(?:\s|$)/,
-            ...siteProjectDefaults,
-          },
-        ]
-      : []),
+    ...derivedSiteProjects(),
     // ── Mobile-viewport lane (OPT-IN — uncomment to enable) ──
     // Runs every @mobile-tagged test in an emulated phone (Pixel 7: 412x915, touch,
     // chromium — the engine the agents author against). Tag semantics are ADDITIVE,
     // mirroring @site: (a spec tagged for two lanes runs in both): ['@mobile','@site:app']
     // runs in the desktop app project AND here — intended (viewport parity, same oracle).
-    // Mobile-ONLY tests: do NOT add `grepInvert: /@mobile/` to app/admin — a project-level
+    // Mobile-ONLY tests: do NOT add `grepInvert: /@mobile/` to the site projects — a project-level
     // grepInvert REPLACES the top-level quarantine grepInvert for that project (quarantined
     // tests would silently run again). Fold both instead:
     //   grepInvert: process.env.QA_RUN_QUARANTINE === '1' ? /@mobile/ : /@quarantine|@mobile/
@@ -292,7 +315,7 @@ export default defineConfig({
     // Spread `siteProjectDefaults` — do NOT hand-type `testIgnore`/`dependencies` here. That is
     // the drift this const exists to prevent, and a hand-typed `testIgnore: ['**/*.setup.ts']`
     // drops the two `_`-scratch globs, so this lane collects probe byproducts the other lanes
-    // ignore. Same `(?:\s|$)` tag boundary as the app/admin greps above: a bare /@mobile/ also
+    // ignore. Same `(?:\s|$)` tag boundary as the site greps above: a bare /@mobile/ also
     // matches @mobile-only / @mobile-safari and pulls those into the Pixel-7 viewport.
     // {
     //   name: 'mobile',
@@ -307,7 +330,7 @@ export default defineConfig({
     // @site:admin specs too and runs them against APP_BASE_URL; without the defaults it has no
     // `dependencies: ['setup']` (every storageState spec runs unauthenticated) and re-runs the
     // `*.setup.ts` files as ordinary tests (F-018). Mirror the `app` project and change only
-    // the device. For a second SITE on this browser, copy the `admin` block instead.
+    // the device. These lanes cover the `app` site only.
     // {
     //   name: 'firefox',
     //   use: { ...devices['Desktop Firefox'], baseURL: APP_BASE_URL },

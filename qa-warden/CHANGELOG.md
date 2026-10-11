@@ -41,6 +41,26 @@ never carry the same number**, or the second one has no way to announce itself.
   untouched), and a table of `prod-guard.sh` URL cases including `QA_ALLOW_PROD=1`. No plugin
   behaviour changes.
 
+### Adding a site no longer means editing `playwright.config.ts`
+
+- **Site projects come from `BASE_URL_<SITE>`; you no longer edit `playwright.config.ts` to add a
+  site.** `playwright.config.ts` is toolkit-owned (it is in `resync-set.txt`), yet doctor Check 10
+  told a user with a third site (say `shop`) to add its project by hand. Check 9 then flagged that
+  edit as drift, and `/qa-warden:init --resync` replaced the file, which deleted the project; the
+  site's `@site:shop` specs then ran in no project. Now `app` stays the one literal site project,
+  and every set, non-empty `BASE_URL_<SITE>` registers project `<site>` (lowercased, `_` → `-`, so
+  `BASE_URL_ADMIN_PORTAL` → `admin-portal`) with the same tag grep, `setup` dependency and ignore
+  globs. With only `BASE_URL_APP`, or with `BASE_URL_ADMIN` too, the resolved projects are
+  identical to before.
+- **Doctor Check 10 checks the `sites[]` table against that rule** instead of grepping the config:
+  ❌ when an id is not lowercase `[a-z0-9-]`, is `setup`, or its `base_url_env` is not exactly
+  `BASE_URL_<ID>`; ⚠️ when `BASE_URL_<ID>` is unset or empty after loading `.env`. That warning is new for
+  declared sites whose var is unset, `admin` included: before, a project-less run of those specs
+  passed silently.
+- **Upgrading:** run `/qa-warden:init --resync`. A project you added by hand is backed up to
+  `playwright.config.ts.qa-bak` and replaced; if it used `BASE_URL_<ID>` and the matching id, it
+  comes back on its own. Otherwise Check 10 names the id or variable to rename.
+
 ---
 
 ## 0.5.6 — nightly CI hardening, a truncated hook message, shellcheck cleanup (2026-10-09)

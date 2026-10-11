@@ -129,7 +129,8 @@ Spelling it out matters: a lens left empty is a coverage gap the checklist surfa
 so the toolkit's count is **8**, not 7.)
 
 **site** — one deployed app under test, addressed by `BASE_URL_<SITE>` (e.g. `BASE_URL_APP`,
-`BASE_URL_ADMIN`). A project can test several sites; each gets its own Playwright project.
+`BASE_URL_ADMIN`). A project can test several sites; each gets its own Playwright project,
+registered automatically while its `BASE_URL_<SITE>` is set.
 
 **situation step** — a spec step that sets up a *condition* rather than clicking something:
 `fault:` makes a named network call fail or return a given response, `clock:` moves the

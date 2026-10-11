@@ -223,8 +223,9 @@ does not fix anything — each finding names its repair:
   drift baseline is the RECORDED active plugin install; a "baseline GUESSED by newest
   mtime" ⚠️ means the install record didn't resolve — re-run via `/qa-warden:doctor` (which
   resolves `CLAUDE_PLUGIN_ROOT`) before trusting a drift verdict.
-- **Check 10 (site↔project routing):** add the missing `playwright.config.ts` project
-  or fix the `sites[].id`.
+- **Check 10 (site↔project routing):** never edit `playwright.config.ts` (toolkit-owned; it
+  derives a project per set `BASE_URL_<SITE>`). ❌ — make the id lowercase `[a-z0-9-]` and its
+  `base_url_env` exactly `BASE_URL_<ID>` (`-`→`_`). ⚠️ — set that var in `.env`.
 - **Check 11 (bug Status):** add the `## Status:` marker to the named `bugs/*.md`.
 - **Check 11b (durable evidence, WARN):** an open `bugs/*.md` that cites its trace/screenshot
   under `artifacts/test-results/…` (volatile — wiped the next time the test runs green) or a
