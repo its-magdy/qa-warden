@@ -39,11 +39,9 @@ missing_keys() {
 #     while the shipped agents diverged). When $TMPL resolved (check 9), also grep the 16 keys
 #     against the plugin's agents so a post-upgrade divergence is caught, not just a local edit.
 if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
-  # /qa-warden:coverage's KEYS_RE alternation is the FOURTH enumerating mirror (CLAUDE.md §"Test case
-  # format contract" and reference/DESIGN.md both name it as a same-commit edit site) — it was
-  # the one mirror nothing policed, so a stale copy there silently UNDER-COUNTS assertions in
-  # coverage dims 1 and 2 with no signal anywhere.
-  for af in agents/planner.md agents/generator.md agents/reviewer.md skills/coverage/scripts/coverage.sh; do
+  # coverage.sh is NOT in this list: it builds KEYS_RE at runtime from scripts/oracle-keys.txt, so it
+  # holds no key copy to drift (it refuses, exit 2, if the manifest is missing).
+  for af in agents/planner.md agents/generator.md agents/reviewer.md; do
     apath="$TMPL/../$af"
     # A MISSING mirror must never read as "no drift". This check exists for the post-upgrade
     # case, and a plugin layout move (e.g. the commands/ -> skills/ migration) is exactly how a

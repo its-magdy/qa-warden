@@ -249,6 +249,14 @@ to `qa-warden`, and the plugin directory moves from `qa/` to `qa-warden/`.
 
 ## [Unreleased]
 
+### `/qa-warden:coverage` reads the oracle keys from the manifest
+
+- `coverage.sh` builds its `KEYS_RE` at runtime from `scripts/oracle-keys.txt` instead of carrying a
+  hand-typed copy of the 16 keys, so it is no longer a mirror to edit when the vocabulary changes.
+  The regex is unchanged on the current key set. If the manifest is missing or empty the command now
+  refuses (exit 2, "run `/qa-warden:init --resync`") rather than falling back to a baked-in list that
+  could silently under-count assertions in dimensions 1 and 2.
+
 ### A documented defect stays red: no `test.fail` marker (found in the demo run, 2026-09-27)
 
 - `agents/healer.md` step 0 and its `must_fail_when` bucket now forbid `test.fail` alongside
