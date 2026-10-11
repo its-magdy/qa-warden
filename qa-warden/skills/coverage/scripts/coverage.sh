@@ -7,7 +7,8 @@
 # root (cwd), not from the plugin dir — every path below is project-relative.
 #
 # Usage: bash coverage.sh "[area=<name>] [site=<id>]"
-# Exit 2 = filter resolution error (a bogus area=), NOT a gap-free result.
+# Exit 2 = the script refused (a bogus area=, a missing scripts/spec-links.sh, or a missing/empty
+# scripts/oracle-keys.txt), NOT a gap-free result.
 # NOTE: deliberately NO `set -euo pipefail`. Every dimension must DEGRADE GRACEFULLY on
 # absent optional inputs (basis/cases/manifests are all optional); -e or -u would abort the
 # whole report on the first missing file, turning "no data" into "no gaps". Faithful to the

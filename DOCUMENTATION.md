@@ -601,7 +601,7 @@ and would let every other assertion pass for the wrong reason.
 > are documented in the stamped `templates/CLAUDE.md`.
 
 **Maintenance:** this exact set is *mirrored* across `planner.md`, `generator.md`,
-reviewer Check 4, `scripts/oracle-keys.txt`, and `/qa-warden:coverage`'s `KEYS_RE`
+reviewer Check 4, and `scripts/oracle-keys.txt` (`/qa-warden:coverage` reads that file at runtime, so it holds no copy)
 (`/qa-warden:new-spec` and `/qa-warden:review url=` **defer** to the stamped CLAUDE.md and hold no list —
 nothing to edit there). Adding or removing a key means editing **all** enumerating
 mirrors in one commit (see [§20](#20-for-maintainers-where-each-fact-lives)).
@@ -998,7 +998,7 @@ Every operational fact has exactly one authoritative home — do **not** duplica
 
 | Fact | Authoritative home |
 |---|---|
-| Oracle vocabulary (16 keys) + argument shapes | `templates/CLAUDE.md` (the stamped SoT). **Enumerated** (editable list — change all in one commit) in `agents/planner.md`, `agents/generator.md`, reviewer Check 4, `/qa-warden:coverage`'s grep (`skills/coverage/scripts/coverage.sh`). **Data file:** `templates/scripts/oracle-keys.txt` — `/qa-warden:doctor` Check 2 reads it and holds no copy. `/qa-warden:new-spec` and `/qa-warden:review url=` **defer** (hold no list). |
+| Oracle vocabulary (16 keys) + argument shapes | `templates/CLAUDE.md` (the stamped SoT). **Enumerated** (editable list — change all in one commit) in `agents/planner.md`, `agents/generator.md`, reviewer Check 4. **Data file:** `templates/scripts/oracle-keys.txt` — `/qa-warden:doctor` Check 2 and `/qa-warden:coverage` read it and hold no copy. `/qa-warden:new-spec` and `/qa-warden:review url=` **defer** (hold no list). |
 | Reviewer checks (the full suite) | `agents/reviewer.md` |
 | Sentinel → action contract (`.healer-needs-*`) | `reference/sentinel-actions.md` — single source; `/qa-warden:heal`, `/qa-warden:batch-fix` and doctor Check 4 all point at it |
 | Command catalog + workflow order | skill frontmatter under `skills/**`; `skills/help/SKILL.md` (or run `/qa-warden:help`) |
