@@ -2,8 +2,8 @@
 
 All notable consumer-facing changes to QA Warden (plugin id `qa-warden`; `qa` before 0.4.0).
 
-The **last published build was `0.2.0` (2026-07-24)**. The `[Unreleased]` section below landed in
-the repository since then as **`0.3.0`**: a feature release on the published `0.1.0 → 0.2.0`
+The **last published build was `0.2.0` (2026-07-24)**. The **`0.3.0`** section below landed in
+the repository since then: a feature release on the published `0.1.0 → 0.2.0`
 line, with no breaking change to the spec format or the `/qa:*` surface. **`0.4.0`** adds only
 the rename on top of it, and that one IS breaking (see its section). **`0.4.1`** is
 documentation fixes only; **`0.5.0`** fixes what a fresh-install test and a re-check of the
@@ -19,6 +19,16 @@ never carry the same number**, or the second one has no way to announce itself.
 ---
 
 ## [Unreleased]
+
+### `/qa-warden:coverage` reads the oracle keys from the manifest
+
+- `coverage.sh` builds its `KEYS_RE` at runtime from `scripts/oracle-keys.txt` instead of carrying a
+  hand-typed copy of the 16 keys, so it is no longer a mirror to edit when the vocabulary changes.
+  The regex is unchanged on the current key set. If the manifest is missing or empty the command now
+  refuses (exit 2, "run `/qa-warden:init --resync`") rather than falling back to a baked-in list that
+  could silently under-count assertions in dimensions 1 and 2.
+
+### The scaffold and prod-guard.sh get a deterministic test
 
 - **New `bin/qa-scaffoldtest`** (maintainer tool, not shipped to projects; runs in CI on Ubuntu and
   macOS). Until now nothing deterministic ran `bin/qa-scaffold`: the only caller was an eval
@@ -262,15 +272,7 @@ to `qa-warden`, and the plugin directory moves from `qa/` to `qa-warden/`.
 - The assertion-contract hook already stripped the plugin namespace from `agent_type`;
   `bin/qa-hooktest` now covers `qa-warden:healer` and `qa-warden:verifier` explicitly.
 
-## [Unreleased]
-
-### `/qa-warden:coverage` reads the oracle keys from the manifest
-
-- `coverage.sh` builds its `KEYS_RE` at runtime from `scripts/oracle-keys.txt` instead of carrying a
-  hand-typed copy of the 16 keys, so it is no longer a mirror to edit when the vocabulary changes.
-  The regex is unchanged on the current key set. If the manifest is missing or empty the command now
-  refuses (exit 2, "run `/qa-warden:init --resync`") rather than falling back to a baked-in list that
-  could silently under-count assertions in dimensions 1 and 2.
+## 0.3.0 — the feature release after the published 0.2.0 (repository-only)
 
 ### A documented defect stays red: no `test.fail` marker (found in the demo run, 2026-09-27)
 

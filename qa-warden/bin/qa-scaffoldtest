@@ -74,6 +74,16 @@ check_eq() {
   fi
 }
 
+# check_nonzero <label> <count> — a vacuity guard: a loop over an empty list passes by checking
+# nothing, so each derived list is asserted non-empty before it is trusted.
+check_nonzero() {
+  if [ "${2:-0}" -gt 0 ] 2>/dev/null; then
+    pass=$((pass+1)); printf '  ok    %s (%s)\n' "$1" "$2"
+  else
+    bad=$((bad+1)); printf '  FAIL  %s (got "%s")\n' "$1" "${2:-}"
+  fi
+}
+
 # check_same <label> <snapshot-before> <snapshot-after> — like check_eq, but a failure names the
 # paths that differ instead of dumping both snapshots.
 check_same() {
@@ -134,19 +144,32 @@ echo "qa-scaffold — fresh stamp"
 new_dir; D=$DIR
 stamp "$D"
 check_eq "stamp exits 0" "0" "$RC"
+check_nonzero "first stamp reports files created" "$(printf '%s\n' "$OUT" | grep -c '\[qa-scaffold\] created')"
+check_nonzero "derived expected file list is non-empty" "$(expected_files | grep -c .)"
 missing=""
 while IFS= read -r rel; do
   if [ ! -f "$D/$rel" ]; then missing="$missing $rel"; fi
 done < <(expected_files)
-check_eq "every derived template file exists (missing:${missing:- none})" "" "$missing"
+check_eq "every derived template file exists" "" "$missing"
+RUNTIME_DIRS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$TEMPLATES/scripts/runtime-dirs.txt" | grep -v '^$')
+check_nonzero "runtime-dirs.txt lists directories" "$(printf '%s\n' "$RUNTIME_DIRS" | grep -c .)"
 missing=""
-for d in $(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$TEMPLATES/scripts/runtime-dirs.txt" | grep -v '^$'); do
+for d in $RUNTIME_DIRS; do
   if [ ! -d "$D/$d" ]; then missing="$missing $d"; fi
 done
-check_eq "every runtime dir exists (missing:${missing:- none})" "" "$missing"
+check_eq "every runtime dir exists" "" "$missing"
 check "scripts/*.sh are executable" test -x "$D/scripts/prod-guard.sh" -a -x "$D/scripts/doctor.sh"
 check "target was git-initialised" test -d "$D/.git"
 check "fresh .claude/settings.json is valid JSON" jq empty "$D/.claude/settings.json"
+check "fresh settings.json carries every template allow rule" \
+  jq -e -s '(.[1].permissions.allow - .[0].permissions.allow) == [] and (.[1].permissions.allow | length) > 0' \
+    "$D/.claude/settings.json" "$TEMPLATES/settings.json"
+check "fresh settings.json carries every template deny rule" \
+  jq -e -s '(.[1].permissions.deny - .[0].permissions.deny) == [] and (.[1].permissions.deny | length) > 0' \
+    "$D/.claude/settings.json" "$TEMPLATES/settings.json"
+check "fresh settings.json allow/deny have no duplicates" \
+  jq -e '(.permissions.allow | length) == (.permissions.allow | unique | length) and (.permissions.deny | length) == (.permissions.deny | unique | length)' \
+    "$D/.claude/settings.json"
 check "no settings.qa-suggested.json left behind" test ! -e "$D/.claude/settings.qa-suggested.json"
 before=$(snapshot "$D")
 stamp "$D"
@@ -232,6 +255,7 @@ grep -v 'qa-bak' "$D/.gitignore" > "$D/.gitignore.tmp" && mv "$D/.gitignore.tmp"
 check "precondition: .gitignore no longer mentions qa-bak" test "$(grep -c 'qa-bak' "$D/.gitignore")" = "0"
 # Edit EVERY toolkit-owned file, plus the three user-owned ones that must survive.
 owned=$(manifest_files)
+check_nonzero "resync-set.txt resolves to template files" "$(printf '%s\n' "$owned" | grep -c .)"
 for rel in $owned; do printf '\n# local edit\n' >> "$D/$rel"; done
 printf '\n# my project policy\n' >> "$D/CLAUDE.md"
 printf 'QA_USER_EMAIL=me@staging.dev\n' >> "$D/.env"
@@ -250,8 +274,8 @@ for rel in $owned; do
   if ! cmp -s "$TEMPLATES/$rel" "$D/$rel"; then stale="$stale $rel"; fi
   if ! grep -q 'local edit' "$D/$rel.qa-bak" 2>/dev/null; then nobak="$nobak $rel"; fi
 done
-check_eq "every edited toolkit-owned file is restored (stale:${stale:- none})" "" "$stale"
-check_eq "every restored file left a .qa-bak holding the edit (missing:${nobak:- none})" "" "$nobak"
+check_eq "every edited toolkit-owned file is restored" "" "$stale"
+check_eq "every restored file left a .qa-bak holding the edit" "" "$nobak"
 check_eq "CLAUDE.md untouched" "$claude_before" "$(cksum < "$D/CLAUDE.md")"
 check_eq ".env untouched" "$env_before" "$(cksum < "$D/.env")"
 check ".gitignore keeps every byte the user had (the rule is only appended)" is_prefix "$GI_BEFORE" "$D/.gitignore"
@@ -295,6 +319,28 @@ pg() {
     pass=$((pass+1)); printf '  ok    exit %s  %s\n' "$want" "$label"
   else
     bad=$((bad+1)); printf '  FAIL  expected exit %s, got %s — %s\n' "$want" "$rc" "$label"
+  fi
+}
+
+# has_out <label> <substring> — the last pg run printed <substring>. Pins the REASON for a
+# refusal, not just its exit code, so a placeholder refused as "prod" (or the reverse) is caught.
+has_out() {
+  if printf '%s' "$PG_OUT" | grep -qF -- "$2"; then
+    pass=$((pass+1)); printf '  ok    %s\n' "$1"
+  else
+    bad=$((bad+1)); printf '  FAIL  %s (output lacks "%s")\n' "$1" "$2"
+  fi
+}
+# lacks_out <label> <needle>... — the last pg run printed none of the needles.
+lacks_out() {
+  local label=$1 needle leaked=""; shift
+  for needle in "$@"; do
+    if printf '%s' "$PG_OUT" | grep -qF -- "$needle"; then leaked="$leaked $needle"; fi
+  done
+  if [ -z "$leaked" ]; then
+    pass=$((pass+1)); printf '  ok    %s\n' "$label"
+  else
+    bad=$((bad+1)); printf '  FAIL  %s (leaked:%s)\n' "$label" "$leaked"
   fi
 }
 
@@ -353,13 +399,41 @@ pg 1 "reserved .example TLD"                       BASE_URL_APP=https://app.exam
 pg 1 "CHANGEME left in a secondary"                BASE_URL_APP=https://staging.acme.dev BASE_URL_ADMIN=CHANGEME
 pg 0 "unset secondary stays fine"                  BASE_URL_APP=https://staging.acme.dev
 
+echo "  -- every refusal says WHY (prod marker, placeholder, empty are different remedies)"
+pg 1 "prod marker on the primary"                  BASE_URL_APP=https://prod.acme.com
+has_out "  names the cause" "looks like production"
+has_out "  names the variable" "(BASE_URL_APP)"
+lacks_out "  is not reported as a placeholder or empty target" "placeholder" "is empty"
+pg 1 "prod marker on API_URL"                      BASE_URL_APP=https://staging.acme.dev API_URL=https://api.prod.acme.com
+has_out "  names API_URL as the offender" "(API_URL) looks like production"
+pg 1 "prod marker on an argument URL"              BASE_URL_APP=https://staging.acme.dev -- https://prod.acme.com
+has_out "  names the argument as the offender" "(argument) looks like production"
+pg 1 "CHANGEME placeholder"                        BASE_URL_APP=CHANGEME
+has_out "  names the cause" "is a placeholder"
+lacks_out "  is not reported as production" "looks like production"
+pg 1 "reserved example.com placeholder"            BASE_URL_APP=https://example.com
+has_out "  names the cause" "is a placeholder"
+pg 1 "empty primary"                               BASE_URL_APP=
+has_out "  names the cause" "BASE_URL_APP is empty"
+lacks_out "  is not reported as production" "looks like production"
+pg 1 "placeholder survives QA_ALLOW_PROD=1"        QA_ALLOW_PROD=1 BASE_URL_APP=CHANGEME
+has_out "  still a placeholder refusal, not a pass" "is a placeholder"
+pg 0 "prod passes under QA_ALLOW_PROD=1"           QA_ALLOW_PROD=1 BASE_URL_APP=https://prod.acme.com
+lacks_out "  prints no refusal" "REFUSING"
+has_out "  prints the verdict" "prod-guard: PASS (exit 0)"
+
 echo "  -- credentials are masked in the output"
+# The userinfo strip is greedy to the LAST @ before the path: a password that itself contains an @
+# must not leak the part after it. Distinctive tokens, so a fragment cannot match by accident.
 pg 0 "staging URL with userinfo still passes"      BASE_URL_APP=https://qa:hunter2@staging.acme.dev
-if printf '%s' "$PG_OUT" | grep -q 'hunter2'; then
-  bad=$((bad+1)); echo "  FAIL  the password reached the output"
-else
-  pass=$((pass+1)); echo "  ok    the password never reaches the output"
-fi
+lacks_out "  the password never reaches the output" "hunter2"
+pg 0 "staging URL, password contains an @"         BASE_URL_APP='https://qa:Zq9@x7Kv@staging.acme.dev/login'
+lacks_out "  no fragment of the @-password leaks" "Zq9" "x7Kv"
+pg 1 "prod URL, password contains an @"            BASE_URL_APP='https://user:Zq9@x7Kv@prod.acme.com/login'
+lacks_out "  no fragment of the @-password leaks in a refusal" "Zq9" "x7Kv"
+has_out "  the refusal still names the real host" "'prod.acme.com'"
+pg 1 "prod argument URL, password contains an @"   BASE_URL_APP=https://staging.acme.dev -- 'https://user:Zq9@x7Kv@prod.acme.com'
+lacks_out "  no fragment of the @-password leaks from an argument" "Zq9" "x7Kv"
 
 echo "  -- .env in CLAUDE_PROJECT_DIR is loaded"
 new_dir; ENVDIR=$DIR
