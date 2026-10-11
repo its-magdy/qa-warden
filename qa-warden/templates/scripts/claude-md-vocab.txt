@@ -25,8 +25,8 @@
 # NOT THE ORACLE KEYS. Those are Check 2's, read from scripts/oracle-keys.txt against this same
 # file. In particular `lock:` MUST NOT be added there: it is a `TestDetails` field, not an
 # oracle key (CLAUDE.md §"Reporting pipeline" says so outright), and oracle-keys.txt is also
-# read by Check 9b and by /qa-warden:coverage's KEYS_RE — widening it would corrupt the closed
-# vocabulary in three consumers to patch a fourth.
+# read by Check 9b and (via the manifest) by /qa-warden:coverage's KEYS_RE — widening it would
+# corrupt the closed vocabulary in three consumers to patch a fourth.
 #
 # THE CHECK IS A FLOOR. Presence anywhere in the file satisfies it, like a commented `# VAR=`
 # satisfying the .env.example stock-var containment next to it. Rewording is free; only a
