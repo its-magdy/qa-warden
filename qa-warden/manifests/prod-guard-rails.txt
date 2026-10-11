@@ -1,8 +1,10 @@
 # prod-guard-rails.txt — the ONE manifest of SKILLS THAT MUST CARRY A PROD-GUARD RAIL.
 #
 # One consumer reads this file:
-#   - scripts/doctor.sh Check 9bd : every skill listed here must still invoke
-#                                   `bash scripts/prod-guard.sh` AND stop on a non-zero exit.
+#   - bin/qa-selfcheck Check 9bd : every skill listed here must still invoke
+#                                  `bash scripts/prod-guard.sh` AND stop on a non-zero exit.
+# Both this list and the skills it polices are plugin source, so the check runs where the plugin
+# is built (it moved out of doctor.sh), and the list is not stamped into projects.
 #
 # WHY A MANIFEST AND NOT A WORDING DIFF. The rail is prose, and prose mirrors cannot `source`
 # a file — so the copies cannot be eliminated, only compared. But comparing the WORDING would

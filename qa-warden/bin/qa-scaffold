@@ -170,11 +170,11 @@ ensure_qa_bak_ignored() {
 # tool — so the project deny-list does not (and should not) block this human-invoked repair.
 if [ "$RESYNC" = "1" ]; then
   echo "[qa-scaffold] --resync: refreshing toolkit-owned substrate in $TARGET"
-  # The toolkit-owned set is SINGLE-SOURCED in templates/scripts/resync-set.txt (which also
+  # The toolkit-owned set is SINGLE-SOURCED in manifests/resync-set.txt (which also
   # documents why each shared-ownership file is excluded). doctor.sh Check 9 reads the SAME
   # manifest, so detection and repair cannot drift apart (M-8) — adding a template is one
   # line there, not two hand-kept lists here and in doctor.
-  MANIFEST="$TEMPLATES/scripts/resync-set.txt"
+  MANIFEST="$PLUGIN_ROOT/manifests/resync-set.txt"
   [ -f "$MANIFEST" ] || { echo "[qa-scaffold] resync manifest missing at $MANIFEST — cannot determine the toolkit-owned file set; reinstall the plugin" >&2; exit 1; }
   RESYNC_SET="$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$MANIFEST" | grep -v '^$')"
   # Copy failures are collected, not ignored — same fail-loud contract as the normal stamp

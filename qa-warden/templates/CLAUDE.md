@@ -160,7 +160,7 @@ way to author *"the payments API returns 503"* or *"the session expires after 30
 
 Argument shapes (verified against the pinned Playwright 1.63.0 type declarations). **The key column
 deliberately carries the trailing colon** (`` `fault:` ``, not `` `clock` ``) — these are `steps:`
-keys, not oracle keys, and the colon is also what keeps them out of `/qa-warden:doctor` Check 9bb's
+keys, not oracle keys, and the colon is also what keeps them out of the plugin's `bin/qa-selfcheck` Check 9bb
 oracle-arg-shape extractor, which matches a bare `` `key` `` in column 1 and would otherwise count
 them as a 17th and 18th member of the closed vocabulary.
 

@@ -56,7 +56,7 @@ if [ -z "$KEYS" ]; then
   echo "❌ scripts/oracle-keys.txt missing or empty — the oracle vocabulary is UNVERIFIED (run /qa-warden:init --resync)"; fail=$((fail+1))
 fi
 # missing_keys <file> — prints the keys ABSENT from <file>, one per line. `bin/qa-selfcheck` Check 9b (plugin-side) runs the
-# same scan over four plugin files; one helper instead of two copies of the loop, and one pass over
+# same scan over the plugin's agent mirrors (planner, generator, reviewer); one helper instead of two copies of the loop, and one pass over
 # each file instead of 16 (the per-key `grep -q` form re-read every file end to end, 16× per file).
 # `grep -oFf` lists the keys the file DOES contain; `grep -vxFf` subtracts them from the full set.
 # An empty pattern file matches nothing, so a file with ZERO keys correctly reports all 16 missing.
@@ -458,8 +458,11 @@ fi
 #      (a) HARD-DENIED in settings.json deny[] — package.json, package-lock.json,
 #          playwright.config.ts, tsconfig.json, .mcp.json, .mcp.explore.json, prod-guard.sh/.ts,
 #          and every scripts/*.sh EXCEPT init.sh. Blocked outright.
-#      (b) Write-allowlist-EXCLUDED — scripts/init.sh, scripts/README.md, and the four
-#          scripts/*.txt manifests, .github/**, .env. Not in deny[], so per-prompt-approved.
+#      (b) Write-allowlist-EXCLUDED — scripts/init.sh, scripts/README.md, and the two stamped
+#          scripts/*.txt manifests (runtime-dirs.txt, oracle-keys.txt), .github/**, .env. Not in
+#          deny[], so per-prompt-approved. The manifests nothing in a project reads
+#          (resync-set.txt, claude-md-vocab.txt, prod-guard-rails.txt) live in the plugin's
+#          manifests/ and are never stamped.
 #      (c) Inside a Write/Edit ALLOW glob — the resync-set members under specs/** and
 #          fixtures/**. These were once silently auto-writable (no deny, no prompt): an agent
 #          could clobber specs/_context/_templates/basis.md with a real feature's basis and
@@ -529,14 +532,20 @@ if [ -z "$TMPL" ]; then
   fi
 fi
 if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
-  # The toolkit-owned set is SINGLE-SOURCED in the shipped templates/scripts/resync-set.txt,
+  # The toolkit-owned set is SINGLE-SOURCED in the plugin's manifests/resync-set.txt,
   # which qa-scaffold's --resync reads too — detection and repair MUST cover the SAME files,
   # else drift in a resync-refreshed file (e.g. _templates/basis.md, which seeds every intake)
   # is silently repaired by `--resync` but never DETECTED here, so doctor never fires the "run
   # --resync" nudge its own header promises (M-8). Two hand-kept lists could not hold that;
   # one manifest can. The manifest also documents the user-editable exclusions.
-  OWNED=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$TMPL/scripts/resync-set.txt" 2>/dev/null | grep -v '^$')
-  [ -n "$OWNED" ] || { echo "⚠️  toolkit-owned manifest (scripts/resync-set.txt) not readable in $TMPL — substrate drift is UNVERIFIED"; warn=$((warn+1)); }
+  # It lives OUTSIDE templates/ because nothing in a project reads it: only this check and
+  # qa-scaffold do, and both read the plugin's copy. A stamped copy was dead weight that fired
+  # drift warnings when edited. A plugin older than that move still has it at
+  # templates/scripts/ — fall back so a teammate on an older install keeps the drift check.
+  RESYNC_MANIFEST="$TMPL/../manifests/resync-set.txt"
+  [ -f "$RESYNC_MANIFEST" ] || RESYNC_MANIFEST="$TMPL/scripts/resync-set.txt"
+  OWNED=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$RESYNC_MANIFEST" 2>/dev/null | grep -v '^$')
+  [ -n "$OWNED" ] || { echo "⚠️  toolkit-owned manifest (manifests/resync-set.txt) not readable in the plugin at $TMPL/.. — substrate drift is UNVERIFIED (the plugin install is incomplete; reinstall it)"; warn=$((warn+1)); }
   for rel in $OWNED; do
     [ -f "$TMPL/$rel" ] || continue
     if [ ! -f "$rel" ]; then
@@ -545,6 +554,18 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
       echo "⚠️  substrate drift: $rel differs from the shipped template — run /qa-warden:init --resync (backs up to $rel.qa-bak)"; warn=$((warn+1))
     fi
   done
+  # Leftovers of that move. A project stamped before it carries copies of the three plugin-only
+  # manifests under scripts/. Nothing reads them any more, --resync no longer refreshes them
+  # and this check no longer compares them, so an edit to one does nothing at all. Say so once
+  # per run as INFO, uncounted: the files are harmless, but a user who edits one expecting an
+  # effect deserves to know. Only when the manifest resolved from manifests/ — against an older
+  # plugin these files are still toolkit-owned members, and deleting one would be reported missing.
+  if [ "$RESYNC_MANIFEST" = "$TMPL/../manifests/resync-set.txt" ]; then
+    for rel in scripts/resync-set.txt scripts/claude-md-vocab.txt scripts/prod-guard-rails.txt; do
+      [ -f "$rel" ] || continue
+      echo "ℹ️  $rel is a leftover from an older stamp — that manifest now lives only in the plugin (manifests/) and nothing in this project reads it; safe to delete"
+    done
+  fi
 else
   # A skipped drift check must be VISIBLE (WARN, counted), not a silent green INFO — this check
   # guards the highest-value propagation class (F-015/F-027); a quiet skip hides exactly that drift.
@@ -604,15 +625,18 @@ fi
 # drift and 9f arm 2 are both WARNs with a one-command fix). A FAIL would red every upgrading
 # consumer's CI for a condition only a human can clear.
 if [ -n "$TMPL" ] && [ -f "$TMPL/CLAUDE.md" ] && [ -f CLAUDE.md ]; then
-  VOCAB="$TMPL/scripts/claude-md-vocab.txt"
+  # The manifest is plugin-only (manifests/, never stamped): this check is its one reader and
+  # it reads the plugin's copy. Same older-plugin fallback as resync-set.txt above.
+  VOCAB="$TMPL/../manifests/claude-md-vocab.txt"
+  [ -f "$VOCAB" ] || VOCAB="$TMPL/scripts/claude-md-vocab.txt"
   if [ ! -f "$VOCAB" ]; then
-    echo "⚠️  scripts/claude-md-vocab.txt not found in $TMPL — CLAUDE.md vocabulary DELIVERY is UNVERIFIED (this clone predates the manifest; run /qa-warden:init --resync to stamp it)"; warn=$((warn+1))
+    echo "⚠️  manifests/claude-md-vocab.txt not found in the plugin at $TMPL/.. — CLAUDE.md vocabulary DELIVERY is UNVERIFIED (this project's scripts/doctor.sh and that plugin are out of step: run /qa-warden:init --resync with the plugin you mean to use, then re-run doctor; if it persists, the plugin install is incomplete — reinstall it)"; warn=$((warn+1))
   else
     # Strip FULL-LINE comments only — unlike the sibling manifests, a row here carries prose in
     # its why-field, so the usual `s/#.*$//` would truncate it mid-sentence.
     while IFS='|' read -r sym swhy; do
       [ -n "$sym" ] || continue
-      # Anchored exactly as Check 9i anchors the step symbols, so `lock:` cannot match `unlock:`.
+      # Anchored exactly as Check 9i (bin/qa-selfcheck) anchors the step symbols, so `lock:` cannot match `unlock:`.
       if ! grep -qE "(^|[^a-zA-Z_])$sym" "$TMPL/CLAUDE.md"; then
         # The 9c stranded-rule shape, inverted: a manifest demanding a symbol the toolkit no
         # longer ships would nag every consumer about a retired feature forever. Report the
@@ -637,198 +661,16 @@ if [ -f CLAUDE.md ]; then
   fi
 fi
 
-# 9b / 9bc / 9be / 9d / 9e / 9h / 9j — MOVED to the plugin's own `bin/qa-selfcheck`, NOT shipped here.
-#     Those seven read ONLY the plugin's source (agents/, skills/, hooks/, reference/) and nothing
-#     in this project, so there was never anything a consumer could fix when one fired: they are
-#     the toolkit's unit tests, and they belong where the toolkit is built. They also made a
-#     project whose substrate is NEWER than a teammate's installed plugin print a wall of ❌ that
-#     all meant "update your plugin". The checks that COMPARE this project with the plugin
-#     (9, 9bb, 9bd, 9c, 9f, 9g, 9i, 9k, 20) stay — that comparison can only be made from here.
-#     The ids are retired, never reused, so a citation of "Check 9bc" stays unambiguous.
-
-# 9bb. Oracle ARGUMENT-SHAPE drift. Checks 2 and 9b compare key PRESENCE only — `missing_keys`
-#      is set membership, no argument parsing anywhere — so a mirror can carry all 16 keys while
-#      pinning a DIFFERENT shape for one of them. That is the closed vocab's own failure mode one
-#      level down: `count_equals: { count }` where the canonical shape is `{ locator, n }` passes
-#      every existing check green, and the generator (which reads `.n`) silently DROPS the
-#      assertion. reference/DESIGN.md called this pair a deliberate emitter-side copy but nothing
-#      compared it; planner.md's own maintainer comment said so outright.
-#      Compares the SHIPPED templates/CLAUDE.md against the plugin's agents/planner.md — the same
-#      post-upgrade framing as 9b, not the project's editable copy.
-#      Shape = the FIRST backticked expression in column 2. The trailing prose deliberately
-#      differs between the two tables (CLAUDE.md carries longer notes), so a byte-compare of the
-#      whole cell would fire on every wording edit; comparing only the shape expression is what
-#      makes this check quiet enough to keep.
-#      NOTE the key charclass includes digits — `a11y_violations_below` is silently dropped by a
-#      naive [a-z_]+, which would leave one of the 16 unchecked while the check reported green.
-#      COVERAGE LIMIT: this compares the two MARKDOWN-TABLE mirrors only. agents/generator.md
-#      holds shapes as an Oracle->expect mapping and agents/reviewer.md Check 4 states them inline
-#      as prose counter-examples; neither is a table, so neither is comparable with this extractor
-#      and both remain UNGUARDED. DOCUMENTATION.md's numbered table lives outside the plugin dir
-#      and is unreachable from a scaffolded project. Do not read a green 9bb as "all mirrors agree".
-if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
-  # arg_shapes <file> — "key<TAB>canonical-shape" per arg-shape table row.
-  arg_shapes() { sed -nE 's/^\| `([a-z0-9_]+)` \| `([^`]*)`.*/\1\t\2/p' "$1" 2>/dev/null; }
-  sot_tbl="$TMPL/CLAUDE.md"; pln_tbl="$TMPL/../agents/planner.md"
-  if [ ! -f "$sot_tbl" ] || [ ! -f "$pln_tbl" ]; then
-    echo "⚠️  arg-shape mirrors not both found ($sot_tbl / $pln_tbl) — argument-shape drift is UNVERIFIED (run /qa-warden:init --resync)"; warn=$((warn+1))
-  else
-    sot_shapes=$(arg_shapes "$sot_tbl"); pln_shapes=$(arg_shapes "$pln_tbl")
-    # A table that fails to parse must not read as "no drift" — an empty side means the format
-    # moved out from under the extractor, which is a silent-green risk, not a pass.
-    n_sot=$(printf '%s\n' "$sot_shapes" | grep -c . || true)
-    n_pln=$(printf '%s\n' "$pln_shapes" | grep -c . || true)
-    n_keys=$(printf '%s\n' "$KEYS" | grep -c . || true)
-    if [ "$n_sot" -eq 0 ] || [ "$n_pln" -eq 0 ]; then
-      echo "❌ arg-shape table did not parse (CLAUDE.md rows=$n_sot, planner.md rows=$n_pln) — the table format changed; argument-shape drift is UNCHECKED"; fail=$((fail+1))
-    else
-      [ -n "$KEYS" ] && [ "$n_sot" -ne "$n_keys" ] && {
-        echo "⚠️  arg-shape table in templates/CLAUDE.md has $n_sot rows but the vocabulary has $n_keys keys — a key is pinned nowhere (or the table gained a row)"; warn=$((warn+1)); }
-      while IFS="$(printf '\t')" read -r k sot_shape; do
-        [ -n "$k" ] || continue
-        pln_shape=$(printf '%s\n' "$pln_shapes" | awk -F'\t' -v k="$k" '$1==k{print $2; exit}')
-        if [ -z "$pln_shape" ]; then
-          echo "❌ arg-shape row for '$k' is in templates/CLAUDE.md but MISSING from agents/planner.md — the planner emits a shape it has no pin for"; fail=$((fail+1))
-        elif [ "$pln_shape" != "$sot_shape" ]; then
-          echo "❌ arg-shape drift for '$k': CLAUDE.md pins \`$sot_shape\` but agents/planner.md pins \`$pln_shape\` — a wrong-named arg drops the assertion silently"; fail=$((fail+1))
-        fi
-      done < <(printf '%s\n' "$sot_shapes")
-      while IFS="$(printf '\t')" read -r k _; do
-        [ -n "$k" ] || continue
-        printf '%s\n' "$sot_shapes" | awk -F'\t' -v k="$k" '$1==k{f=1} END{exit !f}' || {
-          echo "❌ arg-shape row for '$k' is in agents/planner.md but MISSING from templates/CLAUDE.md — the planner pins a shape the stamped SoT does not"; fail=$((fail+1)); }
-      done < <(printf '%s\n' "$pln_shapes")
-    fi
-  fi
-  # 9bb (cont). `invariant_holds_when:` SHAPE. Same drift class as the table above but invisible to
-  #      its extractor — this key lives in the YAML schema block, not the arg-shape table. It shipped
-  #      with TWO incompatible shapes: planner.md emitted a list of {invariant, holds_when} pairs
-  #      while templates/CLAUDE.md showed a bare scalar. The reviewer reads shapes from the STAMPED
-  #      CLAUDE.md, so it validated a scalar the planner never emits (Check 2e). Canonical = the LIST
-  #      form. Assert both mirrors declare the key and neither declares it inline (anything but a
-  #      comment after the colon is the scalar form).
-  for f in "$sot_tbl" "$pln_tbl"; do
-    [ -f "$f" ] || continue
-    if ! grep -qE '^[[:space:]]*invariant_holds_when:' "$f"; then
-      echo "❌ $(basename "$f"): no invariant_holds_when: declaration — the equality-domain shape is UNPINNED in this mirror (reviewer Check 2e reads it from the stamped CLAUDE.md)"; fail=$((fail+1)); continue
-    fi
-    if grep -qE '^[[:space:]]*invariant_holds_when:[[:space:]]*[^[:space:]#]' "$f"; then
-      echo "❌ $(basename "$f"): invariant_holds_when: is pinned as a SCALAR — canonical shape is a LIST of {invariant, holds_when} pairs; a scalar cannot say which equality it scopes, and the two mirrors disagreeing is what made reviewer Check 2e validate a shape the planner never emits"; fail=$((fail+1))
-    elif ! awk '/^[[:space:]]*invariant_holds_when:/{f=1;next} f{ if ($0 ~ /^[[:space:]]*(#|$)/) next; exit ($0 ~ /^[[:space:]]*-[[:space:]]*invariant:/) ? 0 : 1 } END{ if(!f) exit 1 }' "$f"; then
-      echo "❌ $(basename "$f"): invariant_holds_when: is not followed by a '- invariant:' list item — the block shape did not parse; equality-domain drift is UNCHECKED"; fail=$((fail+1))
-    fi
-  done
-fi
-
-# 9bd. Prod-guard RAIL coverage. Eight skills carry a prod-guard rail in prose, and on the
-#      CLI-driving paths (gen/new-spec/intake/explore/review) that prose is the ONLY prod rail —
-#      the enforced scripts/prod-guard.ts globalSetup fires only under `npx playwright test`,
-#      which `playwright-cli goto` never invokes. The rails are ACTIVE TRIM CANDIDATES, and the
-#      plausible regression is not a reworded lead but a dropped STOP clause: flake-check was
-#      already shipped once running the guard and ignoring its exit code (a repeat-each run
-#      MULTIPLIES the blast radius), and nothing detected it.
-#      Compares INVOCATION + STOP-on-non-zero, never the wording. The eight sites deliberately
-#      carry TWO lead forms and materially different bodies, so a whole-text compare would fire
-#      on every edit and get this check disabled — the same property that keeps 9bb alive.
-#      The skill list is READ from scripts/prod-guard-rails.txt, not hand-typed here.
-#      rail_window_ok tests EACH invocation's own +1 window independently and returns success
-#      if ANY one has the STOP clause — a file with 2+ invocations (explore/SKILL.md has one at
-#      the real rail and one at a --list-targets call) must not let a distant window's "non-zero"
-#      wording satisfy a DIFFERENT invocation whose own clause was stripped. Concatenating all
-#      windows into one grep (the prior approach) re-admitted the cross-site false-green class
-#      9bd was built to close, just narrowed from file-wide to per-invocation-file.
-#      The two tokens are matched as a WORD-ORDER-INDEPENDENT pair (both `stop` and `non-zero`
-#      present in the same window), not an ordered alternation: the prior
-#      `STOP.*non-zero|non-zero.*exit` had two defects — its second branch required no STOP token
-#      at all (a pure description like "prod-guard.sh returns non-zero on exit" would pass with the
-#      STOP clause fully deleted), and a correctly-worded rail with "non-zero" appearing before
-#      "STOP" matched neither branch (false FAIL). Requiring both tokens present, order-independent,
-#      closes both without reverting to a whole-window substring match that ignores order entirely.
-#      ALL-semantics, not ANY: a prior version returned success if ANY ONE invocation's window
-#      carried the clause, which meant a skill that keeps its one guarded rail AND gains a NEW
-#      live-driving `bash scripts/prod-guard.sh` call with no exit-code handling still reported
-#      green — the flake-check regression class surviving at per-invocation granularity. Every
-#      invocation must now carry the clause in its own window, with one deliberate exception:
-#      `--list-targets` is a read-only enumeration mode (no target is actually driven), so it is
-#      not required to gate. A file with only `--list-targets` invocations and no gating one at all
-#      now FAILS here rather than passing: those lines are skipped before `hits` is counted, so such
-#      a file reaches the `hits -gt 0` test with zero hits and returns false. That closes what was
-#      previously a documented narrow gap (it used to pass, since the (1) existence check only tests
-#      for A `bash scripts/prod-guard.sh` invocation, not a gating one). The message a maintainer
-#      hits in that case reads "runs the guard but never acts on its exit code" — accurate in effect,
-#      since nothing is gated, though the file's only call is the read-only enumeration mode.
-rail_window_ok() {
-  # `hits` distinguishes "has a valid rail" from "has NO rail at all" — without it the while
-  # loop simply never runs on a rail-less file and `ok=1` returns TRUE, so every skill that
-  # never mentions prod-guard reported as "carries a rail but is not in the manifest" (16
-  # spurious WARNs per run, which buries the real FAILs this check exists to surface).
-  local f="$1" ln line ok=1 hits=0
-  while IFS=: read -r ln line; do
-    [ -n "$ln" ] || continue
-    # --list-targets and --probe SCREEN nothing (enumerate / reachability only) — not rail invocations.
-    case "$line" in *--list-targets*|*--probe*) continue ;; esac
-    hits=$((hits+1))
-    win=$(sed -n "${ln},$((ln+1))p" "$f" | tr '\n' ' ')
-    if printf '%s' "$win" | grep -qi 'stop' && printf '%s' "$win" | grep -q 'non-zero'; then
-      :
-    else
-      ok=0
-    fi
-  done < <(grep -n 'bash scripts/prod-guard\.sh' "$f")
-  [ "$hits" -gt 0 ] && [ "$ok" -eq 1 ]
-}
-if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
-  RAILS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$TMPL/scripts/prod-guard-rails.txt" 2>/dev/null | grep -v '^$')
-  skills_dir="$TMPL/../skills"
-  if [ -z "$RAILS" ]; then
-    echo "❌ scripts/prod-guard-rails.txt missing or empty — prod-guard rail coverage is UNVERIFIED (run /qa-warden:init --resync)"; fail=$((fail+1))
-  elif [ ! -d "$skills_dir" ]; then
-    echo "⚠️  plugin skills/ not found at $skills_dir — prod-guard rail coverage is UNVERIFIED (run /qa-warden:init --resync)"; warn=$((warn+1))
-  else
-    rail_seen=0
-    while read -r sk; do
-      [ -n "$sk" ] || continue
-      sf="$skills_dir/$sk/SKILL.md"
-      if [ ! -f "$sf" ]; then
-        echo "❌ prod-guard rail: skill '$sk' is listed in prod-guard-rails.txt but $sf does not exist — the manifest is stale or the skill was renamed; its rail is UNVERIFIED"; fail=$((fail+1)); continue
-      fi
-      rail_seen=$((rail_seen+1))
-      # (1) the guard must actually be INVOKED, not merely referred to.
-      if ! grep -q 'bash scripts/prod-guard\.sh' "$sf"; then
-        echo "❌ prod-guard rail MISSING from skills/$sk — no 'bash scripts/prod-guard.sh' invocation. On the CLI-driving paths this prose is the only prod rail; do not delete it to satisfy a trim"; fail=$((fail+1)); continue
-      fi
-      # (2) a guard whose exit code is ignored is not a rail. This is the clause trims drop.
-      #     SCOPED TO THE INVOCATION LINE (+1, for a wrapped clause — batch-fix/heal wrap
-      #     "non-zero" onto the next line) — a file-WIDE grep silently passed the mutation
-      #     test: flake-check:19 has an unrelated "STOP and ask the user to confirm" one line
-      #     below the rail, so a whole-file scan reported green on a rail whose own STOP clause
-      #     had been deleted. The alternation ALSO requires "non-zero" (not just "STOP"), so a
-      #     future edit that merges bare "STOP and ask" decoy prose onto the invocation line
-      #     still fails this — the STOP-clause language must actually name the exit-code
-      #     condition, not just contain the word STOP.
-      if ! rail_window_ok "$sf"; then
-        echo "❌ prod-guard rail in skills/$sk runs the guard but never acts on its exit code — a passing-through rail is not a rail (this is the flake-check regression)"; fail=$((fail+1))
-      fi
-    done < <(printf '%s\n' "$RAILS")
-    # Reverse direction: a skill that grew a rail but was never added to the manifest. WARN —
-    # the rail is present (safe); what is missing is the guarantee it stays.
-    # A skill "carries a rail" only when the invocation and the STOP-on-non-zero clause appear
-    # TOGETHER, within the invocation line (+1, for a wrap). Matching a bare invocation anywhere
-    # flagged skills/doctor, whose own remediation text QUOTES `bash scripts/prod-guard.sh` while
-    # documenting this very check — prose that names the rail is not a rail.
-    for sf in "$skills_dir"/*/SKILL.md; do
-      [ -f "$sf" ] || continue
-      rail_window_ok "$sf" || continue
-      sk=$(basename "$(dirname "$sf")")
-      printf '%s\n' "$RAILS" | grep -qx "$sk" || {
-        echo "⚠️  skills/$sk carries a prod-guard rail but is NOT in scripts/prod-guard-rails.txt — add it so the rail is policed"; warn=$((warn+1)); }
-    done
-    # Cardinality self-check: a manifest that resolved to nothing must not read as green.
-    n_rails=$(printf '%s\n' "$RAILS" | grep -c . || true)
-    [ "$rail_seen" -ne "$n_rails" ] && {
-      echo "⚠️  prod-guard rails verified for $rail_seen of $n_rails listed skill(s) — the rest were reported above"; warn=$((warn+1)); }
-  fi
-fi
+# 9b / 9bb / 9bc / 9bd / 9be / 9d / 9e / 9f arm 1 / 9g / 9h / 9i / 9j / 20 — MOVED to the plugin's
+#     own `bin/qa-selfcheck`, NOT shipped here. They read ONLY the plugin's source (agents/,
+#     skills/, hooks/, reference/, templates/, manifests/) and nothing in this project, so there
+#     was never anything a consumer could fix when one fired: they are the toolkit's unit tests,
+#     and they belong where the toolkit is built. They also made a project whose substrate is
+#     NEWER than a teammate's installed plugin print a wall of ❌ that all meant "update your
+#     plugin". Seven moved first; 9bb, 9bd, 9f arm 1, 9g, 9i and 20 followed once the same test
+#     was applied to each of them. The checks that COMPARE this project with the plugin (9, 9c,
+#     9f arms 2-3, 9k) stay — that comparison can only be made from here. The ids are kept, so a
+#     citation of "Check 9bc" or "Check 9bb" resolves — to bin/qa-selfcheck.
 
 # 9c. RETIRED permission rules still present in .claude/settings.json — the settings-side
 #     complement to Check 9. settings.json is EXCLUDED from Check 9's byte-compare and from
@@ -886,22 +728,11 @@ RETIRED
   fi
 fi
 
-# 9f. Healer MCP tool-grant ↔ settings.json permission mirror. `agents/healer.md`'s `tools:`
-#     line and `templates/settings.json`'s `mcp__playwright__*` allow entries are a 17-entry
-#     list hand-typed TWICE, in two different syntaxes, in two different files — the same
-#     unchecked-hand-mirrored-pair shape Checks 9b/9bb/9bc/8 exist for, and the last pair in the
-#     substrate with nothing behind it. It has already been edited by hand once (15 -> 17 when
-#     the healer was granted browser_evaluate + browser_close) and the mirror was kept in sync
-#     only because someone remembered.
-#     Why each direction is a FAIL, not cosmetic drift:
-#       - in healer.md, NOT in the allow-list -> the healer's declared tool prompts at call
-#         time. The healer runs as a SUBAGENT: there is nobody to answer the prompt, so a tool
-#         its own prose mandates (HEAL01 re-probes with browser_evaluate before believing an
-#         empty reading) is simply unavailable, and it burns turns against a 14-turn budget
-#         discovering that.
-#       - in the allow-list, NOT in healer.md -> a standing pre-approval for a tool no agent
-#         declares. Harmless today, but it is how the two sides drift apart unnoticed, and an
-#         agent with an explicit `tools:` list cannot call it anyway.
+# 9f. Healer MCP grants — did the grants the plugin SHIPS actually reach this project (arm 2),
+#     and did the permission merge run at all (arm 3). Arm 1 — agents/healer.md's `tools:` line
+#     against templates/settings.json's `mcp__playwright__*` allow entries — compares two
+#     plugin files and nothing in this project, so it lives in the plugin's `bin/qa-selfcheck`
+#     under the same id.
 #     Arm 2 is the settings-side complement Check 9c does NOT cover: 9c catches a rule the
 #     toolkit RETRACTED that is stranded downstream; nothing caught a rule the toolkit ADDED
 #     that never reached an already-scaffolded project. Deliberately scoped to the mcp__ entries
@@ -923,21 +754,8 @@ fi
 #         itself a line of resync-set.txt: a check added here reaches a project ONLY through
 #         the same command that now performs the repair, and arrives no earlier than it. It
 #         could never observe the state it was written for.
-if [ -n "$TMPL" ] && [ -f "$TMPL/settings.json" ] && [ -f "$TMPL/../agents/healer.md" ] && command -v jq >/dev/null 2>&1; then
-  # `tools:` is a comma-separated frontmatter scalar; settings.json is a JSON array. Normalize
-  # both to a sorted line set so the comparison is of SETS, not of formatting or order.
-  h_mcp=$(grep -m1 '^tools:' "$TMPL/../agents/healer.md" | tr ',' '\n' | grep -oE 'mcp__[a-z0-9_]+' | sort -u)
+if [ -n "$TMPL" ] && [ -f "$TMPL/settings.json" ] && command -v jq >/dev/null 2>&1; then
   s_mcp=$(jq -r '.permissions.allow[]? | select(startswith("mcp__"))' "$TMPL/settings.json" 2>/dev/null | sort -u)
-  if [ -z "$h_mcp" ] || [ -z "$s_mcp" ]; then
-    echo "⚠️  healer/settings MCP mirror UNVERIFIED — could not extract one of the two lists (healer.md tools: line, or settings.json permissions.allow[])"; warn=$((warn+1))
-  else
-    only_h=$(comm -23 <(printf '%s\n' "$h_mcp") <(printf '%s\n' "$s_mcp") | grep . || true)
-    only_s=$(comm -13 <(printf '%s\n' "$h_mcp") <(printf '%s\n' "$s_mcp") | grep . || true)
-    [ -n "$only_h" ] && {
-      echo "❌ MCP mirror drift — declared in agents/healer.md 'tools:' but NOT allowed in templates/settings.json: $(printf '%s\n' "$only_h" | tr '\n' ' ')— the healer runs as a subagent, so this tool PROMPTS with nobody to answer and is effectively unavailable mid-heal. Add it to permissions.allow[]."; fail=$((fail+1)); }
-    [ -n "$only_s" ] && {
-      echo "❌ MCP mirror drift — allowed in templates/settings.json but NOT declared in agents/healer.md 'tools:': $(printf '%s\n' "$only_s" | tr '\n' ' ')— a standing pre-approval no agent can use (an explicit tools: list is a restriction). Add it to the healer or drop the rule."; fail=$((fail+1)); }
-  fi
   # Arm 2 — did the shipped grants actually REACH this project? The scaffold's jq merge is an
   # additive union, so the repair is a plain re-run of /qa-warden:init (no hand edit, unlike 9c).
   if [ -f .claude/settings.json ]; then
@@ -981,122 +799,7 @@ if [ -f .claude/settings.qa-suggested.json ]; then
   fi
 fi
 
-# 9g. The /qa-warden:gen compiler -> verifier chain, and the manifest gate that rides on it. The
-#     generator and the verifier are TWO agents by design: until the split, the same agent that
-#     wrote an expect() also decided at steps 8b/8c whether that expect catches an injected
-#     defect, its cheapest path was to claim CATCHES, and the resulting `// verified:` comment is
-#     durable evidence reviewer Check 2b trusts. Nothing enforces that separation at runtime —
-#     no subagent can spawn another, so the chain exists ONLY as prose in skills/gen/SKILL.md,
-#     which is an active trim candidate. A trim that drops the second call leaves /qa-warden:gen green
-#     and every spec unverified. Same unchecked-prose-contract shape as 9bd.
-#     Arm 3 is the one that actually matters. The route manifest is the SHIP signal (/qa-warden:impact
-#     reads a spec as live coverage only once its manifest exists), and it is gated on
-#     verification passing, so it must be written by the agent that RAN the verification. If the
-#     generator ever reclaims the manifest write, the gate detaches from the gated thing and a
-#     never-verified spec ships looking covered — the exact hole the split closes. Compares
-#     GRANT OWNERSHIP, never wording, so a reword stays green and a re-parenting does not.
-if [ -n "$TMPL" ] && [ -d "$TMPL/.." ]; then
-  ver_a="$TMPL/../agents/verifier.md"; gen_s="$TMPL/../skills/gen/SKILL.md"
-  if [ ! -f "$ver_a" ]; then
-    echo "❌ agents/verifier.md is MISSING — /qa-warden:gen's second half (metamorphic twins, step-8b fault injection, the route manifest) has no agent to run it, and the generator would be grading its own expect() again"; fail=$((fail+1))
-  elif [ -f "$gen_s" ]; then
-    # Arm 1+2: the orchestration prose must still name BOTH agents. Presence, not wording.
-    grep -q 'generator' "$gen_s" || { echo "❌ skills/gen/SKILL.md no longer names the \`generator\` subagent — nothing compiles the spec"; fail=$((fail+1)); }
-    grep -q 'verifier'  "$gen_s" || { echo "❌ skills/gen/SKILL.md no longer names the \`verifier\` subagent — no subagent can spawn another, so this prose IS the chain; without it every spec ships compiled-but-ungraded (no twins, no step-8b injection, no manifest)"; fail=$((fail+1)); }
-  fi
-  # Arm 3: exactly ONE agent may claim the route-manifest write, and it must be the verifier.
-  if [ -f "$ver_a" ]; then
-    mf_owners=""
-    for af in "$TMPL"/../agents/*.md; do
-      [ -f "$af" ] || continue
-      grep -q 'Write(artifacts/route-manifests' "$af" && mf_owners="$mf_owners $(basename "$af" .md)"
-    done
-    mf_owners=$(printf '%s' "$mf_owners" | sed 's/^ //')
-    case " $mf_owners " in
-      " verifier ") : ;;
-      "  ") echo "❌ no agent declares Write(artifacts/route-manifests/**) — /qa-warden:impact exits NO MANIFESTS FOUND for every spec"; fail=$((fail+1)) ;;
-      *) echo "❌ route-manifest write is claimed by: $mf_owners — it must be the VERIFIER alone. The manifest is the ship signal and is gated on verification passing; an agent that writes it without running the verification detaches the gate from the gated thing, and a never-verified spec reads to /qa-warden:impact as live coverage"; fail=$((fail+1)) ;;
-    esac
-  fi
-fi
-
-# 9i. The SITUATION-STEP chain (`fault:` / `clock:`) — the two step forms that make the SFDIPOT
-#     Interfaces/Operations and Time lenses generatable. Unlike an oracle key, these are not in
-#     scripts/oracle-keys.txt and are policed by nothing else: the whole contract is prose spread
-#     across four files, and each one, dropped, fails SILENTLY in a different direction.
-#     Arm 1 (CHAIN COMPLETENESS, symbol-keyed). planner.md authors the step, generator.md compiles
-#       it, reviewer.md validates it, templates/CLAUDE.md is what gets STAMPED into a project (the
-#       in-PROJECT reviewer reads its own copy and cannot read the plugin). Drop it from the planner
-#       and the capability exists but nothing can ask for it — §9's own "a capability that only
-#       lands in the generator is one the planner can never ask for". Drop it from the generator and
-#       the planner authors a step that compiles to nothing. Drop it from the template and no future
-#       stamp carries the definition. Keyed on the literal step SYMBOLS, never on wording, so a
-#       reword stays green and a deletion does not.
-#       SCOPE — read this arm as the SHIPPING SOURCE, never as delivery. All four links are
-#       PLUGIN-side files, `templates/CLAUDE.md` included, so this arm is green whenever the
-#       toolkit still ships the symbols, no matter what any already-scaffolded project holds.
-#       That gap is real and was measured: a 0.2.0 project upgraded to HEAD kept a CLAUDE.md with
-#       zero `fault:`/`clock:` while this arm stayed green, because `--resync` cannot refresh a
-#       shared-ownership file. The delivered copy is policed by the CLAUDE.md containment
-#       sub-check in Check 9 (manifest: scripts/claude-md-vocab.txt), which WARNs rather than
-#       FAILs there because its repair is a hand-merge. The two are complements, not duplicates.
-#     Arm 2 (SCOPE OWNERSHIP, the 9g arm-3 / 9h arm-2 shape). The healer's prohibition on
-#       INTRODUCING a stub or a clock call is enforced by assertion-contract.sh, and that arm must
-#       be scoped to the HEALER ALONE. Both directions are real failures: widen it to the verifier
-#       and its step-8b fault injection — which IS a page.route — gets denied, breaking the negative
-#       control the oracle-defense layer rests on; narrow it to nobody and the healer can stub a
-#       genuinely-broken backend green, converting a real outage into a test that passes forever.
-#     Arm 3 (STRANDED CONTRACT, the 9c shape). The fired-proof for a response-fabricating `fault:`
-#       is a paired `network_response_status` oracle — chosen precisely so the feature needs NO 17th
-#       key. That makes the rule depend on a key it does not own: retire `network_response_status`
-#       from the closed vocabulary and every `fault:` spec becomes unauthorable, while the four
-#       prose files still demand the pairing. Cross-checks the named key against the manifest.
-if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
-  # Arm 1: both step symbols must be present in all four links of the chain.
-  sit_chain="$TMPL/CLAUDE.md:the SHIPPING SOURCE|no future stamp carries the definition at all, and the CLAUDE.md containment sub-check in Check 9 — which is what polices the already-stamped copies — has nothing left to deliver
-$TMPL/../agents/planner.md:the AUTHOR|the capability exists but no spec can ask for it
-$TMPL/../agents/generator.md:the COMPILER|a declared step compiles to nothing
-$TMPL/../agents/reviewer.md:the VALIDATOR|an unproven stub ships green"
-  while IFS=: read -r sf sdesc; do
-    srole=${sdesc%%|*}; scost=${sdesc#*|}
-    [ -n "$sf" ] || continue
-    if [ ! -f "$sf" ]; then
-      echo "⚠️  situation-step mirror not found at $sf — the fault:/clock: chain is UNVERIFIED"; warn=$((warn+1)); continue
-    fi
-    for sym in 'fault:' 'clock:'; do
-      grep -qE "(^|[^a-zA-Z_])$sym" "$sf" \
-        || { echo "❌ ${sf##*/} never mentions \`$sym\` — that file is $srole in the situation-step chain (CLAUDE.md §\"Situation steps\"), so with the link dropped, $scost. Nothing else in this toolkit reads that step form, so the loss is silent."; fail=$((fail+1)); }
-    done
-  done <<EOF
-$sit_chain
-EOF
-
-  # Arm 2: the healer-only stub/clock arm of the assertion hook must still scope to the healer,
-  # and must NOT have been widened to the verifier.
-  ach="$TMPL/../hooks/assertion-contract.sh"
-  if [ -f "$ach" ]; then
-    # Anchor on the block's own section header, NOT on the first `if [ "$agent" = … ]` in the
-    # file — an earlier one belongs to the removed-assertion branch and reads "verifier", which
-    # would make this arm FAIL on a correct hook. Losing the anchor degrades to the WARN below.
-    sarm=$(awk '/^# --- healer-only/{f=1} f && /^if \[ "\$agent" = "[a-z]+" \]; then/{print; exit}' "$ach" \
-             | sed -e 's/.*= "//' -e 's/".*//')
-    if [ -z "$sarm" ]; then
-      echo "⚠️  cannot read the stub/clock arm's agent scope out of hooks/assertion-contract.sh — Check 9i arm 2 is blind; re-anchor it if the script was restructured"; warn=$((warn+1))
-    elif [ "$sarm" != "healer" ]; then
-      echo "❌ the stub/clock arm in hooks/assertion-contract.sh scopes to '$sarm', not 'healer' — if that is the verifier, its step-8b fault injection (which IS a page.route) is now denied and the negative control the oracle-defense layer rests on cannot run"; fail=$((fail+1))
-    elif ! grep -qF '.clock[[:space:]]*' "$ach"; then   # the probe regex keys on the method (0.5.3), so page.clock and context.clock alike
-      echo "❌ hooks/assertion-contract.sh has a healer-scoped arm but no clock probe — the healer can introduce a fake-clock settle, which is a sleep the waitForTimeout ban does not lexically catch"; fail=$((fail+1))
-    fi
-  fi
-
-  # Arm 3: the fired-proof names an oracle key it does not own — it must still be in the manifest.
-  if [ -n "$KEYS" ] && [ -f "$TMPL/CLAUDE.md" ]; then
-    if grep -q 'network_response_status' "$TMPL/CLAUDE.md"; then
-      printf '%s\n' "$KEYS" | grep -qx 'network_response_status' \
-        || { echo "❌ templates/CLAUDE.md makes \`network_response_status\` the fired-proof for a response-fabricating \`fault:\` step, but that key is no longer in scripts/oracle-keys.txt — every fault: spec is now unauthorable while four files still demand the pairing (the 9c stranded-rule shape)"; fail=$((fail+1)); }
-    fi
-  fi
-fi
+# 9g / 9i — MOVED to bin/qa-selfcheck (see the MOVED note above Check 9c).
 
 # 9k. UNMANIFESTED-walk OWNERSHIP. "which compiled tests have no route manifest" is one rule
 #     with two consumers that must never disagree: /qa-warden:impact prints it as ### BLIND SPOTS (a
@@ -1546,21 +1249,7 @@ while read -r basis; do
   esac
 done < <(printf %s\\n "$CTX_FILES" | grep -e "\\.basis\\.md$")
 
-# 20. Plugin-side normative-prose drift (F-016) — the canonical `.env`-load one-liner is duplicated
-#     VERBATIM across several plugin command/agent files (explore/exploration/intake) because a
-#     command that must be run verbatim belongs at its point of use. (NOT because a subagent
-#     "cannot read CLAUDE.md" — this comment said so until 2026-09-21; subagents load the project
-#     CLAUDE.md unless their frontmatter sets `omitClaudeMd`.) That copy-paste is a silent
-#     drift risk: if one file's load line diverges, that path reads an empty $BASE_URL_* and quietly
-#     degrades. When $TMPL resolved, assert the idiom stays byte-identical wherever it appears — WARN
-#     only if MORE THAN ONE distinct form exists (all-identical = healthy, no warn). The
-#     conditional-park rule is deliberately NOT byte-checked: each agent contextualizes it
-#     differently and that variance is intended, so a byte-check there would false-FAIL.
-if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
-  envforms=$(grep -rhoE 'set -a;.*\.env.*set \+a' "$TMPL/../agents" "$TMPL/../skills" 2>/dev/null | sed 's/^[[:space:]]*//' | sort -u)
-  nforms=$(printf '%s\n' "$envforms" | grep -c .)
-  [ "${nforms:-0}" -gt 1 ] && { echo "⚠️  .env-load idiom drift (F-016): $nforms distinct forms of the duplicated one-liner across plugin skill/agent files — re-sync every copy to the canonical CLAUDE.md §Environment form"; warn=$((warn+1)); }
-fi
+# 20 — MOVED to bin/qa-selfcheck (plugin-side guard on the agents' and skills' .env handling; see the MOVED note above Check 9c).
 
 # 21. Fresh-project readiness verdict (F-025) — a brand-new project trips several checks as WARNs
 #     purely because nothing is authored yet (no app.context.md, 0 specs), so "OK with warnings"

@@ -5,7 +5,7 @@ model: opus
 # maxTurns vs the prose turn budget: see reference/agent-budget-pattern.md.
 maxTurns: 16
 # Maintainer notes (not delivered to the model):
-# - doctor Check 9bb compares the oracle argument-shape table's SHAPE EXPRESSIONS against
+# - bin/qa-selfcheck Check 9bb compares the oracle argument-shape table's SHAPE EXPRESSIONS against
 #   templates/CLAUDE.md and FAILs on divergence (Checks 2/9b verify key PRESENCE only). The
 #   trailing prose is deliberately NOT compared, so rewording a note there is free.
 #   generator.md's Oracle→expect mapping and DOCUMENTATION.md's numbered table are guarded by

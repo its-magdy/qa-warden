@@ -122,9 +122,11 @@ byte-identically in places, with its own copy of the `testIgnore` lockstep filte
 
 Not a script: the closed oracle vocabulary, one key per line. `CLAUDE.md` remains the human SoT
 (it owns the semantics and the per-key argument-shape table); this is the machine-readable key
-**set** that `doctor.sh` Check 2/9b compares CLAUDE.md and the plugin's agents against. Doctor
+**set** that `doctor.sh` Check 2 compares this project's CLAUDE.md against (the plugin's own
+`bin/qa-selfcheck` Check 9b compares the plugin's agents against the shipped copy). Doctor
 used to hold a hand-typed copy and police its peers with that copy as the baseline — a checker
-that needed a cardinality self-check on its own mirror. Same pattern as `resync-set.txt`.
+that needed a cardinality self-check on its own mirror. Same pattern as the toolkit-owned
+file list (`resync-set.txt`, in the plugin's `manifests/`).
 
 ## `retire-delete.sh` — sanctioned scoped-delete wrapper
 
@@ -147,22 +149,6 @@ anything but an `<input type="password">`.
 file `/qa-warden:doctor` Check 15 reads. One allow-listed call instead of an improvised compound
 command; it records a verdict the caller already confirmed and judges nothing itself.
 
-## `resync-set.txt` — the toolkit-owned file manifest
-
-Not a script: the single list of files the **toolkit** owns (as opposed to the
-shared-ownership files users edit — `.env`, `CLAUDE.md`, `settings.json`,
-`fixtures/test.ts`, …, each documented inline). Both consumers read it, so
-detection and repair can't drift apart: `qa-scaffold --resync` force-refreshes
-exactly this set, and `doctor.sh` Check 9 byte-compares exactly this set against
-the shipped templates. Adding a template file is a one-line edit here.
-
-Two shared-ownership files are excluded from the *copy* but not from the *upgrade*, because
-skipping the file turned out not to mean skipping its content: `--resync` also runs the
-additive `.claude/settings.json` permission merge (it did not until a resync-only upgrade was
-measured delivering 0 of 37 new rules, exit 0) and appends the single `*.qa-bak` pattern to
-`.gitignore` (the rule that covers litter the resync itself writes, and which an older
-`.gitignore` could not otherwise receive). Neither file is ever overwritten.
-
 ## `runtime-dirs.txt` — the runtime-directory manifest
 
 Also not a script: the single list of directories the subagents write into
@@ -175,44 +161,16 @@ directory is a one-line edit here; keep it consistent with the `Write`/`Edit`
 allowlist in `.claude/settings.json` and CLAUDE.md §"Tooling allowed paths",
 or the first agent write into the new directory hits an approval wall.
 
-## `claude-md-vocab.txt` — the CLAUDE.md delivery manifest
+## Manifests that are NOT here
 
-Also not a script: the list of toolkit-owned **symbols** that must survive in a project's own
-`CLAUDE.md`. It closes the widest hole in the upgrade path. `CLAUDE.md` is shared-ownership, so
-it is excluded from `--resync` *and* from Check 9's byte-compare — both correct in isolation, but
-together they mean the file every new authoring feature ships in is the one file an upgrade
-cannot deliver, and the in-project agents read that file rather than the plugin. Measured on a
-real `0.2.0` → HEAD upgrade: after a clean, green, exit-0 `/qa-warden:init --resync` the stamped
-`CLAUDE.md` carried zero mentions of `fault:`, `clock:`, `lock:` or `verifier`, and doctor said
-nothing.
-
-Why symbols and not sections: across that same upgrade the `## ` heading set was **identical**
-(19 before, 19 after) while the 93 new lines landed *inside* ten pre-existing sections — a
-section-level diff would report green on exactly the release it would have been built for. So it
-polices symbols, the way `prod-guard-rails.txt` polices an invocation rather than a wording.
-
-The required set is derived (manifest × shipped template), so a symbol retired from the template
-reports the *manifest* as stale instead of nagging consumers about a dead feature. Presence
-anywhere in the file satisfies it — rewording and user additions are free, only a deletion is
-reported — and it **WARNs**, because alone among Check 9's findings the repair is a hand-merge
-rather than a command. Not the oracle keys: those are Check 2's, and `lock:` must never be added
-to `oracle-keys.txt` (it is a `TestDetails` field, and that manifest also feeds Check 9b and
-`/qa-warden:coverage`). Shipping a feature documented in `CLAUDE.md` is a one-line edit here.
-
-## `prod-guard-rails.txt` — the prod-guard rail manifest
-
-Also not a script: the single list of skills that must carry a prod-guard rail in prose.
-Doctor Check 9bd reads it and verifies each listed skill still **invokes**
-`bash scripts/prod-guard.sh` **and** stops on a non-zero exit — and WARNs on the reverse, a
-skill carrying a rail that nobody listed. It compares invocation + the STOP clause only, never
-the wording: the eight sites deliberately carry two different lead forms and materially different
-bodies, so a whole-text compare would fire on every edit and get the check switched off.
-
-The clause it really guards is the STOP. `flake-check` once shipped running the guard and
-ignoring its exit code — on a repeat-each run that multiplies the blast radius instead of
-reducing it — and nothing detected it. Never delete a rail to make the check pass: on the
-`gen`/`new-spec`/`intake`/`explore`/`review` CLI-driving paths this prose is the only prod rail,
-since the enforced `prod-guard.ts` globalSetup fires only under `npx playwright test`.
+Three manifests used to be stamped into this directory and no longer are, because
+nothing in a project ever read them: `resync-set.txt` (the toolkit-owned file list that
+`/qa-warden:init --resync` refreshes and doctor Check 9 byte-compares), `claude-md-vocab.txt`
+(the symbols doctor Check 9 requires in your `CLAUDE.md`) and `prod-guard-rails.txt` (the
+skills the plugin's own self-check requires to carry a prod-guard rail). `qa-scaffold` and
+`doctor.sh` read the plugin's copies, so they live in the plugin's `manifests/` directory,
+each documented in its own header. If this project was stamped before that move, the
+old copies here are inert and safe to delete; doctor names any it finds.
 
 ## Running the suite
 

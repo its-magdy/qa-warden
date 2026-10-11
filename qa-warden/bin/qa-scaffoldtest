@@ -11,8 +11,9 @@
 # project. No network, no npm install (--no-install), no model calls.
 #
 # What is pinned:
-#   1. fresh stamp     the file set is DERIVED from templates/ + resync-set.txt (not a hand list that
-#                      drifts), and a second stamp changes nothing
+#   1. fresh stamp     the file set is DERIVED from templates/ + manifests/resync-set.txt (not a hand
+#                      list that drifts), a second stamp changes nothing, and the plugin-only
+#                      manifests (manifests/*.txt) never reach a project
 #   2. settings merge  union of the allow/deny rules, the project's own rules and sibling keys
 #                      (model, ask, defaultMode, env, its own marketplace entry) survive, no
 #                      duplicates, and a re-run is byte-stable
@@ -30,7 +31,9 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TEMPLATES="$here/templates"
 SCAFFOLD="$here/bin/qa-scaffold"
 PROD_GUARD="$TEMPLATES/scripts/prod-guard.sh"
-MANIFEST="$TEMPLATES/scripts/resync-set.txt"
+# The resync set is plugin-only data: it lives in manifests/, outside templates/, so it is never
+# stamped (qa-scaffold copies everything under templates/).
+MANIFEST="$here/manifests/resync-set.txt"
 # `jq -n` and not just `command -v`: a jq of the wrong CPU architecture is found but cannot run, and
 # qa-scaffold would then quietly take its "could not auto-merge" path and fail every merge case.
 jq -n 1 >/dev/null 2>&1 || { echo "qa-scaffoldtest: a working jq is required" >&2; exit 2; }
@@ -151,6 +154,21 @@ while IFS= read -r rel; do
   if [ ! -f "$D/$rel" ]; then missing="$missing $rel"; fi
 done < <(expected_files)
 check_eq "every derived template file exists" "" "$missing"
+# The plugin-only manifests are read from the plugin by qa-scaffold, doctor and qa-selfcheck, never
+# from a project. Assert both halves: no copy is stamped (under scripts/, where they used to land,
+# or under their own name anywhere), and the resync set does not list one, which would make
+# --resync and doctor's drift check expect a file the stamp never writes.
+plugin_only=$(cd "$here/manifests" && find . -type f -name '*.txt' | sed 's|^\./||')
+check_nonzero "manifests/ holds plugin-only manifests" "$(printf '%s\n' "$plugin_only" | grep -c .)"
+stamped_po=""; listed_po=""
+for m in $plugin_only; do
+  if [ -n "$(find "$D" -path "$D/.git" -prune -o -name "$m" -print)" ]; then stamped_po="$stamped_po $m"; fi
+  # Any non-comment line naming it, wherever the entry points (manifest_files would hide a
+  # dangling entry, because it drops lines with no template behind them).
+  if sed -e 's/#.*$//' "$MANIFEST" | grep -qF -e "$m"; then listed_po="$listed_po $m"; fi
+done
+check_eq "no plugin-only manifest is stamped into the project" "" "$stamped_po"
+check_eq "resync-set.txt lists no plugin-only manifest" "" "$listed_po"
 RUNTIME_DIRS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$TEMPLATES/scripts/runtime-dirs.txt" | grep -v '^$')
 check_nonzero "runtime-dirs.txt lists directories" "$(printf '%s\n' "$RUNTIME_DIRS" | grep -c .)"
 missing=""
