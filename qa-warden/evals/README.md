@@ -1,7 +1,8 @@
 # Behavioural evals
 
 `bin/qa-selfcheck` proves the plugin's files agree with each other; `bin/qa-hooktest` proves the
-hooks deny what they should. Neither proves an **agent still behaves** after its prompt is
+hooks deny what they should; `bin/qa-scaffoldtest` proves the scaffold stamps, merges and resyncs
+as documented. Neither proves an **agent still behaves** after its prompt is
 edited. These cases do: each one plants ONE known defect in an otherwise-correct project and
 requires the agent's report to name it.
 

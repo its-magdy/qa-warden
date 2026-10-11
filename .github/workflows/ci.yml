@@ -37,6 +37,9 @@ jobs:
       - name: qa-hooktest
         # /bin/bash on purpose: on macOS that is 3.2, the shell the hooks meet on a stock Mac.
         run: /bin/bash qa-warden/bin/qa-hooktest
+      - name: qa-scaffoldtest
+        # Same reason: qa-scaffold and prod-guard.sh run under the stock macOS bash here.
+        run: /bin/bash qa-warden/bin/qa-scaffoldtest
       - name: Shell scripts parse
         run: |
           rc=0
