@@ -1246,25 +1246,36 @@ fi
 #     derivation rule instead of grepping the config for a `name:`:
 #       ❌ the id is not lowercase [a-z0-9-] (no BASE_URL_<SITE> can produce it), or its
 #          base_url_env is not BASE_URL_<ID> (the config never reads that var for a project);
-#       ⚠️ BASE_URL_<ID> is unset after loading .env — no project this run (CI may set it).
+#       ⚠️ BASE_URL_<ID> is unset or empty after loading .env — no project this run (CI may set it).
 #     `app` is exempt: its project is always registered (BASE_URL_APP → BASE_URL fallback).
 CTXH=specs/_context/app.context.md
 if [ -f "$CTXH" ] && [ -f playwright.config.ts ]; then
   # One `id<TAB>base_url_env` row per `- id:` entry (base_url_env empty when the entry has none).
-  site_rows=$(awk '
-    /^[[:space:]]*-[[:space:]]*id:[[:space:]]*[a-zA-Z0-9_-]+/ {
+  # A row starts on ANY `- id:` line, quoted or not: keying on an unquoted value let a quoted
+  # `- id: "shop"` slip past, so its base_url_env overwrote the PREVIOUS entry's (a false ❌ on
+  # that site, and shop never checked). Values keep every character up to whitespace or `#`
+  # once the quotes are stripped, so an invalid id is reported as written rather than truncated.
+  # The quote class comes in through -v: a `'` cannot appear inside this single-quoted program.
+  site_rows=$(awk -v q="\"'" '
+    function bare(v) {
+      gsub("[" q "]", "", v)
+      sub(/^[[:space:]]+/, "", v)
+      sub(/[[:space:]#].*$/, "", v)
+      return v
+    }
+    /^[[:space:]]*-[[:space:]]*id:/ {
       if (have) print id "\t" envname
       id = $0
-      sub(/^[[:space:]]*-[[:space:]]*id:[[:space:]]*/, "", id)
-      sub(/[^a-zA-Z0-9_-].*$/, "", id)
+      sub(/^[[:space:]]*-[[:space:]]*id:/, "", id)
+      id = bare(id)
       envname = ""
       have = 1
       next
     }
     have && /^[[:space:]]*base_url_env:/ {
       envname = $0
-      sub(/^[[:space:]]*base_url_env:[^a-zA-Z0-9_]*/, "", envname)
-      sub(/[^a-zA-Z0-9_].*$/, "", envname)
+      sub(/^[[:space:]]*base_url_env:/, "", envname)
+      envname = bare(envname)
     }
     END { if (have) print id "\t" envname }
   ' "$CTXH")
@@ -1277,13 +1288,17 @@ if [ -f "$CTXH" ] && [ -f playwright.config.ts ]; then
       echo "❌ site id '$sid' is reserved — playwright.config.ts already has a 'setup' project (the auth setup), so it never derives a site project of that name and specs tagged @site:$sid run in NO project; rename the site in $CTXH and in its specs' site: fields"
       fail=$((fail+1))
     elif ! printf '%s' "$sid" | grep -qE -e '^[a-z0-9]+(-[a-z0-9]+)*$'; then
-      echo "❌ site id '$sid' cannot match a playwright.config.ts project — projects are derived from BASE_URL_<SITE> as lowercase with '-' for '_' (so $want → '$canon'), and specs tagged @site:$sid run in NO project (silent green-but-empty); rename the id to '$canon' in $CTXH and in its specs' site: fields"
+      if printf '%s' "$canon" | grep -qE -e '^[a-z0-9]+(-[a-z0-9]+)*$'; then
+        echo "❌ site id '$sid' cannot match a playwright.config.ts project — projects are derived from BASE_URL_<SITE> as lowercase with '-' for '_' (so $want → '$canon'), and specs tagged @site:$sid run in NO project (silent green-but-empty); rename the id to '$canon' in $CTXH and in its specs' site: fields"
+      else
+        echo "❌ site id '$sid' cannot match a playwright.config.ts project — a site id must be lowercase letters and digits in '-'-separated words (e.g. 'shop', 'admin-portal'), the only names derived from BASE_URL_<SITE>; specs tagged @site:$sid run in NO project (silent green-but-empty). Rename it in $CTXH and in its specs' site: fields"
+      fi
       fail=$((fail+1))
     elif [ "$senv" != "$want" ]; then
       echo "❌ site '$sid' declares base_url_env: ${senv:-<none>}, but playwright.config.ts registers the '$sid' project only from $want — specs tagged @site:$sid run in NO project (silent green-but-empty); set base_url_env: $want in $CTXH and use that var name in .env"
       fail=$((fail+1))
     elif [ -z "$(printenv "$want")" ]; then
-      echo "⚠️  site '$sid': $want is unset after loading .env, so playwright.config.ts registers no '$sid' project and specs tagged @site:$sid run in NO project this run — set $want to the site's staging/QA URL (fine to ignore if CI supplies it)"
+      echo "⚠️  site '$sid': $want is unset or empty after loading .env, so playwright.config.ts registers no '$sid' project and specs tagged @site:$sid run in NO project this run — set $want to the site's staging/QA URL (fine to ignore if CI supplies it)"
       warn=$((warn+1))
     fi
   done < <(printf '%s\n' "$site_rows")
