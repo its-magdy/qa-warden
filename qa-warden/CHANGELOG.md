@@ -18,6 +18,21 @@ never carry the same number**, or the second one has no way to announce itself.
 
 ---
 
+## [Unreleased]
+
+- **New `bin/qa-scaffoldtest`** (maintainer tool, not shipped to projects; runs in CI on Ubuntu and
+  macOS). Until now nothing deterministic ran `bin/qa-scaffold`: the only caller was an eval
+  fixture that needs `claude plugin eval`, so the byte-stable `settings.json` merge and the
+  `--resync` backup and `.gitignore` behaviour its comments describe were asserted nowhere. It
+  stamps into temp dirs (no network, no `npm install`) and checks a fresh stamp (file set derived
+  from `templates/` and `resync-set.txt`, second run byte-identical), the settings merge (rules
+  unioned, the project's rules and sibling keys kept, no duplicates, byte-stable), `--resync`
+  (owned files restored with a `.qa-bak`, `*.qa-bak` gitignored once, `CLAUDE.md` and `.env`
+  untouched), and a table of `prod-guard.sh` URL cases including `QA_ALLOW_PROD=1`. No plugin
+  behaviour changes.
+
+---
+
 ## 0.5.6 — nightly CI hardening, a truncated hook message, shellcheck cleanup (2026-10-09)
 
 Each item is backed by GitHub's, Playwright's or Anthropic's official docs, or by a reproduction.

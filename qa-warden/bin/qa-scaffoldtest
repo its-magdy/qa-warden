@@ -1,0 +1,375 @@
+#!/usr/bin/env bash
+# qa-scaffoldtest — regression tests for bin/qa-scaffold and templates/scripts/prod-guard.sh.
+# Run from the toolkit repo:
+#
+#     qa-warden/bin/qa-scaffoldtest
+#
+# NOT shipped to consumers. Until this file, the only thing that ran qa-scaffold was an eval
+# fixture (evals/_lib/base-project.sh) that needs `claude plugin eval`, so the settings.json
+# merge, the --resync backups and the .gitignore carve-out its comments describe were asserted
+# nowhere. Every case stamps into its own mktemp directory, so nothing here touches a real
+# project. No network, no npm install (--no-install), no model calls.
+#
+# What is pinned:
+#   1. fresh stamp     the file set is DERIVED from templates/ + resync-set.txt (not a hand list that
+#                      drifts), and a second stamp changes nothing
+#   2. settings merge  union of the allow/deny rules, the project's own rules and sibling keys
+#                      (model, ask, defaultMode, env, its own marketplace entry) survive, no
+#                      duplicates, and a re-run is byte-stable
+#   3. --resync        toolkit-owned files restored with a .qa-bak, `*.qa-bak` gitignored exactly
+#                      once, CLAUDE.md / .env / .gitignore never overwritten, rules re-merged
+#   4. prod-guard.sh   the URL table: staging passes, a word-boundary prod marker refuses,
+#                      QA_ALLOW_PROD=1 lifts the marker refusal ONLY, placeholders never pass
+#
+# The prod-guard.ts twin is not tested here: qa-hooktest only copies it as a project marker, and
+# running it needs node + Playwright's dependencies, which this test deliberately does not install.
+#
+# Not asserted, on purpose: the `\@`, `https:/` and `%70` host-parsing quirks. prod-guard.sh
+# documents them as correctness-only, not a security boundary.
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+TEMPLATES="$here/templates"
+SCAFFOLD="$here/bin/qa-scaffold"
+PROD_GUARD="$TEMPLATES/scripts/prod-guard.sh"
+MANIFEST="$TEMPLATES/scripts/resync-set.txt"
+# `jq -n` and not just `command -v`: a jq of the wrong CPU architecture is found but cannot run, and
+# qa-scaffold would then quietly take its "could not auto-merge" path and fail every merge case.
+jq -n 1 >/dev/null 2>&1 || { echo "qa-scaffoldtest: a working jq is required" >&2; exit 2; }
+command -v git >/dev/null || { echo "qa-scaffoldtest: git is required (qa-scaffold git-inits the target)" >&2; exit 2; }
+for f in "$SCAFFOLD" "$PROD_GUARD" "$MANIFEST" "$TEMPLATES/settings.json"; do
+  [ -f "$f" ] || { echo "qa-scaffoldtest: missing $f" >&2; exit 2; }
+done
+
+# A developer's global git config (core.excludesFile, say) could already ignore `*.qa-bak` and
+# hide the append path under test. Make git read nothing but the repo.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+
+# Every case gets its own scratch directory; the trap removes them all, pass or fail.
+SCRATCH=()
+trap 'for d in "${SCRATCH[@]}"; do rm -rf "$d"; done' EXIT
+# new_dir — creates a scratch directory and returns its path in $DIR. Not command-substituted
+# on purpose: that would run in a subshell and the trap would never learn about the directory.
+new_dir() {
+  DIR=$(mktemp -d "${TMPDIR:-/tmp}/qa-scaffoldtest-XXXXXX") || exit 2
+  # macOS: mktemp returns /var/..., git resolves it to /private/var/... — use the real path.
+  DIR=$(cd "$DIR" && pwd -P)
+  SCRATCH+=("$DIR")
+}
+
+pass=0; bad=0
+# check <label> <command...> — passes when the command exits 0. Output is discarded.
+check() {
+  local label=$1; shift
+  if "$@" >/dev/null 2>&1; then
+    pass=$((pass+1)); printf '  ok    %s\n' "$label"
+  else
+    bad=$((bad+1)); printf '  FAIL  %s\n' "$label"
+  fi
+}
+# check_eq <label> <expected> <actual>
+check_eq() {
+  if [ "$2" = "$3" ]; then
+    pass=$((pass+1)); printf '  ok    %s\n' "$1"
+  else
+    bad=$((bad+1)); printf '  FAIL  %s (expected "%s", got "%s")\n' "$1" "$2" "$3"
+  fi
+}
+
+# check_same <label> <snapshot-before> <snapshot-after> — like check_eq, but a failure names the
+# paths that differ instead of dumping both snapshots.
+check_same() {
+  if [ "$2" = "$3" ]; then
+    pass=$((pass+1)); printf '  ok    %s\n' "$1"
+  else
+    bad=$((bad+1)); printf '  FAIL  %s\n' "$1"
+    diff <(printf '%s\n' "$2") <(printf '%s\n' "$3") | grep '^[<>]' | head -6 | sed 's/^/          /'
+  fi
+}
+
+# stamp <dir> [extra qa-scaffold args...] — runs qa-scaffold with --no-install; output lands in
+# $OUT, exit status in $RC. Run under the same bash that runs this test (3.2 on a stock Mac).
+stamp() {
+  local dir=$1; shift
+  OUT=$("$BASH" "$SCAFFOLD" "$dir" --no-install "$@" 2>&1)
+  RC=$?
+}
+
+# snapshot <dir> — one line per path, with a content checksum for files, .git excluded. Two equal
+# snapshots mean no file was added, removed or changed.
+snapshot() {
+  (
+    cd "$1" || exit 1
+    find . -path ./.git -prune -o -print | sort | while IFS= read -r p; do
+      if [ -f "$p" ]; then printf '%s ' "$(cksum < "$p")"; fi
+      printf '%s\n' "$p"
+    done
+  )
+}
+
+# is_prefix <short> <long> — succeeds when <long> begins with every byte of <short>. Not `cmp -n`:
+# BSD cmp (macOS) reports EOF on the shorter file even when the limit is within it.
+is_prefix() {
+  [ "$(head -c "$(wc -c < "$1")" "$2" | cksum)" = "$(cksum < "$1")" ]
+}
+
+# manifest_files — the toolkit-owned set, parsed the way qa-scaffold parses it, minus any entry
+# with no template behind it (qa-scaffold skips those too).
+manifest_files() {
+  sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$MANIFEST" | grep -v '^$' | while IFS= read -r rel; do
+    if [ -f "$TEMPLATES/$rel" ]; then printf '%s\n' "$rel"; fi
+  done
+}
+
+# expected_files — every project-relative file a fresh stamp must leave behind, derived from
+# templates/ with qa-scaffold's own two exceptions: `gitignore` lands as `.gitignore`, and
+# settings.json is merged into .claude/ rather than copied. .env comes from .env.example.
+expected_files() {
+  (cd "$TEMPLATES" && find . -type f ! -name settings.json ! -name '.DS_Store' | sed 's|^\./||') \
+    | sed 's|^gitignore$|.gitignore|'
+  echo ".claude/settings.json"
+  echo ".env"
+}
+
+# ------------------------------------------------------------------------------------------
+echo "qa-scaffold — fresh stamp"
+new_dir; D=$DIR
+stamp "$D"
+check_eq "stamp exits 0" "0" "$RC"
+missing=""
+while IFS= read -r rel; do
+  if [ ! -f "$D/$rel" ]; then missing="$missing $rel"; fi
+done < <(expected_files)
+check_eq "every derived template file exists (missing:${missing:- none})" "" "$missing"
+missing=""
+for d in $(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$TEMPLATES/scripts/runtime-dirs.txt" | grep -v '^$'); do
+  if [ ! -d "$D/$d" ]; then missing="$missing $d"; fi
+done
+check_eq "every runtime dir exists (missing:${missing:- none})" "" "$missing"
+check "scripts/*.sh are executable" test -x "$D/scripts/prod-guard.sh" -a -x "$D/scripts/doctor.sh"
+check "target was git-initialised" test -d "$D/.git"
+check "fresh .claude/settings.json is valid JSON" jq empty "$D/.claude/settings.json"
+check "no settings.qa-suggested.json left behind" test ! -e "$D/.claude/settings.qa-suggested.json"
+before=$(snapshot "$D")
+stamp "$D"
+after=$(snapshot "$D")
+check_eq "second stamp exits 0" "0" "$RC"
+check_same "second stamp is byte-identical (no file added, removed or changed)" "$before" "$after"
+created=$(printf '%s\n' "$OUT" | grep -c '\[qa-scaffold\] created')
+check_eq "second stamp reports nothing created" "0" "$created"
+
+# ------------------------------------------------------------------------------------------
+echo "qa-scaffold — settings.json merge into a project that already has one"
+new_dir; D=$DIR
+mkdir -p "$D/.claude"
+# One custom allow, one custom deny, an `ask` list, defaultMode, a model, an env block, the
+# project's own qa-warden marketplace entry (a fork), a second marketplace, and one rule the
+# template also ships (to prove the union does not duplicate it).
+cat > "$D/.claude/settings.json" <<'JSON'
+{
+  "model": "opus",
+  "env": { "FOO": "bar" },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": ["Bash(make test)", "Read(./docs/**)", "Bash(jq *)"],
+    "deny": ["Bash(shutdown *)"],
+    "ask": ["Bash(git push*)"]
+  },
+  "extraKnownMarketplaces": {
+    "qa-warden": { "source": { "source": "github", "repo": "someone/qa-warden-fork" } },
+    "internal": { "source": { "source": "github", "repo": "acme/plugins" } }
+  }
+}
+JSON
+S="$D/.claude/settings.json"
+new_dir; SEED=$DIR/seed.json
+cp "$S" "$SEED"
+stamp "$D"
+check_eq "stamp exits 0" "0" "$RC"
+check "result is valid JSON" jq empty "$S"
+check "project allow rules survive" jq -e '.permissions.allow | index("Bash(make test)") and index("Read(./docs/**)")' "$S"
+check "project deny rule survives" jq -e '.permissions.deny | index("Bash(shutdown *)")' "$S"
+check "template allow rules are all present" \
+  jq -e -s '(.[1].permissions.allow - .[0].permissions.allow) == []' "$S" "$TEMPLATES/settings.json"
+check "template deny rules are all present" \
+  jq -e -s '(.[1].permissions.deny - .[0].permissions.deny) == []' "$S" "$TEMPLATES/settings.json"
+check "allow has no duplicates (shared rule appears once)" \
+  jq -e '(.permissions.allow | length) == (.permissions.allow | unique | length)' "$S"
+check "deny has no duplicates" jq -e '(.permissions.deny | length) == (.permissions.deny | unique | length)' "$S"
+check "allow is exactly the union (nothing invented, nothing dropped)" \
+  jq -e -s '.[0].permissions.allow == ((.[1].permissions.allow + .[2].permissions.allow) | unique)' \
+    "$S" "$SEED" "$TEMPLATES/settings.json"
+check "deny is exactly the union" \
+  jq -e -s '.[0].permissions.deny == ((.[1].permissions.deny + .[2].permissions.deny) | unique)' \
+    "$S" "$SEED" "$TEMPLATES/settings.json"
+check "sibling key permissions.ask preserved" jq -e '.permissions.ask == ["Bash(git push*)"]' "$S"
+check "sibling key permissions.defaultMode preserved" jq -e '.permissions.defaultMode == "acceptEdits"' "$S"
+check "sibling key model preserved" jq -e '.model == "opus"' "$S"
+check "sibling key env preserved" jq -e '.env == {"FOO": "bar"}' "$S"
+check "project's own qa-warden marketplace entry wins over the template's" \
+  jq -e '.extraKnownMarketplaces["qa-warden"].source.repo == "someone/qa-warden-fork"' "$S"
+check "project's other marketplace entry preserved" \
+  jq -e '.extraKnownMarketplaces.internal.source.repo == "acme/plugins"' "$S"
+before=$(snapshot "$D")
+stamp "$D"
+after=$(snapshot "$D")
+check_eq "re-run exits 0" "0" "$RC"
+check_same "re-run is byte-stable (merging its own output changes nothing)" "$before" "$after"
+
+# A project with settings.json and none of the template's keys still gets the template's
+# marketplace entry, appended beneath its own keys.
+new_dir; D=$DIR
+mkdir -p "$D/.claude"
+echo '{ "model": "sonnet" }' > "$D/.claude/settings.json"
+stamp "$D"
+check "bare project gets the template marketplace entry" \
+  jq -e '.extraKnownMarketplaces["qa-warden"].source.repo == "its-magdy/qa-warden" and .model == "sonnet"' "$D/.claude/settings.json"
+
+# ------------------------------------------------------------------------------------------
+echo "qa-scaffold --resync — restore toolkit-owned files, never user-owned ones"
+new_dir; D=$DIR
+stamp "$D"
+# Simulate a project scaffolded before the `*.qa-bak` rule shipped: drop it from .gitignore.
+grep -v 'qa-bak' "$D/.gitignore" > "$D/.gitignore.tmp" && mv "$D/.gitignore.tmp" "$D/.gitignore"
+check "precondition: .gitignore no longer mentions qa-bak" test "$(grep -c 'qa-bak' "$D/.gitignore")" = "0"
+# Edit EVERY toolkit-owned file, plus the three user-owned ones that must survive.
+owned=$(manifest_files)
+for rel in $owned; do printf '\n# local edit\n' >> "$D/$rel"; done
+printf '\n# my project policy\n' >> "$D/CLAUDE.md"
+printf 'QA_USER_EMAIL=me@staging.dev\n' >> "$D/.env"
+printf '\n# my own ignore rule\nlocal-notes/\n' >> "$D/.gitignore"
+claude_before=$(cksum < "$D/CLAUDE.md"); env_before=$(cksum < "$D/.env")
+new_dir; GI_BEFORE=$DIR/gitignore.before
+cp "$D/.gitignore" "$GI_BEFORE"
+# Knock one template rule out of settings.json: resync must merge it back.
+jq '.permissions.allow -= ["Bash(rg *)"]' "$D/.claude/settings.json" > "$D/s.tmp" && mv "$D/s.tmp" "$D/.claude/settings.json"
+check "precondition: settings.json lost a template rule" jq -e '.permissions.allow | index("Bash(rg *)") | not' "$D/.claude/settings.json"
+
+stamp "$D" --resync
+check_eq "resync exits 0" "0" "$RC"
+stale=""; nobak=""
+for rel in $owned; do
+  if ! cmp -s "$TEMPLATES/$rel" "$D/$rel"; then stale="$stale $rel"; fi
+  if ! grep -q 'local edit' "$D/$rel.qa-bak" 2>/dev/null; then nobak="$nobak $rel"; fi
+done
+check_eq "every edited toolkit-owned file is restored (stale:${stale:- none})" "" "$stale"
+check_eq "every restored file left a .qa-bak holding the edit (missing:${nobak:- none})" "" "$nobak"
+check_eq "CLAUDE.md untouched" "$claude_before" "$(cksum < "$D/CLAUDE.md")"
+check_eq ".env untouched" "$env_before" "$(cksum < "$D/.env")"
+check ".gitignore keeps every byte the user had (the rule is only appended)" is_prefix "$GI_BEFORE" "$D/.gitignore"
+check "no .qa-bak for CLAUDE.md / .env / .gitignore / settings.json" \
+  test ! -e "$D/CLAUDE.md.qa-bak" -a ! -e "$D/.env.qa-bak" -a ! -e "$D/.gitignore.qa-bak" -a ! -e "$D/.claude/settings.json.qa-bak"
+check_eq "*.qa-bak appended to .gitignore exactly once" "1" "$(grep -c '^\*\.qa-bak$' "$D/.gitignore")"
+check "git agrees the backups are ignored" git -C "$D" check-ignore -q "playwright.config.ts.qa-bak"
+check "rule knocked out of settings.json is merged back by resync" \
+  jq -e '.permissions.allow | index("Bash(rg *)")' "$D/.claude/settings.json"
+refreshed=$(printf '%s\n' "$OUT" | grep -c 'resynced')
+check_eq "resync reports one resynced line per owned file" "$(printf '%s\n' "$owned" | grep -c .)" "$refreshed"
+
+before=$(snapshot "$D")
+stamp "$D" --resync
+after=$(snapshot "$D")
+check_eq "second resync exits 0" "0" "$RC"
+check_same "second resync changes nothing" "$before" "$after"
+check_eq "second resync does not append *.qa-bak again" "1" "$(grep -c '^\*\.qa-bak$' "$D/.gitignore")"
+check "second resync says there was nothing to do" grep -q '0 file(s) refreshed' <<<"$OUT"
+
+# A project whose .gitignore already ignores *.qa-bak (the shipped template does) is left alone.
+new_dir; D=$DIR
+stamp "$D"
+printf '\n# local edit\n' >> "$D/playwright.config.ts"
+stamp "$D" --resync
+check_eq "template .gitignore keeps its single *.qa-bak rule through a resync" "1" "$(grep -c '^\*\.qa-bak$' "$D/.gitignore")"
+
+# ------------------------------------------------------------------------------------------
+echo "prod-guard.sh — URL classification"
+new_dir; EMPTY=$DIR   # a CLAUDE_PROJECT_DIR with no .env, so only the variables below are seen
+# pg <expect-exit> <label> [VAR=value ...] [-- url ...]
+#   Runs the guard under `env -i` so nothing inherited (BASE_URL, QA_ALLOW_PROD) leaks in.
+pg() {
+  local want=$1 label=$2; shift 2
+  local envs=() urls=()
+  while [ $# -gt 0 ] && [ "$1" != "--" ]; do envs+=("$1"); shift; done
+  if [ "${1:-}" = "--" ]; then shift; urls=("$@"); fi
+  PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" "${envs[@]}" /bin/sh "$PROD_GUARD" "${urls[@]}" 2>&1)
+  local rc=$?
+  if [ "$rc" = "$want" ]; then
+    pass=$((pass+1)); printf '  ok    exit %s  %s\n' "$want" "$label"
+  else
+    bad=$((bad+1)); printf '  FAIL  expected exit %s, got %s — %s\n' "$want" "$rc" "$label"
+  fi
+}
+
+echo "  -- passes"
+pg 0 "staging host"                                BASE_URL_APP=https://staging.acme.dev
+pg 0 "localhost with a port"                       BASE_URL_APP=http://localhost:3000
+pg 0 "127.0.0.1"                                   BASE_URL_APP=http://127.0.0.1:8080/app
+pg 0 "'product' is not the marker"                 BASE_URL_APP=https://product.acme.dev
+pg 0 "'reproduction' is not the marker"            BASE_URL_APP=https://reproduction.acme.dev
+pg 0 "'produce' / 'prodigy' are not the marker"    BASE_URL_APP=https://produce.acme.dev BASE_URL_ADMIN=https://prodigy.acme.dev
+pg 0 "prod only in the PATH is not the host"       BASE_URL_APP=https://staging.acme.dev/prod/home
+pg 0 "real host that merely contains 'example'"    BASE_URL_APP=https://qa.example.company.com
+pg 0 "legacy single-site BASE_URL"                 BASE_URL=https://staging.acme.dev
+pg 0 "staging primary + staging secondary + API"   BASE_URL_APP=https://staging.acme.dev BASE_URL_ADMIN=https://admin.staging.acme.dev API_URL=https://api.staging.acme.dev
+pg 0 "staging argument URL"                        BASE_URL_APP=https://staging.acme.dev -- https://review.staging.acme.dev
+
+echo "  -- prod marker refuses"
+pg 1 "prod as a leading label"                     BASE_URL_APP=https://prod.acme.com
+pg 1 "production as a label"                       BASE_URL_APP=https://app.production.acme.com
+pg 1 "prod2 (digits after the marker)"             BASE_URL_APP=https://prod2.acme.com
+pg 1 "prod after a hyphen"                         BASE_URL_APP=https://eu-prod.acme.com
+pg 1 "prod before a hyphen"                        BASE_URL_APP=https://prod-eu.acme.com
+pg 1 "uppercase PROD"                              BASE_URL_APP=https://PROD.acme.com
+pg 1 "bare prod host with a port"                  BASE_URL_APP=http://prod:8080
+pg 1 "prod host behind userinfo with an @ password" BASE_URL_APP='https://user:p@ss@prod.acme.com/login'
+pg 1 "prod on a secondary BASE_URL_*"              BASE_URL_APP=https://staging.acme.dev BASE_URL_ADMIN=https://admin.prod.acme.com
+pg 1 "prod on API_URL"                             BASE_URL_APP=https://staging.acme.dev API_URL=https://api.prod.acme.com
+pg 1 "prod on a *_API_URL"                         BASE_URL_APP=https://staging.acme.dev SEED_API_URL=https://api.production.acme.com
+pg 1 "prod passed as an argument URL"              BASE_URL_APP=https://staging.acme.dev -- https://prod.acme.com
+pg 1 "prod argument among clean ones"              BASE_URL_APP=https://staging.acme.dev -- https://a.staging.acme.dev https://prod.acme.com
+
+echo "  -- QA_ALLOW_PROD=1 lifts the prod marker and nothing else"
+pg 0 "override: prod primary"                      QA_ALLOW_PROD=1 BASE_URL_APP=https://prod.acme.com
+pg 0 "override: prod secondary + API"              QA_ALLOW_PROD=1 BASE_URL_APP=https://staging.acme.dev BASE_URL_ADMIN=https://prod.acme.com API_URL=https://api.prod.acme.com
+pg 0 "override: prod argument"                     QA_ALLOW_PROD=1 BASE_URL_APP=https://staging.acme.dev -- https://prod.acme.com
+pg 1 "QA_ALLOW_PROD=0 is not an override"          QA_ALLOW_PROD=0 BASE_URL_APP=https://prod.acme.com
+pg 1 "QA_ALLOW_PROD=true is not an override"       QA_ALLOW_PROD=true BASE_URL_APP=https://prod.acme.com
+pg 1 "override does not excuse a CHANGEME primary" QA_ALLOW_PROD=1 BASE_URL_APP=CHANGEME
+pg 1 "override does not excuse an empty primary"   QA_ALLOW_PROD=1 BASE_URL_APP=
+pg 1 "override does not excuse an unset primary"   QA_ALLOW_PROD=1
+pg 1 "override does not excuse a placeholder secondary" QA_ALLOW_PROD=1 BASE_URL_APP=https://staging.acme.dev BASE_URL_ADMIN=https://admin.example.com
+pg 1 "override does not excuse a placeholder argument" QA_ALLOW_PROD=1 BASE_URL_APP=https://staging.acme.dev -- https://example.org
+
+echo "  -- placeholders and empty targets refuse (no env escape)"
+pg 1 "nothing configured at all"
+pg 1 "primary set but empty"                       BASE_URL_APP=
+pg 1 "empty BASE_URL_APP does not fall through to BASE_URL" BASE_URL_APP= BASE_URL=https://staging.acme.dev
+pg 1 "CHANGEME sentinel"                           BASE_URL_APP=CHANGEME
+pg 1 "CHANGEME inside a URL"                       BASE_URL_APP=https://CHANGEME.acme.dev
+pg 1 "angle-bracket placeholder"                   BASE_URL_APP='https://<your-host>.acme.dev'
+pg 1 "example.com"                                 BASE_URL_APP=https://example.com
+pg 1 "subdomain of example.com"                    BASE_URL_APP=https://admin.staging.example.com
+pg 1 "example.org"                                 BASE_URL_APP=https://example.org
+pg 1 "example.net"                                 BASE_URL_APP=https://example.net
+pg 1 "reserved .example TLD"                       BASE_URL_APP=https://app.example
+pg 1 "CHANGEME left in a secondary"                BASE_URL_APP=https://staging.acme.dev BASE_URL_ADMIN=CHANGEME
+pg 0 "unset secondary stays fine"                  BASE_URL_APP=https://staging.acme.dev
+
+echo "  -- credentials are masked in the output"
+pg 0 "staging URL with userinfo still passes"      BASE_URL_APP=https://qa:hunter2@staging.acme.dev
+if printf '%s' "$PG_OUT" | grep -q 'hunter2'; then
+  bad=$((bad+1)); echo "  FAIL  the password reached the output"
+else
+  pass=$((pass+1)); echo "  ok    the password never reaches the output"
+fi
+
+echo "  -- .env in CLAUDE_PROJECT_DIR is loaded"
+new_dir; ENVDIR=$DIR
+printf 'BASE_URL_APP=https://prod.acme.com\n' > "$ENVDIR/.env"
+EMPTY_SAVED=$EMPTY; EMPTY=$ENVDIR
+pg 1 ".env pointing at prod refuses"
+printf 'BASE_URL_APP=https://staging.acme.dev\n' > "$ENVDIR/.env"
+pg 0 ".env pointing at staging passes"
+EMPTY=$EMPTY_SAVED
+
+echo "---"
+if [ "$bad" -ne 0 ]; then echo "qa-scaffoldtest: ❌ $bad of $((pass+bad)) cases FAILED"; exit 1; fi
+echo "qa-scaffoldtest: ✅ all $pass cases passed"

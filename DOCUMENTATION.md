@@ -916,7 +916,8 @@ qa-warden/
     ├── bin/
     │   ├── qa-scaffold             # the deterministic substrate installer
     │   ├── qa-selfcheck            # the plugin's own consistency checks (not shipped to projects)
-    │   └── qa-hooktest             # regression tests for the two PreToolUse hooks (not shipped)
+    │   ├── qa-hooktest             # regression tests for the two PreToolUse hooks (not shipped)
+    │   └── qa-scaffoldtest         # tests for qa-scaffold (stamp, settings merge, --resync) and prod-guard.sh (not shipped)
     ├── evals/                      # behavioural evals: each case plants one defect for an agent to catch
     └── CHANGELOG.md                # release notes, one entry per plugin version
 ```
