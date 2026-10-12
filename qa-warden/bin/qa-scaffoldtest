@@ -372,15 +372,45 @@ run_launcher "$D" "$CFG"
 check_eq "launcher passes the doctor's exit code through" "$DR_RC" "$LN_RC"
 check "launcher names the plugin it runs" grep -qF "recorded plugin install → $here" <<<"$LN_OUT"
 check_same "launcher output is the doctor's, after its one notice line" "$fresh_out" "$(tail -n +2 <<<"$LN_OUT")"
+# The 0 == 0 case above cannot tell a pass-through from a launcher that always exits 0. Make the
+# doctor FAIL (a toolkit-owned file missing is a ❌) and require the same non-zero code.
+mv "$D/playwright.config.ts" "$D/playwright.config.ts.away"
+run_doctor "$D"
+check_eq "precondition: doctor exits 1 with playwright.config.ts missing" "1" "$DR_RC"
+run_launcher "$D" "$CFG"
+check_eq "launcher passes a failing doctor's exit code through (1)" "1" "$LN_RC"
+mv "$D/playwright.config.ts.away" "$D/playwright.config.ts"
 # A project-scope record for THIS directory outranks a user-scope one.
 new_dir; NODOC=$DIR   # a "plugin" with no doctor in it
 record "$CFG" "[{\"scope\": \"user\", \"installPath\": \"$NODOC\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"},
                 {\"scope\": \"project\", \"projectPath\": \"$D\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-01T00:00:00Z\"}]"
 run_launcher "$D" "$CFG"
 check "launcher prefers this project's install over the user-scope one" grep -qF "recorded plugin install → $here" <<<"$LN_OUT"
+# Within one tier the newest record wins, not the first in the file: the stale one comes first here.
+record "$CFG" "[{\"scope\": \"user\", \"installPath\": \"$NODOC\", \"lastUpdated\": \"2026-09-01T00:00:00Z\"},
+                {\"scope\": \"user\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
+run_launcher "$D" "$CFG"
+check "launcher picks the newest record within a scope, not the first" grep -qF "recorded plugin install → $here" <<<"$LN_OUT"
 record "$CFG" "[{\"scope\": \"user\", \"installPath\": \"$NODOC\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
 run_launcher "$D" "$CFG"
 check_eq "launcher exits 2 when the recorded plugin has no doctor" "2" "$LN_RC"
+check "  and says the plugin is older than the launcher" grep -qF "older than this launcher" <<<"$LN_OUT"
+record "$CFG" "[{\"scope\": \"user\", \"installPath\": \"$NODOC/gone\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
+run_launcher "$D" "$CFG"
+check_eq "launcher exits 2 when the recorded install path is gone" "2" "$LN_RC"
+check "  and says the record is stale, not that the plugin is old" grep -qF "no longer exists" <<<"$LN_OUT"
+printf '{ not json\n' > "$CFG/plugins/installed_plugins.json"
+run_launcher "$D" "$CFG"
+check_eq "launcher exits 2 on a malformed install record" "2" "$LN_RC"
+check "  and says jq failed to read it" grep -qF "jq failed to read" <<<"$LN_OUT"
+# A jq that is found but cannot run (this is what an x86-only jq does on Apple silicon).
+new_dir; FAKEJQ=$DIR
+printf '#!/bin/sh\necho "fake jq cannot execute" >&2\nexit 126\n' > "$FAKEJQ/jq"
+chmod +x "$FAKEJQ/jq"
+record "$CFG" "[{\"scope\": \"user\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
+run_launcher "$D" "$CFG" PATH="$FAKEJQ:$PATH"
+check_eq "launcher exits 2 when jq cannot run" "2" "$LN_RC"
+check "  and shows jq's own error" grep -qF "fake jq cannot execute" <<<"$LN_OUT"
 new_dir; EMPTYCFG=$DIR
 run_launcher "$D" "$EMPTYCFG"
 check_eq "launcher exits 2 with no install record (no guessing)" "2" "$LN_RC"

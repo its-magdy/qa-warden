@@ -8,8 +8,9 @@
 #
 # It finds the plugin through the install Claude Code recorded in
 # ${CLAUDE_CONFIG_DIR:-~/.claude}/plugins/installed_plugins.json: this project's local- or
-# project-scope install first, then the user-scope one, then the most recently updated. Then it
-# runs that plugin's doctor in this directory and passes its exit code through.
+# project-scope install first, then the user-scope one, then any other, the most recently updated
+# first within each. Then it runs that plugin's doctor in this directory and passes its exit code
+# through.
 #
 # Why the checks moved out of the project: a stamped doctor was refreshed only by
 # /qa-warden:init --resync, so every new check reached a project one repair late, and a doctor
@@ -41,23 +42,37 @@ if [ ! -f "$IPJ" ]; then
   exit 2
 fi
 
-# pwd AND pwd -P: a recorded projectPath may be either form (/tmp is /private/tmp on macOS).
-PLUGIN=$(jq -r --arg pwd "$(pwd)" --arg pwdp "$(pwd -P)" '
-  [ .plugins // {} | to_entries[] | select(.key | startswith("qa-warden@")) | .value[] ]
-  | (   map(select((.scope == "local" or .scope == "project")
-                   and (.projectPath == $pwd or .projectPath == $pwdp)))
-      + map(select(.scope == "user"))
-      + (sort_by(.lastUpdated) | reverse) )
-  | first
-  | .installPath // empty' "$IPJ" 2>/dev/null)
+# Which install to run: this project's local- or project-scope install, then the user-scope one,
+# then any other. Within each tier the most recently updated entry wins, so a stale record that
+# happens to come first in the file does not. pwd AND pwd -P: a recorded projectPath may be
+# either form (/tmp is /private/tmp on macOS).
+# stderr is captured with stdout on purpose: on success jq prints only the path, and on failure
+# (a jq that cannot execute, e.g. one built for another CPU, or a malformed record) the message
+# says why instead of reading as "no install recorded".
+if ! PLUGIN=$(jq -r --arg pwd "$(pwd)" --arg pwdp "$(pwd -P)" '
+    def newest_first: sort_by(.lastUpdated // "") | reverse;
+    [ .plugins // {} | to_entries[] | select(.key | startswith("qa-warden@")) | .value[] ]
+    | (   (map(select((.scope == "local" or .scope == "project")
+                      and (.projectPath == $pwd or .projectPath == $pwdp))) | newest_first)
+        + (map(select(.scope == "user")) | newest_first)
+        + newest_first )
+    | first
+    | .installPath // empty' "$IPJ" 2>&1); then
+  echo "❌ scripts/doctor.sh: jq failed to read $IPJ: $PLUGIN. $HOW" >&2
+  exit 2
+fi
 
 if [ -z "$PLUGIN" ]; then
   echo "❌ scripts/doctor.sh: $IPJ records no qa-warden install. $HOW" >&2
   exit 2
 fi
+if [ ! -d "$PLUGIN" ]; then
+  echo "❌ scripts/doctor.sh: the recorded qa-warden install at $PLUGIN no longer exists, so the install record is stale. Reinstall or update the plugin in Claude Code (/plugin), then run this again. $HOW" >&2
+  exit 2
+fi
 DOCTOR="$PLUGIN/skills/doctor/scripts/doctor.sh"
 if [ ! -f "$DOCTOR" ]; then
-  echo "❌ scripts/doctor.sh: the recorded qa-warden install at $PLUGIN has no skills/doctor/scripts/doctor.sh. It predates this launcher; update the plugin, or run its own /qa-warden:doctor." >&2
+  echo "❌ scripts/doctor.sh: the recorded qa-warden install at $PLUGIN is older than this launcher (it has no skills/doctor/scripts/doctor.sh). Update the plugin (claude plugin update qa-warden, or /plugin in Claude Code), then run this again." >&2
   exit 2
 fi
 

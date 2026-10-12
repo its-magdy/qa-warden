@@ -115,9 +115,11 @@ projects.
   version by mtime, which could be a stale orphaned one ("baseline GUESSED by newest mtime"). The
   plugin doctor uses the plugin it sits in and reads no environment variable for it.
 - **`scripts/doctor.sh` is now a small launcher** for running doctor from a terminal. It reads the
-  install Claude Code recorded (this project's install, then your user install), runs that plugin's
-  doctor and passes its exit code through. With no recorded install it exits 2 and runs nothing; it
-  never guesses, and it ignores `$CLAUDE_PLUGIN_ROOT` (it executes what it finds, and older projects
+  install Claude Code recorded (this project's install, then your user install, the newest record
+  first within each), runs that plugin's doctor and passes its exit code through. With no recorded
+  install it exits 2 and runs nothing, and it says which case it hit: no record, a record jq could
+  not read (a broken jq, malformed JSON), an install path that no longer exists, or a plugin older
+  than the launcher. It never guesses, and it ignores `$CLAUDE_PLUGIN_ROOT` (it executes what it finds, and older projects
   carry an allow rule for `CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh`). In CI, where no plugin is
   installed, check out the plugin and run `bash <checkout>/qa-warden/skills/doctor/scripts/doctor.sh`
   from the project root. It is still toolkit-owned (in `resync-set.txt`, edit-denied).
@@ -127,14 +129,19 @@ projects.
   (they pre-approve running the edit-denied launcher), so doctor Check 9c does not flag them.
 - **Upgrading:** update the plugin, then run `/qa-warden:init --resync`. Until then doctor reports
   `substrate drift: scripts/doctor.sh` (and `scripts/README.md`); `--resync` backs up the old full
-  copy to `scripts/doctor.sh.qa-bak` and puts the launcher in its place. A teammate whose plugin is
+  copy to `scripts/doctor.sh.qa-bak` and puts the launcher in its place. **Delete that backup**
+  (`find . -name '*.qa-bak' -not -path './node_modules/*' -delete`, as the resync banner says): it is
+  the old full doctor, and the `Bash(bash scripts/doctor.sh*)` rule your project still carries
+  pre-approves running it, since that pattern also matches `scripts/doctor.sh.qa-bak`. A teammate whose plugin is
   older than this keeps running their own plugin's `/qa-warden:doctor`, which calls the stamped
   path. That now reaches the launcher, which finds no doctor in their plugin, exits 2 and tells
   them to update it (in a project first stamped by this version the call also prompts, because the
   allow rule it relied on is no longer shipped).
-- `bin/qa-scaffoldtest` gains 15 cases: the plugin doctor finds its baseline (no drift on a fresh
-  stamp, a real edit reported, `CLAUDE_PLUGIN_ROOT` ignored) and the launcher (exit code passed
-  through, project install before user install, exit 2 with no record or a doctor-less plugin).
+- `bin/qa-scaffoldtest` gains 25 cases: the plugin doctor finds its baseline (no drift on a fresh
+  stamp, a real edit reported, `CLAUDE_PLUGIN_ROOT` ignored) and the launcher (a failing doctor's
+  exit 1 passed through, project install before user install, newest record within a scope, and
+  exit 2 with a distinct message for no record, a malformed record, a jq that cannot run, a missing
+  install path and a doctor-less plugin).
 
 ---
 

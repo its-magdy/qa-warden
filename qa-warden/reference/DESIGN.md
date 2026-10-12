@@ -502,9 +502,14 @@ delete them to make the toolkit sound more complete than it is.
   defensible split is to honour `allow` deletions and, for `deny`, keep re-adding but **say so** — a
   receipt makes the report possible even where the obedience is not granted, which is the half of
   "neither warned nor obeyed" that costs nothing to fix.
+- **Plugin scripts call the project's STAMPED helpers, so a helper change must stay compatible with
+  older stamps.** The plugin doctor runs the project's `check-last-run.sh`, `spec-links.sh`,
+  `post-run-checks.sh`, `bug-status.sh` and `prod-guard.sh`, as `coverage.sh` and `impact.sh` already
+  do with `spec-links.sh` and `run.sh` with three others; those copies change only on `/qa-warden:init --resync`, so a new plugin
+  can meet an old helper until the user resyncs.
 - **Mobile is deliberately out of scope, and the successor is a sibling plugin, not a mode here.**
   Playwright does mobile-**web** emulation only (viewport/touch) — no native iOS/Android — so the entire
-  template layer (`playwright.config.ts`, fixtures, `prod-guard.ts`, `doctor.sh`) is Playwright-shaped
+  template layer (`playwright.config.ts`, fixtures, `prod-guard.ts`) and the doctor are Playwright-shaped
   and does not transfer. The 2026 substrate pick is **Maestro** (YAML flows, an official MCP server that
   plugs into Claude Code the same way the exploration lane does); **Appium** stays the standard for
   deep/hybrid/system-level coverage but is much heavier to author and heal — an escape hatch, not a
