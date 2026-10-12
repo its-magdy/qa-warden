@@ -8,9 +8,11 @@
 #
 # It finds the plugin through the install Claude Code recorded in
 # ${CLAUDE_CONFIG_DIR:-~/.claude}/plugins/installed_plugins.json: this project's local- or
-# project-scope install first, then the user-scope one, then any other, the most recently updated
-# first within each. Then it runs that plugin's doctor in this directory and passes its exit code
-# through.
+# project-scope install first, then the user-scope one, then any other that is not tied to a
+# project (a managed one, say), the most recently updated first within each. Another project's
+# local- or project-scope install is never used: that scope applies only to its own repository,
+# so it is not the plugin this project runs. Then it runs that plugin's doctor in this directory
+# and passes its exit code through.
 #
 # Why the checks moved out of the project: a stamped doctor was refreshed only by
 # /qa-warden:init --resync, so every new check reached a project one repair late, and a doctor
@@ -18,12 +20,16 @@
 #
 # Two things this launcher deliberately does not do:
 #   - Guess. If no install is recorded it stops (exit 2). The doctor used to fall back to the
-#     newest cached plugin version by mtime, and an orphaned old version can be the newest.
+#     newest cached plugin version by mtime, and an orphaned old version can be the newest. The
+#     same goes when the only installs belong to other projects: it names them and stops.
 #   - Read $CLAUDE_PLUGIN_ROOT. This file EXECUTES the doctor it finds, and projects stamped
 #     before this change carry the allow rule `Bash(CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh*)`.
 #     Honouring the variable would pre-approve running any file an agent could place at
-#     <dir>/skills/doctor/scripts/doctor.sh. To run a particular plugin build (a CI checkout, a
-#     development tree), call its doctor directly from the project root:
+#     <dir>/skills/doctor/scripts/doctor.sh. Ignoring it does not make that rule safe: its first
+#     `*` also matches other assignments (CLAUDE_CONFIG_DIR, which this launcher does read) and
+#     whole programs, so doctor Check 9c reports it as a retired rule to delete.
+#     To run a particular plugin build (a CI checkout, a development tree), call its doctor
+#     directly from the project root:
 #       bash <plugin>/skills/doctor/scripts/doctor.sh
 #
 # Exit codes: the doctor's own (0 healthy or warnings only, 1 on any ❌), or 2 when no plugin was
@@ -43,19 +49,25 @@ if [ ! -f "$IPJ" ]; then
 fi
 
 # Which install to run: this project's local- or project-scope install, then the user-scope one,
-# then any other. Within each tier the most recently updated entry wins, so a stale record that
-# happens to come first in the file does not. pwd AND pwd -P: a recorded projectPath may be
-# either form (/tmp is /private/tmp on macOS).
+# then any other that is not local- or project-scope. Within each tier the most recently updated
+# entry wins, so a stale record that happens to come first in the file does not. pwd AND pwd -P:
+# a recorded projectPath may be either form (/tmp is /private/tmp on macOS), and a trailing `/`
+# on either side is ignored.
+# The last tier used to be every record, so with no install for this project and none for the
+# user it ran ANOTHER project's install: a version this project does not run, and one that may
+# be older or newer than its stamp.
 # stderr is captured with stdout on purpose: on success jq prints only the path, and on failure
 # (a jq that cannot execute, e.g. one built for another CPU, or a malformed record) the message
 # says why instead of reading as "no install recorded".
 if ! PLUGIN=$(jq -r --arg pwd "$(pwd)" --arg pwdp "$(pwd -P)" '
     def newest_first: sort_by(.lastUpdated // "") | reverse;
+    def per_project: .scope == "local" or .scope == "project";
+    def here: (.projectPath // "" | rtrimstr("/")) as $p
+              | $p != "" and ($p == ($pwd | rtrimstr("/")) or $p == ($pwdp | rtrimstr("/")));
     [ .plugins // {} | to_entries[] | select(.key | startswith("qa-warden@")) | .value[] ]
-    | (   (map(select((.scope == "local" or .scope == "project")
-                      and (.projectPath == $pwd or .projectPath == $pwdp))) | newest_first)
+    | (   (map(select(per_project and here)) | newest_first)
         + (map(select(.scope == "user")) | newest_first)
-        + newest_first )
+        + (map(select(per_project | not)) | newest_first) )
     | first
     | .installPath // empty' "$IPJ" 2>&1); then
   echo "❌ scripts/doctor.sh: jq failed to read $IPJ: $PLUGIN. $HOW" >&2
@@ -63,7 +75,21 @@ if ! PLUGIN=$(jq -r --arg pwd "$(pwd)" --arg pwdp "$(pwd -P)" '
 fi
 
 if [ -z "$PLUGIN" ]; then
-  echo "❌ scripts/doctor.sh: $IPJ records no qa-warden install. $HOW" >&2
+  # Nothing usable. Say whether that is "no install at all" or "installs, but only for other
+  # projects": the second needs an install here, not a reinstall. List each one with the command
+  # that runs its doctor here, for a user who wants that build anyway.
+  OTHERS=$(jq -r '[ .plugins // {} | to_entries[] | select(.key | startswith("qa-warden@")) | .value[]
+                    | select(.scope == "local" or .scope == "project")
+                    | "  \(.projectPath // "a project the record does not name"): "
+                      + (if .installPath then "bash \"\(.installPath)/skills/doctor/scripts/doctor.sh\""
+                         else "no install path recorded" end) ]
+                  | unique | .[]' "$IPJ" 2>/dev/null)
+  if [ -n "$OTHERS" ]; then
+    echo "❌ scripts/doctor.sh: $IPJ records qa-warden only for other projects, not for this one ($(pwd)) or for your user. A local- or project-scope install applies only to its own project, so it is not run here. Install the plugin for this project or for your user (/plugin in Claude Code), then run this again; or, from this directory, run one of those installs' doctor directly:" >&2
+    printf '%s\n' "$OTHERS" >&2
+  else
+    echo "❌ scripts/doctor.sh: $IPJ records no qa-warden install. $HOW" >&2
+  fi
   exit 2
 fi
 if [ ! -d "$PLUGIN" ]; then

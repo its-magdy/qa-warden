@@ -74,9 +74,10 @@ const siteProjectDefaults = {
 };
 
 // Every site except `app` gets its project FROM THE ENVIRONMENT, never from a hand edit. This
-// file is toolkit-owned (scripts/resync-set.txt): doctor Check 9 flags any local change and
-// `/qa-warden:init --resync` overwrites it, so a hand-added project was a standing drift warning
-// that the next resync silently deleted — after which its @site: specs ran in NO project.
+// file is toolkit-owned (listed in the plugin's manifests/resync-set.txt): doctor Check 9 flags
+// any local change and `/qa-warden:init --resync` overwrites it, so a hand-added project was a
+// standing drift warning that the next resync silently deleted — after which its @site: specs
+// ran in NO project.
 // Rule: a set, non-empty BASE_URL_<SITE> registers a project named <site> that selects
 // @site:<site>. <SITE> maps to the id lowercased with `_` → `-` (BASE_URL_ADMIN → admin,
 // BASE_URL_ADMIN_PORTAL → admin-portal); doctor Check 10 holds each app.context.md sites[]

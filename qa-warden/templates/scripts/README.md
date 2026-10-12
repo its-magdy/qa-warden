@@ -60,9 +60,12 @@ on any ❌.
 
 This file is only a launcher for running it from a terminal: `bash scripts/doctor.sh` finds the
 plugin install Claude Code recorded (`~/.claude/plugins/installed_plugins.json`) and runs that
-plugin's doctor here. It exits 2, having run nothing, when no install is recorded. In CI, where no
-plugin is installed, check out the plugin at the tag you use and run its doctor from this
-directory: `bash <checkout>/qa-warden/skills/doctor/scripts/doctor.sh`.
+plugin's doctor here: this project's install, else your user install, else one not tied to a
+project. It never runs another project's local- or project-scope install, since that scope
+applies only to its own repository. It exits 2, having run nothing, when no usable install is
+recorded, and names any other projects' installs with the command to run their doctor. In CI,
+where no plugin is installed, check out the plugin at the tag you use and run its doctor from
+this directory: `bash <checkout>/qa-warden/skills/doctor/scripts/doctor.sh`.
 
 ## `check-last-run.sh` — canonical last-run.json gate
 
@@ -156,7 +159,7 @@ points read it — `bin/qa-scaffold` (the `/qa-warden:init` path) and `init.sh` 
 plugin-free `npm run init` path) — so the two provably stamp the **same** tree.
 It replaced a pair of hand-kept `mkdir -p` lists held together only by matching
 "keep this list IDENTICAL" comments, which nothing enforced. Adding a runtime
-directory is a one-line edit here; keep it consistent with the `Write`/`Edit`
+directory is a one-line edit here; keep it consistent with the `Edit(...)`
 allowlist in `.claude/settings.json` and CLAUDE.md §"Tooling allowed paths",
 or the first agent write into the new directory hits an approval wall.
 

@@ -125,8 +125,9 @@ projects.
   from the project root. It is still toolkit-owned (in `resync-set.txt`, edit-denied).
 - **Two allow rules leave the shipped `settings.json`:** `Bash(bash scripts/doctor.sh*)` and
   `Bash(CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh*)`. Nothing Claude runs calls the stamped path
-  any more. The merge never removes a rule, so existing projects keep both; they are harmless
-  (they pre-approve running the edit-denied launcher), so doctor Check 9c does not flag them.
+  any more. The merge never removes a rule, so existing projects keep both. The first is harmless
+  (it pre-approves only the edit-denied launcher). The second is not, and doctor Check 9c now flags
+  it: see "The doctor launcher stops running another project's install" below.
 - **Upgrading:** update the plugin, then run `/qa-warden:init --resync`. Until then doctor reports
   `substrate drift: scripts/doctor.sh` (and `scripts/README.md`); `--resync` backs up the old full
   copy to `scripts/doctor.sh.qa-bak` and puts the launcher in its place. **Delete that backup**
@@ -305,6 +306,63 @@ projects.
   worker-scoped seeding rule. Those rules (seeding, parallel and cross-run safety, `test lock:`,
   factory resolution, `must_fail_when:`/`fail_if:` invariants) sat under `## Situation steps ->
   page.route / page.clock`, which is about `fault:`/`clock:` only. Text unchanged; no behaviour change.
+
+### The doctor launcher stops running another project's install; stale wording in stamped files
+
+- **`scripts/doctor.sh` no longer runs another project's plugin install.** The launcher tried this
+  project's local- or project-scope install, then the user-scope one, then every record. That last
+  tier included local- and project-scope installs recorded for other directories, so on a machine
+  where qa-warden was installed only for another project, `bash scripts/doctor.sh` ran that
+  project's copy here. Claude Code applies a local- or project-scope install only to its own
+  repository, so that copy is not the plugin this project runs, and its version can be older or
+  newer than this project's stamp. The last tier now takes only records not tied to a project (a
+  managed install, for example). When the only installs belong to other projects, the launcher
+  exits 2 and runs nothing. It lists each of those projects with the
+  `bash "<installPath>/skills/doctor/scripts/doctor.sh"` command that runs its doctor here, for
+  anyone who wants that build anyway. A record whose `projectPath` matches this directory in either
+  form (`pwd` or `pwd -P`), with or without a trailing `/`, still counts as this project.
+- **Doctor Check 9c now warns on `Bash(CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh*)`.** Projects
+  stamped before `/qa-warden:doctor` moved into the plugin still carry it, because the settings
+  merge never removes a rule. The earlier section called it harmless, and it is not. A `*` in a
+  Bash rule matches any text, spaces included, so the rule also pre-approves
+  `CLAUDE_PLUGIN_ROOT=x CLAUDE_CONFIG_DIR=artifacts/x bash scripts/doctor.sh`. The launcher reads
+  `CLAUDE_CONFIG_DIR`, and `artifacts/` is agent-writable, so an install record written there
+  chooses the doctor that runs. It also pre-approves
+  `CLAUDE_PLUGIN_ROOT=x bash -c '<anything>' bash scripts/doctor.sh`. Nothing calls it any more.
+  Like the `printenv` rules, it gets a counted ⚠️ that names both forms; delete the line by hand.
+- **The plain `Bash(bash scripts/doctor.sh*)` is named as a leftover, not warned on.** It begins
+  with the program, so an allow match cannot carry a variable assignment in front of it, and a
+  compound command is matched one subcommand at a time. All it pre-approves is running the
+  edit-denied launcher. Doctor prints one ℹ️ line (not counted as a warning) calling it safe to
+  delete, the way it already names `scripts/review-marker.sh`. Delete the rule, not
+  `scripts/doctor.sh`, which is the launcher.
+- **Stale wording in four stamped files.** `playwright.config.ts` and `scripts/runtime-dirs.txt`
+  pointed at `scripts/resync-set.txt`, which is no longer stamped; they now name the plugin's
+  `manifests/resync-set.txt`. `scripts/runtime-dirs.txt` and `scripts/README.md` said the stamped
+  settings have a `Write`/`Edit` allowlist, but they have only `Edit(...)` rules.
+  `scripts/README.md` also describes the launcher's new order and exit. `scripts/retire-delete.sh`
+  said its allow-listed wrapper pattern was the one used for `doctor.sh`, which no longer has an
+  allow rule; it now names `prod-guard.sh` only. These edits change no behaviour.
+- **Already-stamped projects:** until you run `/qa-warden:init --resync`, doctor reports one ⚠️
+  `substrate drift` line for each of the five changed stamped files: `playwright.config.ts`,
+  `scripts/README.md`, `scripts/doctor.sh`, `scripts/retire-delete.sh` and
+  `scripts/runtime-dirs.txt`. `--resync` backs each one up to `.qa-bak` and refreshes it.
+  Measured on a project stamped from the previous commit that still has both old doctor rules:
+  2 warnings before; after the plugin update, 8 (the 5 drift lines plus the Check 9c warning)
+  and the ℹ️; 3 after `--resync`. The Check 9c warning and the ℹ️ stay until you delete those two
+  rules. A fresh stamp's doctor output is unchanged. Doctor still runs 32 numbered checks.
+- `bin/qa-scaffoldtest` gains 23 cases (270 → 293).
+  - For the launcher: when another project's install is the only one, it exits 2, runs nothing,
+    and lists that project with its doctor command. A project record with no `projectPath` is
+    listed as unnamed. The same record with this project's path is picked (the control), and so
+    is one ending in `/`. A managed install beats another project's newer one. Run through a
+    symlink, a record holding the real path or the symlink path is picked. Restoring the old
+    fallback tier fails 7 of them.
+  - For the two rules: neither is in the template, and a fresh stamp gets neither line. With both
+    present, doctor prints the ℹ️ for the plain rule and the Check 9c ⚠️ for the other, naming
+    `CLAUDE_CONFIG_DIR` and `bash -c`. It exits 0, counts one more warning than a fresh stamp, and
+    prints no other new line. Each rule on its own gets only its own line, and the ℹ️ is not
+    counted. Removing the rule from Check 9c's list fails 5 of them.
 
 ---
 
