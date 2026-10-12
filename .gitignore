@@ -12,3 +12,7 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Claude Code worktrees (claude --worktree, subagent isolation) live here. Untracked, they show up
+# as embedded repos that `git add -A` turns into gitlinks; Claude Code's worktrees doc says to ignore them.
+.claude/worktrees/

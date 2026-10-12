@@ -299,6 +299,13 @@ projects.
   that runs `qa-scaffoldtest` and `qa-hooktest` again with mawk first on PATH, because the runner's
   default awk is gawk and nothing else exercised mawk. Tests and CI only; no plugin behaviour changes.
 
+### The generator's data-isolation rules get their own heading
+
+- `agents/generator.md` gains a `## Data isolation, factories and invariants` heading before the
+  worker-scoped seeding rule. Those rules (seeding, parallel and cross-run safety, `test lock:`,
+  factory resolution, `must_fail_when:`/`fail_if:` invariants) sat under `## Situation steps ->
+  page.route / page.clock`, which is about `fault:`/`clock:` only. Text unchanged; no behaviour change.
+
 ---
 
 ## 0.5.6 — nightly CI hardening, a truncated hook message, shellcheck cleanup (2026-10-09)
