@@ -360,7 +360,7 @@ Why it matters: a 2026 study of autonomous test repair documented "assertion wea
 qa-warden/                        the plugin
 ├── .claude-plugin/plugin.json    manifest; pinned `version`
 ├── agents/     planner, generator, verifier, healer, reviewer, exploration, ideation
-├── skills/     23 skills: the 19 /qa-warden:* commands + 4 model-only helpers
+├── skills/     24 skills: the 19 /qa-warden:* commands + 5 model-only helpers
 │               (playwright-cli, axe-a11y, visual-regression, test-data-seed)
 ├── hooks/      2 PreToolUse gates: lexical reviewer FAILs, and the healer/verifier
 │               assertion prohibition (see qa-warden/hooks/README.md)

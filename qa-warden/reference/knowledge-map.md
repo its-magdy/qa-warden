@@ -122,6 +122,7 @@ recommend a command rather than run it. The model-invocable ones (`help` `review
 | **test-data-seed** | Parallel-safe, API-seeded, teardown-by-tag fixtures (survives 10+ workers). | auto (generator authoring) | no |
 | **axe-a11y** | WCAG accessibility assertions per UI state. Catches ~30–40% by success-criterion (~57% by issue volume); rest needs a human. | auto; `/qa-warden:review url=` | no |
 | **visual-regression** | `toHaveScreenshot()` layout/CSS oracle that text assertions miss. | `/qa-warden:review url=`; otherwise only when you ask for a screenshot check in the main session. **Not reachable from a spec** — no oracle key requests a screenshot, so planner/generator/verifier never invoke it. | no |
+| **test-case-contract** | The spec format: YAML schema, the closed 16-key oracle vocabulary and its argument shapes, `fault:`/`clock:` situation steps, the smoke-lane rule. It used to be a section of the project's `CLAUDE.md`. | preloaded by planner, generator, verifier, reviewer, ideation; `/qa-warden:import-cases` | no |
 | **metamorphic-relations** | Generate 2–3 invariant-preserving "twin" specs that catch spec drift plain assertions can't. **Authored by the verifier** post-green (it has Write, and did not write the parent); reviewer Check 6 only *verifies* they exist and agree. Twins are tagged `@metamorphic` + `@regression`, never `@smoke`. | verifier (post-green, authors); reviewer (verifies, Check 6); `/qa-warden:review url=`; human | **yes** |
 
 ## Mental model (the load-bearing "why"s)

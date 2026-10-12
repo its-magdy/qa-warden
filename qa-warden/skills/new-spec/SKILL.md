@@ -97,9 +97,8 @@ The `site:` field is REQUIRED and MUST match a `sites[].id` in the hot tier
 (reviewer Check 8 fails the PR on unknown ids).
 
 **Use the closed oracle vocabulary only** — the canonical 16-key set defined in
-CLAUDE.md §"Test case format contract" (the stamped single source of truth; the
-planner and reviewer Check 4 mirror it — do not restate the list here, defer to
-CLAUDE.md). No free-form "should look right". **Include `must_fail_when` and `output_schema`**
+the `test-case-contract` skill (the single source of truth, preloaded into the planner;
+reviewer Check 4 mirrors it — do not restate the list here, defer to the skill). No free-form "should look right". **Include `must_fail_when` and `output_schema`**
 — `must_fail_when` documents the defects the test must catch; `output_schema` gates
 the evidence. `must_fail_when` is **advisory in the sense that the author isn't forced
 to *declare* one — but once declared it IS enforced**: reviewer **Check 2b** FAILs any
@@ -110,7 +109,7 @@ declared invariant that you drop from the oracle is a merge blocker, not a silen
 Only `output_schema` lacks a reviewer presence-check. (See CLAUDE.md §"Oracle defense".)
 
 Negative/error-path specs also need `fail_if:` + `prompt_guardrail:` stanzas
-(see CLAUDE.md §Test case format).
+(see the `test-case-contract` skill).
 
 **Every APPROVED `.cases.md` case must become a scenario — or be explicitly waived.** When you
 scope an approved checklist into `scenarios:`, do not silently drop an approved row: if you

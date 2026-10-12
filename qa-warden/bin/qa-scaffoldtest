@@ -22,7 +22,10 @@
 #   4. doctor          the plugin's skills/doctor/scripts/doctor.sh finds its baseline beside
 #                      itself (no drift on a fresh stamp, real drift reported, CLAUDE_PLUGIN_ROOT
 #                      ignored), and the stamped scripts/doctor.sh launcher runs it from the
-#                      recorded install, or exits 2 without guessing
+#                      recorded install, or exits 2 without guessing; the spec format's move from
+#                      CLAUDE.md into the test-case-contract skill (old section warned, a missing
+#                      pointer nudged, Check 2 compares key sets with the skill exactly,
+#                      fault:/clock: no longer demanded in CLAUDE.md)
 #   5. prod-guard.sh   the URL table: staging passes, a word-boundary prod marker refuses,
 #                      QA_ALLOW_PROD=1 lifts the marker refusal ONLY, placeholders never pass
 #
@@ -417,6 +420,74 @@ check_eq "launcher exits 2 with no install record (no guessing)" "2" "$LN_RC"
 check "  and runs nothing" test "$(grep -c '^doctor: ' <<<"$LN_OUT")" = "0"
 run_launcher "$D" "$EMPTYCFG" CLAUDE_PLUGIN_ROOT="$here"
 check_eq "launcher ignores CLAUDE_PLUGIN_ROOT (still exits 2)" "2" "$LN_RC"
+
+echo "  -- the spec format lives in the test-case-contract skill, not in CLAUDE.md"
+OLDSEC="still has the '## Test case format contract' section"
+check "a fresh CLAUDE.md has no '## Test case format contract' section" \
+  test "$(grep -c '^## Test case format contract' "$D/CLAUDE.md")" = "0"
+check "a fresh stamp gets no old-section warning" test "$(grep -cF "$OLDSEC" <<<"$fresh_out")" = "0"
+check "a fresh stamp gets no oracle-key finding (Check 2 reads the skill, not CLAUDE.md)" \
+  test "$(grep -c "oracle key '" <<<"$fresh_out")" = "0"
+# A project stamped before the move keeps the section, because CLAUDE.md is never resynced.
+new_dir; OLDP=$DIR
+stamp "$OLDP"
+printf '\n## Test case format contract\n\nSpecs are Markdown prose plus fenced YAML blocks.\n' >> "$OLDP/CLAUDE.md"
+printf '\n### Situation steps — `fault:` (network) and `clock:` (time)\n' >> "$OLDP/CLAUDE.md"
+run_doctor "$OLDP"
+check "a CLAUDE.md that still has the old section is warned" grep -qF "$OLDSEC" <<<"$DR_OUT"
+check_eq "  as a warning, so doctor still exits 0" "0" "$DR_RC"
+# Everything else matches a fresh stamp: the only new line besides the rollup is that warning.
+newlines=$(diff <(printf '%s\n' "$fresh_out") <(printf '%s\n' "$DR_OUT") | grep '^>' | grep -v '^> doctor: ')
+check_eq "  and it is the only new finding" "1" "$(printf '%s\n' "$newlines" | grep -c .)"
+check "  that one line is the old-section warning" grep -qF "$OLDSEC" <<<"$newlines"
+# Negative control: the heading is matched as a level-2 heading on its own line, not as text.
+new_dir; MENTP=$DIR
+stamp "$MENTP"
+printf '\nOur notes on the old "Test case format contract" are in the wiki.\n' >> "$MENTP/CLAUDE.md"
+printf '\n### Test case format contract\n\n## Test case format contract notes\n' >> "$MENTP/CLAUDE.md"
+run_doctor "$MENTP"
+check "a prose mention, a ### heading or a longer ## heading is not warned" \
+  test "$(grep -cF "$OLDSEC" <<<"$DR_OUT")" = "0"
+# With the section and the template's pointer both gone, CLAUDE.md has no `fault:`/`clock:` at
+# all. The vocabulary-containment check must not ask for them back: they ship in the skill now.
+grep -v -e 'fault:' -e 'clock:' "$MENTP/CLAUDE.md" > "$MENTP/CLAUDE.md.new"
+mv "$MENTP/CLAUDE.md.new" "$MENTP/CLAUDE.md"
+check "precondition: CLAUDE.md now mentions neither fault: nor clock:" \
+  test "$(grep -c -e 'fault:' -e 'clock:' "$MENTP/CLAUDE.md")" = "0"
+run_doctor "$MENTP"
+check "a CLAUDE.md without fault:/clock: is not asked to restore them" \
+  test "$(grep -c -e 'never mentions `fault:`' -e 'never mentions `clock:`' <<<"$DR_OUT")" = "0"
+# A CLAUDE.md whose old section was deleted without putting the template's pointer back: the
+# vocabulary-containment check nudges the pointer in, and that is the only new finding.
+new_dir; LEGP=$DIR
+stamp "$LEGP"
+awk '/^## Spec format$/{skip=1; next} skip && /^## /{skip=0} !skip' "$LEGP/CLAUDE.md" \
+  | sed 's/Closed vocabulary\*\* — the `test-case-contract` skill;/Closed vocabulary** — see above;/' > "$LEGP/CLAUDE.md.new"
+mv "$LEGP/CLAUDE.md.new" "$LEGP/CLAUDE.md"
+check "precondition: CLAUDE.md now never names test-case-contract" \
+  test "$(grep -c 'test-case-contract' "$LEGP/CLAUDE.md")" = "0"
+run_doctor "$LEGP"
+newlines=$(diff <(printf '%s\n' "$fresh_out") <(printf '%s\n' "$DR_OUT") | grep '^>' | grep -v '^> doctor: ')
+check "a CLAUDE.md without the pointer is asked to restore it" grep -qF 'never mentions `test-case-contract`' <<<"$newlines"
+check_eq "  and that is the only new finding" "1" "$(printf '%s\n' "$newlines" | grep -c .)"
+# Check 2 compares key SETS exactly. A key the skill does not define FAILs, including the words
+# that occur in the skill's prose (`value`, `lock`), which a substring scan used to let through.
+for bogus in not_a_real_key value lock; do
+  new_dir; VKP=$DIR
+  stamp "$VKP"
+  printf '%s\n' "$bogus" >> "$VKP/scripts/oracle-keys.txt"
+  run_doctor "$VKP"
+  check "Check 2 fails the manifest key '$bogus', which the skill does not define" grep -qF "oracle key '$bogus' (scripts/oracle-keys.txt)" <<<"$DR_OUT"
+  check_eq "  and doctor exits 1" "1" "$DR_RC"
+done
+# A skill key the project's manifest lacks (the project is older) is a WARN, not a FAIL.
+new_dir; VKP=$DIR
+stamp "$VKP"
+grep -vx 'clipboard_contains' "$VKP/scripts/oracle-keys.txt" > "$VKP/scripts/oracle-keys.txt.new"
+mv "$VKP/scripts/oracle-keys.txt.new" "$VKP/scripts/oracle-keys.txt"
+run_doctor "$VKP"
+check "Check 2 warns on a skill key missing from the manifest" grep -qF "oracle key 'clipboard_contains' is in the plugin's test-case-contract skill" <<<"$DR_OUT"
+check_eq "  as a warning (exit 0)" "0" "$DR_RC"
 
 # ------------------------------------------------------------------------------------------
 echo "prod-guard.sh — URL classification"

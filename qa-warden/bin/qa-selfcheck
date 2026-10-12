@@ -45,15 +45,29 @@ missing_keys() {
   grep -vxFf <(grep -oFf <(printf '%s\n' "$KEYS") "$1" 2>/dev/null | sort -u) <(printf '%s\n' "$KEYS")
 }
 
-# 9b. Plugin-side vocab drift (F-09) — check 2 greps the 16 keys against the PROJECT's CLAUDE.md
-#     ONLY, but the planner/generator/reviewer that actually COMPILE specs live in the plugin, and
-#     that is exactly where drift lands after a plugin upgrade (a project CLAUDE.md can be in sync
-#     while the shipped agents diverged). When $TMPL resolved (check 9), also grep the 16 keys
-#     against the plugin's agents so a post-upgrade divergence is caught, not just a local edit.
+# 9b. Plugin-side vocab drift (F-09). The 16 keys are defined in the plugin's test-case-contract
+#     skill (the SoT; it used to be a section of templates/CLAUDE.md) and mirrored by the
+#     planner/generator/reviewer that actually COMPILE specs. Grep the shipped manifest's keys
+#     against all four so a divergence is caught here, before it ships. doctor Check 2 compares a
+#     PROJECT's scripts/oracle-keys.txt against the same skill.
+#     Arm 2 (DELIVERY). The skill reaches the agents only through their `skills:` preload: it is no
+#     longer in CLAUDE.md, which every agent loaded for free. Drop the preload from one agent and
+#     that agent silently works without the vocabulary — for the reviewer, Check 4 has no SoT and
+#     passes whatever it is shown. And a skill with `disable-model-invocation: true` cannot be
+#     preloaded at all (sub-agents docs), so that flag would cut all five links at once.
+#     Arm 3 (COMPACTION). After a compaction Claude Code re-attaches each invoked skill but keeps
+#     only its first 5,000 tokens (code.claude.com/docs/en/skills.md). The docs do not say
+#     whether that also applies to a preload, so assume it does. The skill is longer than that, so
+#     the rules come first and the explanatory notes last. This arm checks that order: every
+#     normative anchor must lie inside the first 17,500 BYTES, which is 5,000 tokens at 3.5
+#     chars/token. Bytes are stricter than chars because the file has multi-byte dashes and
+#     arrows. A whole-file size cap would be simpler, but the file is ~20 KB and the tail that
+#     goes past the cap (the honest limits) is explanation, so a cap would mean cutting real
+#     content to satisfy a check.
 if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   # coverage.sh is NOT in this list: it builds KEYS_RE at runtime from scripts/oracle-keys.txt, so it
   # holds no key copy to drift (it refuses, exit 2, if the manifest is missing).
-  for af in agents/planner.md agents/generator.md agents/reviewer.md; do
+  for af in skills/test-case-contract/SKILL.md agents/planner.md agents/generator.md agents/reviewer.md; do
     apath="$TMPL/../$af"
     # A MISSING mirror must never read as "no drift". This check exists for the post-upgrade
     # case, and a plugin layout move (e.g. the commands/ -> skills/ migration) is exactly how a
@@ -67,6 +81,48 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
       echo "❌ oracle key '$k' missing from plugin $af — post-upgrade vocab drift (reviewer would FAIL specs its own planner authors)"; fail=$((fail+1))
     done < <(missing_keys "$apath")
   done
+  # Arm 2: every agent that reads specs preloads the contract, and the contract stays preloadable.
+  tcc="$TMPL/../skills/test-case-contract/SKILL.md"
+  if [ -f "$tcc" ]; then
+    if awk '/^---$/{c++; next} c==1' "$tcc" | grep -qE '^disable-model-invocation:[[:space:]]*true'; then
+      echo "❌ skills/test-case-contract/SKILL.md sets disable-model-invocation: true — a skill with that flag cannot be preloaded, so no agent receives the spec format or the oracle vocabulary"; fail=$((fail+1))
+    fi
+    for ag in planner generator verifier reviewer ideation; do
+      agf="$TMPL/../agents/$ag.md"
+      if [ ! -f "$agf" ]; then
+        echo "⚠️  agents/$ag.md not found — its test-case-contract preload is UNVERIFIED"; warn=$((warn+1)); continue
+      fi
+      # The frontmatter `skills:` list, comment lines skipped, one name per line.
+      preloads=$(awk '/^---$/{c++; next} c==1' "$agf" \
+        | awk '/^skills:/{f=1; next}
+               f && /^[[:space:]]*#/{next}
+               f && /^[[:space:]]*-/{sub(/^[[:space:]]*-[[:space:]]*/, ""); print; next}
+               {f=0}')
+      printf '%s\n' "$preloads" | grep -qx 'test-case-contract' \
+        || { echo "❌ agents/$ag.md does not preload test-case-contract (frontmatter skills:) — that agent reads or writes specs but no longer has the spec format or the oracle vocabulary in context"; fail=$((fail+1)); }
+    done
+    # Arm 3: the normative rules sit inside the part a compaction keeps.
+    tcc_head=$(head -c 17500 "$tcc")
+    while IFS= read -r anchor; do
+      [ -n "$anchor" ] || continue
+      if ! grep -qF -- "$anchor" "$tcc"; then
+        echo "❌ skills/test-case-contract/SKILL.md no longer contains the anchor '$anchor' — Check 9b arm 3 cannot place that rule; re-anchor it on the rule's new wording"; fail=$((fail+1))
+      elif ! printf '%s\n' "$tcc_head" | grep -qF -- "$anchor"; then
+        echo "❌ skills/test-case-contract/SKILL.md: '$anchor' is not wholly inside the first 17,500 bytes — after a compaction only the first ~5,000 tokens of a skill are re-attached, so this rule would be dropped. Move it above '## Authoring notes and honest limits'"; fail=$((fail+1))
+      fi
+    done <<'ANCHORS'
+invariant_holds_when:
+**Smoke-lane rule.**
+Closed **oracle vocabulary**
+| `a11y_violations_below` |
+**Two assertions with the same key
+| `clock:` |
+**The fired-proof rule
+**A scenario with a `fault:` step may not be tagged `smoke`.**
+**HAR replay is BANNED.**
+## Authoring notes and honest limits
+ANCHORS
+  fi
 fi
 
 # 9bb. Oracle ARGUMENT-SHAPE drift. Checks 2 and 9b compare key PRESENCE only — `missing_keys`
@@ -76,10 +132,10 @@ fi
 #      every existing check green, and the generator (which reads `.n`) silently DROPS the
 #      assertion. reference/DESIGN.md called this pair a deliberate emitter-side copy but nothing
 #      compared it; planner.md's own maintainer comment said so outright.
-#      Compares the SHIPPED templates/CLAUDE.md against the plugin's agents/planner.md — the same
-#      post-upgrade framing as 9b, not the project's editable copy.
+#      Compares the plugin's skills/test-case-contract/SKILL.md (the SoT; it was a section of
+#      templates/CLAUDE.md before) against the plugin's agents/planner.md.
 #      Shape = the FIRST backticked expression in column 2. The trailing prose deliberately
-#      differs between the two tables (CLAUDE.md carries longer notes), so a byte-compare of the
+#      differs between the two tables (the skill carries longer notes), so a byte-compare of the
 #      whole cell would fire on every wording edit; comparing only the shape expression is what
 #      makes this check quiet enough to keep.
 #      NOTE the key charclass includes digits — `a11y_violations_below` is silently dropped by a
@@ -92,7 +148,7 @@ fi
 if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   # arg_shapes <file> — "key<TAB>canonical-shape" per arg-shape table row.
   arg_shapes() { sed -nE 's/^\| `([a-z0-9_]+)` \| `([^`]*)`.*/\1\t\2/p' "$1" 2>/dev/null; }
-  sot_tbl="$TMPL/CLAUDE.md"; pln_tbl="$TMPL/../agents/planner.md"
+  sot_tbl="$TMPL/../skills/test-case-contract/SKILL.md"; pln_tbl="$TMPL/../agents/planner.md"
   if [ ! -f "$sot_tbl" ] || [ ! -f "$pln_tbl" ]; then
     echo "⚠️  arg-shape mirrors not both found ($sot_tbl / $pln_tbl) — argument-shape drift is UNVERIFIED"; warn=$((warn+1))
   else
@@ -103,37 +159,37 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
     n_pln=$(printf '%s\n' "$pln_shapes" | grep -c . || true)
     n_keys=$(printf '%s\n' "$KEYS" | grep -c . || true)
     if [ "$n_sot" -eq 0 ] || [ "$n_pln" -eq 0 ]; then
-      echo "❌ arg-shape table did not parse (CLAUDE.md rows=$n_sot, planner.md rows=$n_pln) — the table format changed; argument-shape drift is UNCHECKED"; fail=$((fail+1))
+      echo "❌ arg-shape table did not parse (test-case-contract rows=$n_sot, planner.md rows=$n_pln) — the table format changed; argument-shape drift is UNCHECKED"; fail=$((fail+1))
     else
       [ -n "$KEYS" ] && [ "$n_sot" -ne "$n_keys" ] && {
-        echo "⚠️  arg-shape table in templates/CLAUDE.md has $n_sot rows but the vocabulary has $n_keys keys — a key is pinned nowhere (or the table gained a row)"; warn=$((warn+1)); }
+        echo "⚠️  arg-shape table in skills/test-case-contract/SKILL.md has $n_sot rows but the vocabulary has $n_keys keys — a key is pinned nowhere (or the table gained a row)"; warn=$((warn+1)); }
       while IFS="$(printf '\t')" read -r k sot_shape; do
         [ -n "$k" ] || continue
         pln_shape=$(printf '%s\n' "$pln_shapes" | awk -F'\t' -v k="$k" '$1==k{print $2; exit}')
         if [ -z "$pln_shape" ]; then
-          echo "❌ arg-shape row for '$k' is in templates/CLAUDE.md but MISSING from agents/planner.md — the planner emits a shape it has no pin for"; fail=$((fail+1))
+          echo "❌ arg-shape row for '$k' is in skills/test-case-contract/SKILL.md but MISSING from agents/planner.md — the planner emits a shape it has no pin for"; fail=$((fail+1))
         elif [ "$pln_shape" != "$sot_shape" ]; then
-          echo "❌ arg-shape drift for '$k': CLAUDE.md pins \`$sot_shape\` but agents/planner.md pins \`$pln_shape\` — a wrong-named arg drops the assertion silently"; fail=$((fail+1))
+          echo "❌ arg-shape drift for '$k': test-case-contract pins \`$sot_shape\` but agents/planner.md pins \`$pln_shape\` — a wrong-named arg drops the assertion silently"; fail=$((fail+1))
         fi
       done < <(printf '%s\n' "$sot_shapes")
       while IFS="$(printf '\t')" read -r k _; do
         [ -n "$k" ] || continue
         printf '%s\n' "$sot_shapes" | awk -F'\t' -v k="$k" '$1==k{f=1} END{exit !f}' || {
-          echo "❌ arg-shape row for '$k' is in agents/planner.md but MISSING from templates/CLAUDE.md — the planner pins a shape the stamped SoT does not"; fail=$((fail+1)); }
+          echo "❌ arg-shape row for '$k' is in agents/planner.md but MISSING from skills/test-case-contract/SKILL.md — the planner pins a shape the SoT does not"; fail=$((fail+1)); }
       done < <(printf '%s\n' "$pln_shapes")
     fi
   fi
   # 9bb (cont). `invariant_holds_when:` SHAPE. Same drift class as the table above but invisible to
   #      its extractor — this key lives in the YAML schema block, not the arg-shape table. It shipped
   #      with TWO incompatible shapes: planner.md emitted a list of {invariant, holds_when} pairs
-  #      while templates/CLAUDE.md showed a bare scalar. The reviewer reads shapes from the STAMPED
-  #      CLAUDE.md, so it validated a scalar the planner never emits (Check 2e). Canonical = the LIST
+  #      while templates/CLAUDE.md (then the SoT) showed a bare scalar. The reviewer reads shapes from
+  #      the SoT, so it validated a scalar the planner never emits (Check 2e). Canonical = the LIST
   #      form. Assert both mirrors declare the key and neither declares it inline (anything but a
   #      comment after the colon is the scalar form).
   for f in "$sot_tbl" "$pln_tbl"; do
     [ -f "$f" ] || continue
     if ! grep -qE '^[[:space:]]*invariant_holds_when:' "$f"; then
-      echo "❌ $(basename "$f"): no invariant_holds_when: declaration — the equality-domain shape is UNPINNED in this mirror (reviewer Check 2e reads it from the stamped CLAUDE.md)"; fail=$((fail+1)); continue
+      echo "❌ $(basename "$f"): no invariant_holds_when: declaration — the equality-domain shape is UNPINNED in this mirror (reviewer Check 2e reads it from the test-case-contract skill)"; fail=$((fail+1)); continue
     fi
     if grep -qE '^[[:space:]]*invariant_holds_when:[[:space:]]*[^[:space:]#]' "$f"; then
       echo "❌ $(basename "$f"): invariant_holds_when: is pinned as a SCALAR — canonical shape is a LIST of {invariant, holds_when} pairs; a scalar cannot say which equality it scopes, and the two mirrors disagreeing is what made reviewer Check 2e validate a shape the planner never emits"; fail=$((fail+1))
@@ -314,7 +370,7 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
 fi
 
 # 9be. Oracle arg-shape drift in the REMAINING mirrors. Check 9bb compares the two markdown-table
-#      mirrors (templates/CLAUDE.md <-> agents/planner.md) by BYTE-comparing the shape expression.
+#      mirrors (skills/test-case-contract/SKILL.md <-> agents/planner.md) by BYTE-comparing the shape expression.
 #      That works only because those two tables share a format. The other mirrors do not:
 #        - agents/generator.md states shapes as INSTANTIATED examples (`{ locator: ..., n: 3 }`)
 #        - DOCUMENTATION.md uses a numbered table with deliberately SHORTENED notes
@@ -351,13 +407,13 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
     return res==""?"-":res
   }
   BEGIN{FS="\t"} { print $1 "\t" arg_names($2) }'
-  sot_md="$TMPL/CLAUDE.md"
+  sot_md="$TMPL/../skills/test-case-contract/SKILL.md"
   if [ ! -f "$sot_md" ]; then
     echo "⚠️  $sot_md not found — remaining-mirror arg-shape drift is UNVERIFIED"; warn=$((warn+1))
   else
     sot_norm=$(sed -nE 's/^\| `([a-z0-9_]+)` \| `([^`]*)`.*/\1\t\2/p' "$sot_md" | awk "$norm_prog" | sort)
     if [ -z "$sot_norm" ]; then
-      echo "❌ the arg-shape SoT table in templates/CLAUDE.md did not parse — remaining-mirror drift is UNCHECKED"; fail=$((fail+1))
+      echo "❌ the arg-shape SoT table in skills/test-case-contract/SKILL.md did not parse — remaining-mirror drift is UNCHECKED"; fail=$((fail+1))
     else
       # mirror <label> <file> <sed-extractor> <mode: full|partial> [min-rows]
       # min-rows is a cardinality FLOOR for a `partial` mirror — a `full` mirror already gets
@@ -384,7 +440,7 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
           mmatched=$((mmatched+1))
           sot_shape=$(printf '%s\n' "$sot_norm" | awk -F'\t' -v k="$k" '$1==k{print $2; exit}')
           if [ -z "$sot_shape" ]; then
-            echo "❌ arg-shape mirror '$ml' pins key '$k' which is ABSENT from the templates/CLAUDE.md SoT table"; fail=$((fail+1))
+            echo "❌ arg-shape mirror '$ml' pins key '$k' which is ABSENT from the skills/test-case-contract/SKILL.md SoT table"; fail=$((fail+1))
           elif [ "$shape" != "$sot_shape" ]; then
             echo "❌ arg-shape drift for '$k' in $ml: SoT args are [$sot_shape] but this mirror pins [$shape] — a wrong-named arg drops the assertion silently"; fail=$((fail+1))
           fi
@@ -652,21 +708,18 @@ fi
 #     scripts/oracle-keys.txt and are policed by nothing else: the whole contract is prose spread
 #     across four files, and each one, dropped, fails SILENTLY in a different direction.
 #     Arm 1 (CHAIN COMPLETENESS, symbol-keyed). planner.md authors the step, generator.md compiles
-#       it, reviewer.md validates it, templates/CLAUDE.md is what gets STAMPED into a project (the
-#       in-PROJECT reviewer reads its own copy and cannot read the plugin). Drop it from the planner
-#       and the capability exists but nothing can ask for it — §9's own "a capability that only
-#       lands in the generator is one the planner can never ask for". Drop it from the generator and
-#       the planner authors a step that compiles to nothing. Drop it from the template and no future
-#       stamp carries the definition. Keyed on the literal step SYMBOLS, never on wording, so a
-#       reword stays green and a deletion does not.
-#       SCOPE — read this arm as the SHIPPING SOURCE, never as delivery. All four links are
-#       PLUGIN-side files, `templates/CLAUDE.md` included, so this arm is green whenever the
-#       toolkit still ships the symbols, no matter what any already-scaffolded project holds.
-#       That gap is real and was measured: a 0.2.0 project upgraded to HEAD kept a CLAUDE.md with
-#       zero `fault:`/`clock:` while this arm stayed green, because `--resync` cannot refresh a
-#       shared-ownership file. The delivered copy is policed by the CLAUDE.md containment
-#       sub-check in doctor.sh Check 9 (manifest: manifests/claude-md-vocab.txt), which WARNs rather than
-#       FAILs there because its repair is a hand-merge. The two are complements, not duplicates.
+#       it, reviewer.md validates it, and skills/test-case-contract/SKILL.md DEFINES it (shapes and
+#       the fired-proof rule; the planner, generator, verifier, reviewer and ideation agents all
+#       preload it). Drop it from the planner and the capability exists but nothing can ask for it
+#       — §9's own "a capability that only lands in the generator is one the planner can never ask
+#       for". Drop it from the generator and the planner authors a step that compiles to nothing.
+#       Drop it from the skill and no agent has the definition. Keyed on the literal step SYMBOLS,
+#       never on wording, so a reword stays green and a deletion does not.
+#       The definition used to live in templates/CLAUDE.md, which is stamped and never resynced, so
+#       a 0.2.0 project upgraded to HEAD kept a CLAUDE.md with zero `fault:`/`clock:` while this arm
+#       stayed green, and doctor's CLAUDE.md containment sub-check had to police the delivered
+#       copy. The skill ships with the plugin, so that delivery gap is closed: what this arm sees
+#       is what every agent loads.
 #     Arm 2 (SCOPE OWNERSHIP, the 9g arm-3 / 9h arm-2 shape). The healer's prohibition on
 #       INTRODUCING a stub or a clock call is enforced by assertion-contract.sh, and that arm must
 #       be scoped to the HEALER ALONE. Both directions are real failures: widen it to the verifier
@@ -680,7 +733,7 @@ fi
 #       prose files still demand the pairing. Cross-checks the named key against the manifest.
 if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   # Arm 1: both step symbols must be present in all four links of the chain.
-  sit_chain="$TMPL/CLAUDE.md:the SHIPPING SOURCE|no future stamp carries the definition at all, and the CLAUDE.md containment sub-check in Check 9 — which is what polices the already-stamped copies — has nothing left to deliver
+  sit_chain="$TMPL/../skills/test-case-contract/SKILL.md:the DEFINITION|no agent has the step's shapes or its fired-proof rule
 $TMPL/../agents/planner.md:the AUTHOR|the capability exists but no spec can ask for it
 $TMPL/../agents/generator.md:the COMPILER|a declared step compiles to nothing
 $TMPL/../agents/reviewer.md:the VALIDATOR|an unproven stub ships green"
@@ -692,7 +745,7 @@ $TMPL/../agents/reviewer.md:the VALIDATOR|an unproven stub ships green"
     fi
     for sym in 'fault:' 'clock:'; do
       grep -qE "(^|[^a-zA-Z_])$sym" "$sf" \
-        || { echo "❌ ${sf##*/} never mentions \`$sym\` — that file is $srole in the situation-step chain (CLAUDE.md §\"Situation steps\"), so with the link dropped, $scost. Nothing else in this toolkit reads that step form, so the loss is silent."; fail=$((fail+1)); }
+        || { echo "❌ ${sf#"$TMPL"/../} never mentions \`$sym\` — that file is $srole in the situation-step chain (test-case-contract §\"Situation steps\"), so with the link dropped, $scost. Nothing else in this toolkit reads that step form, so the loss is silent."; fail=$((fail+1)); }
     done
   done <<EOF
 $sit_chain
@@ -717,10 +770,11 @@ EOF
   fi
 
   # Arm 3: the fired-proof names an oracle key it does not own — it must still be in the manifest.
-  if [ -n "$KEYS" ] && [ -f "$TMPL/CLAUDE.md" ]; then
-    if grep -q 'network_response_status' "$TMPL/CLAUDE.md"; then
+  tcc="$TMPL/../skills/test-case-contract/SKILL.md"
+  if [ -n "$KEYS" ] && [ -f "$tcc" ]; then
+    if grep -q 'network_response_status' "$tcc"; then
       printf '%s\n' "$KEYS" | grep -qx 'network_response_status' \
-        || { echo "❌ templates/CLAUDE.md makes \`network_response_status\` the fired-proof for a response-fabricating \`fault:\` step, but that key is no longer in templates/scripts/oracle-keys.txt — every fault: spec is now unauthorable while four files still demand the pairing (the 9c stranded-rule shape)"; fail=$((fail+1)); }
+        || { echo "❌ skills/test-case-contract/SKILL.md makes \`network_response_status\` the fired-proof for a response-fabricating \`fault:\` step, but that key is no longer in templates/scripts/oracle-keys.txt — every fault: spec is now unauthorable while four files still demand the pairing (the 9c stranded-rule shape)"; fail=$((fail+1)); }
     fi
   fi
 fi

@@ -60,9 +60,14 @@ else
   echo "⚠️  scripts/check-last-run.sh missing — project scaffolded before it shipped; re-run /qa-warden:init --resync"; warn=$((warn+1))
 fi
 
-# 2. Closed-vocab drift — the oracle keys MUST be byte-identical across the SoT (CLAUDE.md)
-#    and every mirror (planner, generator, reviewer Check 4). A divergence means the reviewer
-#    FAILs specs its own planner authored.
+# 2. Closed-vocab drift — the oracle keys MUST be byte-identical across the SoT (the plugin's
+#    test-case-contract skill) and every mirror (planner, generator, reviewer Check 4, and this
+#    project's scripts/oracle-keys.txt). A divergence means the reviewer FAILs specs its own
+#    planner authored.
+#    The SoT used to be a section of this project's CLAUDE.md, so this check grepped CLAUDE.md.
+#    It is now a plugin skill the agents preload, and the plugin-side mirrors are compared with it
+#    by bin/qa-selfcheck Check 9b. What only this check can see is the PROJECT side: the manifest
+#    /qa-warden:coverage counts with, against the skill the agents actually load.
 #    The key set is READ from scripts/oracle-keys.txt, not hand-typed here. This check used to
 #    carry its own copy and compare five files against it — a checker whose baseline was one
 #    more unpoliced mirror, which is why it also needed a cardinality self-check on that copy
@@ -72,22 +77,36 @@ KEYS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' scripts/oracle-keys.txt 2>/dev/n
 if [ -z "$KEYS" ]; then
   echo "❌ scripts/oracle-keys.txt missing or empty — the oracle vocabulary is UNVERIFIED (run /qa-warden:init --resync)"; fail=$((fail+1))
 fi
-# missing_keys <file> — prints the keys ABSENT from <file>, one per line. `bin/qa-selfcheck` Check 9b (plugin-side) runs the
-# same scan over the plugin's agent mirrors (planner, generator, reviewer); one helper instead of two copies of the loop, and one pass over
-# each file instead of 16 (the per-key `grep -q` form re-read every file end to end, 16× per file).
-# `grep -oFf` lists the keys the file DOES contain; `grep -vxFf` subtracts them from the full set.
-# An empty pattern file matches nothing, so a file with ZERO keys correctly reports all 16 missing.
-missing_keys() {
-  [ -n "$KEYS" ] || return 0
-  grep -vxFf <(grep -oFf <(printf '%s\n' "$KEYS") "$1" 2>/dev/null | sort -u) <(printf '%s\n' "$KEYS")
-}
-while read -r k; do
-  [ -n "$k" ] || continue
-  echo "❌ oracle key '$k' missing from CLAUDE.md"; fail=$((fail+1))
-done < <(missing_keys CLAUDE.md)
-# (Reviewer/planner/generator live in the plugin, not the project — the project's CLAUDE.md
-#  is the stamped SoT. `bin/qa-selfcheck` Check 9b greps these same 16 keys against the plugin's agents when
-#  the templates dir resolves, so post-upgrade plugin-side drift is caught too, not just local edits.)
+# The skill ships beside this script: <plugin>/skills/doctor/scripts/doctor.sh -> <plugin>/skills/.
+# Its key SET is read from the arg-shape table rows, with the same extractor bin/qa-selfcheck
+# Check 9bb uses (a row is "| `key` | `shape` |"; the `fault:`/`clock:` rows keep their trailing
+# colon precisely so this pattern skips them). The sets are compared EXACTLY. A substring scan
+# (grep -oF of each key over the file) used to be enough for CLAUDE.md, but it passes a manifest
+# that gains `value`, `url` or `lock`, because those words occur inside the skill's prose.
+TCC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)/test-case-contract/SKILL.md"
+if [ -n "$KEYS" ]; then
+  if [ ! -f "$TCC" ]; then
+    echo "⚠️  the plugin's test-case-contract skill was not found at $TCC — the vocabulary the agents load is UNVERIFIED (run doctor from the plugin: /qa-warden:doctor)"; warn=$((warn+1))
+  else
+    SKILL_KEYS=$(sed -nE 's/^\| `([a-z0-9_]+)` \| `.*/\1/p' "$TCC" | sort -u)
+    PROJ_KEYS=$(printf '%s\n' "$KEYS" | sort -u)
+    if [ -z "$SKILL_KEYS" ]; then
+      echo "⚠️  the arg-shape table in $TCC did not parse — the project's oracle keys are UNVERIFIED against the vocabulary the agents load"; warn=$((warn+1))
+    else
+      # In the project's manifest, not in the skill: a spec using the key fails review.
+      while read -r k; do
+        [ -n "$k" ] || continue
+        echo "❌ oracle key '$k' (scripts/oracle-keys.txt) is not in the plugin's test-case-contract skill — the planner and reviewer do not know it, so a spec using it fails review. The project and the installed plugin disagree: run /qa-warden:init --resync, or update the plugin if this project is newer"; fail=$((fail+1))
+      done < <(comm -23 <(printf '%s\n' "$PROJ_KEYS") <(printf '%s\n' "$SKILL_KEYS"))
+      # In the skill, not in the manifest: the project is older than the plugin, and
+      # /qa-warden:coverage (which builds its pattern from the manifest) does not count that key.
+      while read -r k; do
+        [ -n "$k" ] || continue
+        echo "⚠️  oracle key '$k' is in the plugin's test-case-contract skill but not in scripts/oracle-keys.txt — /qa-warden:coverage does not count it. Run /qa-warden:init --resync"; warn=$((warn+1))
+      done < <(comm -13 <(printf '%s\n' "$PROJ_KEYS") <(printf '%s\n' "$SKILL_KEYS"))
+    fi
+  fi
+fi
 
 # --- shared tree walks (Checks 3/13/14/15/15b/16/17/18) ----------------------------------
 # These checks used to re-run the SAME walks over tests/ and specs/ (eight-plus traversals, and
@@ -596,9 +615,10 @@ fi
 # cannot be resynced at all.
 # The required set is DERIVED, like STOCK_VARS above: manifest x shipped template. Presence
 # anywhere satisfies it, so rewording and user additions are free and only a DELETION is
-# reported. Not the oracle keys — Check 2 already greps those against this same file from
-# scripts/oracle-keys.txt, and `lock:` must never be added there (it is a TestDetails field, not
-# an oracle key, and that manifest also feeds Check 9b and /qa-warden:coverage's KEYS_RE).
+# reported. Not the oracle keys, and not `fault:`/`clock:` any more: they are defined in the
+# plugin's test-case-contract skill, which ships with the plugin, so a CLAUDE.md without them is
+# missing nothing. And `lock:` must never be added to oracle-keys.txt (it is a TestDetails field,
+# not an oracle key, and that manifest also feeds Check 2, Check 9b and /qa-warden:coverage's KEYS_RE).
 # WARN, never FAIL: alone among Check 9's findings the repair is not a command but a hand-merge,
 # and a repair the toolkit cannot perform must not be louder than the ones it can (substrate
 # drift and 9f arm 2 are both WARNs with a one-command fix). A FAIL would red every upgrading
@@ -637,6 +657,18 @@ if [ -f CLAUDE.md ]; then
     echo "⚠️  CLAUDE.md still uses the pre-0.4.0 command prefix /qa: on $old_cmds line(s) — those commands are now /qa-warden:<cmd>. Replace /qa: with /qa-warden: in CLAUDE.md (/qa-warden:init --resync does not rewrite it)."
     warn=$((warn+1))
   fi
+fi
+
+# The spec format contract moved out of CLAUDE.md into the plugin's test-case-contract skill, which
+# the planner, generator, verifier, reviewer and ideation agents preload. A project stamped before
+# that keeps the old section, because CLAUDE.md is shared-ownership and never resynced. Left in
+# place it is a second copy of the vocabulary and the argument shapes that nothing compares with
+# the skill, so the two drift apart, and it still costs every session its ~19 KB on every turn.
+# Keyed on the section's own heading, which the shipped template no longer carries. WARN, for the
+# same reason as the two checks above: the repair is a hand-edit.
+if [ -f CLAUDE.md ] && grep -qE '^##[[:space:]]+Test case format contract[[:space:]]*$' CLAUDE.md; then
+  echo "⚠️  CLAUDE.md still has the '## Test case format contract' section. It moved into the plugin's test-case-contract skill, which the agents preload, and the two copies will drift apart. Run /qa-warden:init --resync first (it does not edit CLAUDE.md). Then move any project-specific rules out of the section, replace it (from that heading down to the next '## ' heading, '### Situation steps' included) with the shipped template's '## Spec format' section, and in '## Oracle defense' change 'Closed vocabulary — see above' to name the skill."
+  warn=$((warn+1))
 fi
 
 # 9b / 9bb / 9bc / 9bd / 9be / 9d / 9e / 9f arm 1 / 9g / 9h / 9i / 9j / 20 — MOVED to the plugin's
@@ -1161,7 +1193,7 @@ done < <(printf '%s\n' "$TEST_FILES")
 # 16. Smoke-tagged spec with NO compiled test (RUN-27) — the smoke-gate-blind catch. Check 3 above
 #     confirms SOME test carries @smoke so `--grep @smoke` isn't vacuous; this is the complementary
 #     gap: a SPEC that declares a `tags: [smoke, …]` scenario but was never compiled to a test. The
-#     spec author put a P1 flow on the fast gate (CLAUDE.md smoke-lane rule), but with no .spec.ts the
+#     spec author put a P1 flow on the fast gate (the smoke-lane rule), but with no .spec.ts the
 #     `--grep @smoke` run selects nothing for it — a fully-broken governed flow (admin RBAC, checkout
 #     charge==total) passes the nightly smoke gate silently because there's simply no test to fail.
 #     Match the YAML `tags: [ … smoke … ]` list form (the machine-authored tag), not prose `@smoke`

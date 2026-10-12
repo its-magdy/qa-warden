@@ -25,7 +25,9 @@ same plain-prose fallback as `/qa-warden:intake`); it does NOT delegate to a sub
    But accept ANY CSV/markdown/pasted table with title+steps+expected. **Group
    multi-row exports by ID/Key/TCID before structuring**; parse quoted-newline CSV
    cells with the model, not shell awk.
-3. **Map each case to the closed oracle vocabulary.** Map its expected result to
+3. **Map each case to the closed oracle vocabulary.** Invoke the `test-case-contract` skill
+   first (Skill tool) — it holds the 16 keys and their argument shapes, which this session
+   does not otherwise have. Map its expected result to
    closed-vocab oracle key(s), or the existing
    `→ oracle: OUT-OF-VOCAB (<reason>) coverage: partial` marker. A case with NO stated
    expected result gets `→ oracle: OUT-OF-VOCAB (no expected result in source)

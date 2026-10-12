@@ -1,8 +1,8 @@
 # oracle-keys.txt — the closed oracle vocabulary, one key per line, as MACHINE-READABLE data.
 #
-# CLAUDE.md §"Test case format contract" remains the human SoT (it carries the semantics and the
-# per-key argument-shape table, which are prose and belong in prose). This file is the mechanical
-# half: the KEY SET, in the one form a script can read.
+# The plugin's test-case-contract skill remains the human SoT (it carries the semantics and the
+# per-key argument-shape table, which are prose and belong in prose; it used to be a CLAUDE.md
+# section). This file is the mechanical half: the KEY SET, in the one form a script can read.
 #
 # It exists because doctor Check 2 used to hold a hand-typed copy of the 16 keys and then compare
 # CLAUDE.md and four plugin files AGAINST THAT COPY — a checker policing peers with its own
@@ -12,7 +12,7 @@
 # created to end: N consumers, one manifest, no hand-kept peer lists.
 #
 # ADDING OR REMOVING A KEY is a real vocab change and still means editing every ENUMERATING mirror
-# in the same commit — this file, CLAUDE.md's list + arg-shape table, agents/planner.md,
+# in the same commit — this file, the test-case-contract skill's list + arg-shape table, agents/planner.md,
 # agents/generator.md, and reviewer Check 4. (/qa-warden:coverage is not one: it reads this file at
 # runtime to build its KEYS_RE.) The prose mirrors cannot
 # `source` a file; what this manifest guarantees is that the CHECKER comparing them is not itself

@@ -71,7 +71,7 @@ naming:
 # and the test-data-seed skill keys off it. Declaring api_url_env + secret_env here (never a literal
 # secret — that lives in .env) stops every spec from re-discovering the seeding contract. Omit if the
 # app ships no test-support API (then transactional oracles cannot rely on a deterministic seed — see
-# CLAUDE.md relational-gap note). Add every var you name below to .env.example so /qa-warden:doctor Check 6 sees it.
+# the test-case-contract skill's relational-gap note). Add every var you name below to .env.example so /qa-warden:doctor Check 6 sees it.
 test_support:                          # optional — omit if no seeding/reset hook exists
   api_url_env: "<e.g. API_URL>"        # base URL of the test-support API (env var name)
   secret_env: "<e.g. QA_TEST_SECRET>"  # env var holding the shared secret header, if the routes are guarded
@@ -100,7 +100,7 @@ business_sources:                       # optional — omit if you have no exter
     covers: "<areas or topics this source is authoritative for>"
     # freshness: "<optional note — a stale source can mislead; intake flags on source-vs-app contradiction>"
 
-oracle_vocab_ref: CLAUDE.md#test-case-format-contract   # single source of truth for the closed vocab (§"Test case format contract")
+oracle_vocab_ref: test-case-contract   # the plugin skill that is the single source of truth for the closed vocab (preloaded by the agents)
 
 # single source of truth for reviewer Check 7 (context freshness) staleness thresholds (days). Tune per project.
 # An area file's `volatility:` field selects its tier; missing/unknown → reference.

@@ -23,10 +23,14 @@
 # is invited to edit — so police the symbols, exactly as prod-guard-rails.txt polices an
 # invocation rather than a wording.
 #
-# NOT THE ORACLE KEYS. Those are Check 2's, read from scripts/oracle-keys.txt against this same
-# file. In particular `lock:` MUST NOT be added there: it is a `TestDetails` field, not an
-# oracle key (CLAUDE.md §"Reporting pipeline" says so outright), and oracle-keys.txt is also
-# read by Check 9b and (via the manifest) by /qa-warden:coverage's KEYS_RE — widening it would
+# NOT THE ORACLE KEYS, AND NOT THE SPEC FORMAT. The spec format (the oracle keys, their argument
+# shapes and the `fault:`/`clock:` situation steps) used to be a CLAUDE.md section and is now the
+# plugin's test-case-contract skill, which ships with the plugin and needs no delivery check.
+# `fault:` and `clock:` were listed here until that move. Check 2 compares the project's
+# scripts/oracle-keys.txt with the skill. In particular `lock:` MUST NOT be added to
+# oracle-keys.txt: it is a `TestDetails` field, not an oracle key (CLAUDE.md §"Reporting
+# pipeline" says so outright), and oracle-keys.txt is also read by doctor Check 2,
+# bin/qa-selfcheck Check 9b and /qa-warden:coverage's KEYS_RE — widening it would
 # corrupt the closed vocabulary in three consumers to patch a fourth.
 #
 # THE CHECK IS A FLOOR. Presence anywhere in the file satisfies it, like a commented `# VAR=`
@@ -40,8 +44,7 @@
 #
 # Format: <symbol>|<why its absence costs something>. Full-line `#` comments and blank lines
 # are ignored; `#` is NOT stripped mid-line, because the why-text is prose.
-fault:|the situation step that stubs a network dependency. A scaffolded project's reviewer reads its definition from THIS file and cannot read the plugin, so a spec that declares one has nothing to validate it
-clock:|the situation step that controls time — the SFDIPOT Time lens is not authorable without it, and the in-project reviewer has no definition to validate against
 lock:|the cross-file mutual-exclusion field the generator emits, together with the sharding caveat that VOIDS it. Absent, a reader adopts the sharding recipe and silently loses every lock
 verifier|the agent that grades the generator's output. Absent from the roster, the split reads as a single authoring agent and the `// verified:` stamp reviewer Check 2b trusts has no documented author
+test-case-contract|the pointer to the plugin skill that now holds the spec format (the YAML schema, the oracle keys and their argument shapes). Absent, a reader of CLAUDE.md finds no oracle vocabulary and no sign of where it went
 cli-fill-env.sh|the wrapper that types a credential through playwright-cli without the value reaching the command line. Absent, an agent that must log in reads `.env` and puts the literal password in the transcript, or skips the login and leaves auth unverified
