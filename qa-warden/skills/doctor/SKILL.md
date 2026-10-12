@@ -168,9 +168,11 @@ does not fix anything — each finding names its repair:
   build. An ℹ️ naming
   `scripts/resync-set.txt`, `scripts/claude-md-vocab.txt` or `scripts/prod-guard-rails.txt` as a
   leftover is not a finding: those manifests now live only in the plugin, nothing in the project
-  reads the old copies, and the user can delete them. A ⚠️ drift on `scripts/doctor.sh` after a
-  plugin update is expected: that stamped file is now only a launcher for running doctor by hand,
-  and `--resync` replaces the old full copy with it.
+  reads the old copies, and the user can delete them. Likewise an ℹ️ naming
+  `scripts/review-marker.sh`: `/qa-warden:review` runs the plugin's copy, so the user can delete
+  the stamped one together with its two `settings.json` rules. A ⚠️ drift on `scripts/doctor.sh`
+  after a plugin update is expected: that stamped file is now only a launcher for running doctor
+  by hand, and `--resync` replaces the old full copy with it.
 - **Check 10 (site↔project routing):** never edit `playwright.config.ts` (toolkit-owned; it
   derives a project per set `BASE_URL_<SITE>`). ❌ — make the id lowercase `[a-z0-9-]` and its
   `base_url_env` exactly `BASE_URL_<ID>` (`-`→`_`). ⚠️ — set that var in `.env`.

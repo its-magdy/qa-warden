@@ -46,7 +46,8 @@ a relative link.) **Plugin-only reader (no repo checkout)?** Ask `/qa-warden:hel
 
 ## Make sure every test got reviewed
 
-**Locally — the default, nothing to set up.** Run `/qa-warden:review` after `/qa-warden:gen`. On a PASS it writes
+**Locally — the default, nothing to set up.** Run `/qa-warden:review` after `/qa-warden:gen`.
+Once the reviewer returns a verdict (PASS or FAIL), it writes
 `reports/review/<area>/<feature>.reviewed`, pinned to the hashes of that spec and test. `/qa-warden:doctor`
 (Check 15) then flags any test with no marker, or whose spec or code changed since — so a
 forgotten review shows up the next time anyone runs doctor.

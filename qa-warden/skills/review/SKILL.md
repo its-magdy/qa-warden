@@ -1,6 +1,7 @@
 ---
 description: "Runs the load-bearing reviewer subagent over the current diff or a named spec/path — the full assertion-contract check suite. With url=<x>, audits a live URL instead (a11y + visual + closed vocab). Use before committing or merging a test, or when the user asks whether a test can actually fail."
 argument-hint: "[spec-or-path — default: the working diff vs origin/main] | url=<url> [site=<id>]"
+allowed-tools: Bash(bash "${CLAUDE_SKILL_DIR}/scripts/review-marker.sh" *)
 ---
 
 **Two modes, same command.** No `url=` argument → diff-review mode (below, the default).
@@ -15,8 +16,9 @@ Delegate to the **`reviewer`** subagent — the read-only gatekeeper that is the
 only the lexical FAILs and the healer/verifier assertion prohibition; every check
 needing the paired spec, the `bugs/` tree or a judgment call rides on the reviewer
 running, and this skill is what runs it). Without a shipped trigger the single most important quality
-gate is the easiest one to forget — invoke it on **every PR that touches
-`tests/**`, `specs/**`, or `page-objects/**`**, and wire it into CI (below).
+gate is the easiest one to forget — invoke it locally on **every change that touches
+`tests/**`, `specs/**`, or `page-objects/**`**, before it is committed. Claude does not run in
+CI; the attestation marker below and `/qa-warden:doctor` Check 15 are what surface a skipped review.
 
 **Scope.** With no argument, the reviewer resolves the scope itself: the
 `$BASE...HEAD` commit diff **unioned with the working tree and untracked files**,
@@ -63,9 +65,10 @@ the twins and hits no network.
 **If it does not — a `maxTurns` cutoff, a crash, or any output with no verdict —
 do NOT write a `.reviewed` marker at all**, and treat the invocation as if the
 reviewer had not run (surface this to the human instead). A marker written from a
-guess would launder a truncated review into a durable, doctor-trusted `PASS`
-exactly the way the CI-gate hardening above exists to prevent — the marker file is
-a second, unguarded consumer of the same verdict. Only once a verdict is
+guess would launder a truncated review into a durable, doctor-trusted `PASS` — the
+outcome the reviewer's own fail-closed rule (`agents/reviewer.md` §"Fail-closed on
+inconclusive") exists to prevent; the marker file is a second, unguarded consumer of
+the same verdict. Only once a verdict is
 confirmed present, this skill writes `reports/review/<area>/<feature>.reviewed`
 for each reviewed spec/test pair, containing:
 
@@ -77,21 +80,22 @@ date: <YYYY-MM-DD>
 result: PASS|FAIL
 ```
 
-Write it with the shipped script — ONE allow-listed call per pair, never an improvised
-`git rev-parse … && shasum … && printf …` chain (a compound command needs a rule per subcommand,
-so those prompt, and are denied headless):
+Write it with this skill's script, from the project root — ONE pre-approved call per pair
+(this skill's `allowed-tools` rule), never an improvised `git rev-parse … && shasum … && printf …`
+chain (a compound command needs a rule per subcommand, so those prompt, and are denied headless):
 
 ```bash
-bash scripts/review-marker.sh specs/<area>/<feature>.md tests/<area>/<feature>.spec.ts PASS|FAIL
+bash "${CLAUDE_SKILL_DIR}/scripts/review-marker.sh" specs/<area>/<feature>.md tests/<area>/<feature>.spec.ts PASS|FAIL
 ```
 
 It computes the digests with the same `sha256sum` → `shasum -a 256` fallback `/qa-warden:doctor`
-Check 15 reads them with (T-05). If the script is missing (project scaffolded before it
-shipped), say so and point at `/qa-warden:init --resync` rather than hand-rolling the file.
+Check 15 reads them with (T-05). The script ships with the plugin; ignore any
+`scripts/review-marker.sh` an older stamp left in the project.
 
-Commit the markers with the reviewed change; they are agent-writable convenience
-for `/qa-warden:doctor` Check 15 (which WARNs when a pair changed since its marker) — the
-anti-forgery layer is the CI required-status above.
+Commit the markers with the reviewed change. They are agent-writable convenience for
+`/qa-warden:doctor` Check 15 (which WARNs when a pair changed since its marker), not proof:
+anything that can write a file can forge one. The anti-forgery layer is a human reading the
+PR — enforce it with a required approval in branch protection if you need one.
 
 ## URL-audit mode
 
