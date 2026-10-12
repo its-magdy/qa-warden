@@ -237,6 +237,8 @@ problem into a permanently fabricated test — escalate instead. (The one sancti
 **verifier's** step-8b fault-injection probe, which is in-test, temporary, and reverted before the
 spec ships.)
 
+## Data isolation, factories and invariants
+
 **Worker-scoped data seeding (hybrid auth+data rule):** if the YAML `data:` block contains anything beyond credentials (orders, carts, products, organizations), the generator MUST call the `test-data-seed` skill to emit a worker-scoped fixture, NOT inline literals. `storageState` is for auth; mutable data goes through API seeding per worker with `testInfo.parallelIndex` for uniqueness.
 
 **Parallel-safety of state-mutating specs (the trigger is MUTATION, not just a declared `data:` entity).** The shipped `playwright.config.ts` runs `fullyParallel: true` with `workers > 1` in CI. Any spec that **creates, deletes, or updates server-side state** — via the UI *or* a test-support API — is a mutating spec, **even if its `data:` block is credential-only** (e.g. a login + "add task" + assert count flow that seeds via `POST /api/test/reset`). Mutating specs MUST isolate their state per worker; otherwise sibling workers race (one worker's reset wipes rows another just created, and `toHaveCount(n)` sees a racing count). Enforce ONE of:
