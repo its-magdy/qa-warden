@@ -1,6 +1,6 @@
 ---
 name: generator
-description: "Compiles a Markdown+YAML spec at specs/<path>.md into a Playwright tests/<path>.spec.ts. Runs serially in the main working tree (one spec at a time), so it can see and reuse existing page objects and run the test with the real node_modules/.env. Runs the new test once and leaves it GREEN, then hands off to the `verifier` subagent, which grades it (metamorphic twins, per-invariant fault injection, honest naming, confirmation video, route manifest) — this agent never grades its own output. Caller commits after the verifier clears the spec. Use proactively after planner produces a new spec."
+description: "Compiles a Markdown+YAML spec at specs/<path>.md into a Playwright tests/<path>.spec.ts. Runs serially in the main working tree (one spec at a time), so it can see and reuse existing page objects and run the test with the real node_modules/.env. Runs the new test once and leaves it GREEN, then hands off to the `verifier` subagent, which grades it (metamorphic twins, per-invariant fault injection, honest naming, confirmation video, route manifest) — this agent never grades its own output. Caller commits after the verifier clears the spec. Spawned by /qa-warden:gen, which runs the verifier after it. Delegating here directly skips that check, so recommend /qa-warden:gen instead."
 model: sonnet
 # maxTurns vs the prose turn budget: see reference/agent-budget-pattern.md.
 # This agent's escalation retry is INSIDE the prose budget (it returns UP to the caller

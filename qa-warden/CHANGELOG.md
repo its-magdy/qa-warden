@@ -364,6 +364,29 @@ projects.
     prints no other new line. Each rule on its own gets only its own line, and the ℹ️ is not
     counted. Removing the rule from Check 9c's list fails 5 of them.
 
+### Claude takes the guarded path: `run` becomes model-invocable, three agents stop inviting direct use
+
+- **`/qa-warden:run` no longer sets `disable-model-invocation: true`.** The flag did not stop Claude
+  running tests: `Bash(npx playwright *)` is pre-allowed, so Claude could already run a bare
+  `npx playwright test` with no prompt. All the flag blocked was the guarded wrapper, with its
+  zero-test and freshness checks and the report paths `/qa-warden:report` and `/qa-warden:heal` read.
+  It also hid the skill's description, including "Do not hand-roll a bare `npx playwright test`",
+  from Claude. Claude can now invoke it; you can still type it. It uses no model and keeps
+  prod-guard. README, `DOCUMENTATION.md`, `reference/knowledge-map.md` and `reference/DESIGN.md` list
+  it under "You or Claude".
+- **The planner, generator and healer agents no longer say "Use proactively".** The flag on
+  `/qa-warden:new-spec`, `/qa-warden:gen` and `/qa-warden:heal` blocks only the skill, so those
+  descriptions invited Claude to delegate to the agent directly. That skipped `gen`'s verifier (the
+  check that the test can fail) and `heal`'s sentinel loop. Each description now names its command and
+  says not to delegate directly.
+- **Sentinel handoffs that need a user-only command now go to you.** `reference/sentinel-actions.md`
+  told the orchestrator to run `/qa-warden:gen` (`.healer-needs-migrate`) and `/qa-warden:new-spec`
+  (`.healer-needs-spec-update`), which Claude cannot run. Those rows, and `/qa-warden:heal`'s loop, now
+  give you the exact command and keep the sentinel until it has run.
+- New projects' `CLAUDE.md` says to compile with `/qa-warden:gen`, not by naming the `generator`
+  subagent, which skipped the verifier. Existing projects keep their copy; `CLAUDE.md` is yours and
+  `--resync` does not touch it. No stamped file changes, so there is no drift event.
+
 ---
 
 ## 0.5.6 — nightly CI hardening, a truncated hook message, shellcheck cleanup (2026-10-09)

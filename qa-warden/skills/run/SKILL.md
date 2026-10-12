@@ -1,7 +1,6 @@
 ---
 description: Execute Playwright tests in one of four ways — run a single spec headless/CI-shaped (mode=single), run the @smoke-tagged suite (mode=smoke), repeat-probe a spec N times to check flakiness/repeatability/stability (mode=repeat), or run only the tests a git change touches (mode=changed). Deterministic, JSON-only, no LLM in the loop. Do not hand-roll a bare `npx playwright test` for any of these — this skill owns the resolver, freshness/zero-test guards, and report paths every downstream consumer (`/qa-warden:report`, `/qa-warden:heal`) depends on.
 argument-hint: mode=single|smoke|repeat|changed [<spec-path-or-test-path>|<git-ref>] [N]
-disable-model-invocation: true
 allowed-tools: Bash(bash "${CLAUDE_SKILL_DIR}/scripts/run.sh" *)
 ---
 

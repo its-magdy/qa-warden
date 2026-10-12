@@ -67,10 +67,10 @@ context; THIS file is read on demand for catalog / workflow-order / "what does X
 
 **Who can invoke what** (ask about this if a user wonders why Claude did or didn't run something):
 every `/qa-warden:*` is a skill under `skills/`. The side-effecting ones — `init` `gen` `new-spec`
-`heal` `batch-fix` `retire` `approve` `run`
+`heal` `batch-fix` `retire` `approve`
 `intake` `ideate` `import-cases` — are **user-only**: Claude never triggers them by itself, so it will
 recommend a command rather than run it. The model-invocable ones (`help` `review`
-`coverage` `doctor` `impact` `report` `explore` `metamorphic-relations`) Claude may also invoke on its own, and
+`coverage` `doctor` `impact` `report` `explore` `run` `metamorphic-relations`) Claude may also invoke on its own, and
 `coverage`/`doctor`/`impact` run in their own subagent; `report` runs inline. Reasoning:
 `${CLAUDE_PLUGIN_ROOT}/reference/DESIGN.md` §"Why the invocation policy is what it is".
 (`reference/how-to-import-manual-cases.md` has a narrative walkthrough of the same
