@@ -366,6 +366,54 @@ record() {
 }
 DOCTOR="$here/skills/doctor/scripts/doctor.sh"
 check "the doctor ships in the plugin at skills/doctor/scripts/doctor.sh" test -f "$DOCTOR"
+
+echo "  -- outside a project: one line, not a ❌ per missing file"
+NOTPROJ="❌ not a QA Warden project (run from the project root, or /qa-warden:init)"
+new_dir; EMPTYP=$DIR
+run_doctor "$EMPTYP"
+check_eq "doctor in an empty directory exits 1" "1" "$DR_RC"
+check "  and prints the not-a-project line" grep -qxF "$NOTPROJ" <<<"$DR_OUT"
+check_eq "  and no other ❌" "1" "$(grep -c '❌' <<<"$DR_OUT")"
+check "  and runs no checks (no rollup line)" test "$(grep -c '^doctor: ' <<<"$DR_OUT")" = "0"
+# The stamped launcher must run the doctor in the caller's directory, or this guard would read
+# the plugin's directory instead. Run the template copy (byte-identical to the stamped one) from
+# the empty directory against an install record that points at this plugin.
+new_dir; GCFG=$DIR
+record "$GCFG" "[{\"scope\": \"user\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-01T00:00:00Z\"}]"
+LN_OUT=$(cd "$EMPTYP" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT CLAUDE_CONFIG_DIR="$GCFG" \
+           "$BASH" "$TEMPLATES/scripts/doctor.sh" 2>&1)
+LN_RC=$?
+check_eq "the launcher run from an empty directory exits 1 too" "1" "$LN_RC"
+check "  with the same single not-a-project line" grep -qxF "$NOTPROJ" <<<"$LN_OUT"
+check_eq "  and no other ❌" "1" "$(grep -c '❌' <<<"$LN_OUT")"
+# Any ONE of the three markers is a project, however damaged: the full pass runs and names the rest.
+for marker in playwright.config.ts CLAUDE.md scripts; do
+  new_dir; ONEP=$DIR
+  if [ "$marker" = scripts ]; then mkdir "$ONEP/scripts"; else : > "$ONEP/$marker"; fi
+  run_doctor "$ONEP"
+  check "a directory with only $marker runs the full doctor (rollup line printed)" grep -q '^doctor: ' <<<"$DR_OUT"
+  check "  and is not called a non-project" test "$(grep -cF "$NOTPROJ" <<<"$DR_OUT")" = "0"
+done
+
+echo "  -- Bash(printenv *) is retired: gone from the template, warned when an old project keeps it"
+check "templates/settings.json no longer allows Bash(printenv *)" \
+  jq -e '.permissions.allow | index("Bash(printenv *)") | not' "$TEMPLATES/settings.json"
+new_dir; PEP=$DIR
+stamp "$PEP"
+check "precondition: a fresh stamp's settings.json has no Bash(printenv *)" \
+  jq -e '.permissions.allow | index("Bash(printenv *)") | not' "$PEP/.claude/settings.json"
+run_doctor "$PEP"
+check "a fresh stamp gets no retired-rule warning" \
+  test "$(grep -c 'retired permission rule' <<<"$DR_OUT")" = "0"
+jq '.permissions.allow += ["Bash(printenv *)"]' "$PEP/.claude/settings.json" > "$PEP/settings.new"
+mv "$PEP/settings.new" "$PEP/.claude/settings.json"
+run_doctor "$PEP"
+check "Check 9c warns on a leftover Bash(printenv *)" \
+  grep -qF 'retired permission rule still in .claude/settings.json: "Bash(printenv *)"' <<<"$DR_OUT"
+check "  and does not misreport it as the bare Bash(printenv)" \
+  test "$(grep -cF 'settings.json: "Bash(printenv)"' <<<"$DR_OUT")" = "0"
+check_eq "  as a warning (exit 0)" "0" "$DR_RC"
+
 new_dir; D=$DIR
 stamp "$D"
 run_doctor "$D"

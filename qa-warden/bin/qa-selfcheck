@@ -40,9 +40,16 @@ fail=0; warn=0
 # manifest is the only copy there is.
 KEYS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$TMPL/scripts/oracle-keys.txt" 2>/dev/null | grep -v '^$')
 [ -n "$KEYS" ] || { echo "❌ templates/scripts/oracle-keys.txt missing or empty — the vocab checks below are VACUOUS"; fail=$((fail+1)); }
+# missing_keys <file> — prints each key that does not occur in <file> as a WHOLE token, i.e. as a
+# maximal run of [A-Za-z0-9_]. It used to be a substring scan (grep -oF of each key), and that let
+# a manifest key that is only part of a longer word pass: `lock` was "found" inside `clock:` and
+# `value` inside `value_between`, so a bogus key appended to oracle-keys.txt drew no ❌ here. The
+# file is split into tokens and each key must equal one of them. A `:` or a backtick is not an
+# identifier character, so `text_visible:` and `` `text_visible` `` still count, while `clock:` is
+# the token `clock` and never stands in for `lock`.
 missing_keys() {
   [ -n "$KEYS" ] || return 0
-  grep -vxFf <(grep -oFf <(printf '%s\n' "$KEYS") "$1" 2>/dev/null | sort -u) <(printf '%s\n' "$KEYS")
+  grep -vxFf <(grep -oE '[A-Za-z0-9_]+' "$1" 2>/dev/null | sort -u) <(printf '%s\n' "$KEYS")
 }
 
 # 9b. Plugin-side vocab drift (F-09). The 16 keys are defined in the plugin's test-case-contract
@@ -161,8 +168,23 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
     if [ "$n_sot" -eq 0 ] || [ "$n_pln" -eq 0 ]; then
       echo "❌ arg-shape table did not parse (test-case-contract rows=$n_sot, planner.md rows=$n_pln) — the table format changed; argument-shape drift is UNCHECKED"; fail=$((fail+1))
     else
-      [ -n "$KEYS" ] && [ "$n_sot" -ne "$n_keys" ] && {
-        echo "⚠️  arg-shape table in skills/test-case-contract/SKILL.md has $n_sot rows but the vocabulary has $n_keys keys — a key is pinned nowhere (or the table gained a row)"; warn=$((warn+1)); }
+      # The table's key SET must equal the manifest's, and a difference is a ❌. This used to be a
+      # row-COUNT comparison that only warned, so CI stayed green on it, and equal counts with one
+      # key swapped for another passed outright. Unlike doctor Check 2, which compares a project
+      # (possibly older) with the plugin, both sides here ship in the same commit: the
+      # oracle-keys.txt header requires every enumerating mirror to change together, so there is
+      # no legitimate state in which they differ.
+      if [ -n "$KEYS" ]; then
+        sot_keys=$(printf '%s\n' "$sot_shapes" | cut -f1 | sort -u)
+        while IFS= read -r k; do
+          [ -n "$k" ] || continue
+          echo "❌ oracle key '$k' (templates/scripts/oracle-keys.txt) has no arg-shape row in skills/test-case-contract/SKILL.md — the key is pinned nowhere, so no agent knows its argument shape (the vocabulary has $n_keys keys, the table $n_sot rows)"; fail=$((fail+1))
+        done < <(comm -23 <(printf '%s\n' "$KEYS" | sort -u) <(printf '%s\n' "$sot_keys"))
+        while IFS= read -r k; do
+          [ -n "$k" ] || continue
+          echo "❌ arg-shape row '$k' in skills/test-case-contract/SKILL.md is not in templates/scripts/oracle-keys.txt — the table pins a key the vocabulary does not have (the vocabulary has $n_keys keys, the table $n_sot rows)"; fail=$((fail+1))
+        done < <(comm -13 <(printf '%s\n' "$KEYS" | sort -u) <(printf '%s\n' "$sot_keys"))
+      fi
       while IFS="$(printf '\t')" read -r k sot_shape; do
         [ -n "$k" ] || continue
         pln_shape=$(printf '%s\n' "$pln_shapes" | awk -F'\t' -v k="$k" '$1==k{print $2; exit}')

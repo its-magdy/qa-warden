@@ -243,6 +243,44 @@ projects.
   PASS only), and `DOCUMENTATION.md` says the reviewer's git commands work headless (`claude -p`)
   rather than "in CI", where Claude does not run.
 
+### Doctor outside a project, a retired `printenv` rule, and two selfcheck gaps
+
+- **Doctor run outside a project prints one line instead of ~31 ❌.** When the current directory
+  has none of `playwright.config.ts`, `CLAUDE.md` or `scripts/`, doctor prints
+  `❌ not a QA Warden project (run from the project root, or /qa-warden:init)` and exits 1. Before,
+  it ran every check and reported each missing substrate file, which looks like a broken project
+  rather than the wrong directory. Any one of the three present still runs the full pass, so a
+  damaged project still gets every finding. The stamped launcher runs the doctor in your directory,
+  so the same line appears through `bash scripts/doctor.sh`. Not a numbered check; doctor stays at 32.
+- **`Bash(printenv *)` leaves the shipped `settings.json`, and doctor Check 9c now warns when a
+  project still has it.** Nothing in the toolkit runs `printenv`: agents resolve base URLs with
+  `bash scripts/prod-guard.sh --list-targets`, and doctor's own `printenv` is a shell call, not a
+  tool call. The rule did pre-approve `printenv QA_ADMIN_PASSWORD` (or any other secret in the
+  shell's environment, such as a CI secret) with no prompt, which puts the value into the
+  transcript. That is the reason the bare `Bash(printenv)` was retired earlier, so Check 9c treats
+  this one the same way: the settings merge is a union and never removes a rule, so without the
+  warning every existing project would keep the grant. The warning appears once, in projects
+  stamped before this change, and the fix is deleting one line by hand. The ⚠️ for the bare rule no
+  longer says `agents/exploration.md` mandates `printenv $base_url_env`; that file stopped using it
+  when base URLs moved to `--list-targets`.
+- **`bin/qa-selfcheck` Check 9b matches oracle keys as whole tokens.** It used a substring scan, so
+  a key appended to `oracle-keys.txt` that is part of a longer word in the mirrors passed: `lock`
+  was found inside `clock:`. The mirrors are now split into identifier tokens and each key must
+  equal one. Appending `lock` now fails 9b for the skill and `agents/planner.md` (the generator
+  and reviewer mention Playwright's `test lock:`, so they still contain the word).
+- **Check 9bb compares the argument-shape table's key set with `oracle-keys.txt` and fails on a
+  difference.** It compared row counts and only warned, so CI passed (it is one of the ⚠️ arms
+  listed under "Doctor stops running checks no project can fix" above), and a table that swapped one key for another with the same count passed
+  outright. Both files ship in the same commit and the manifest's header requires every
+  enumerating mirror to change together, so a difference is always a bug. Doctor Check 2, which
+  compares a project that may be older than the plugin, keeps its ⚠️ for a key the project lacks.
+  qa-selfcheck stays at 14 checks.
+- `reference/test-case-ideation.md` no longer calls the hooks rationale in `DESIGN.md` "the no-hooks
+  decision". `bin/qa-scaffoldtest` gains 19 cases (182 → 201): doctor and the launcher in an empty
+  directory (exit 1, that one ❌, no rollup), each of the three markers alone still running the full
+  pass, and the `printenv` rule absent from the template and a fresh stamp and warned (exit 0) when
+  added back.
+
 ---
 
 ## 0.5.6 — nightly CI hardening, a truncated hook message, shellcheck cleanup (2026-10-09)

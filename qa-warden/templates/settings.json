@@ -76,7 +76,6 @@
       "Bash(cat *)",
       "Bash(npx tsc --noEmit*)",
       "Bash(curl -sS -o /dev/null *)",
-      "Bash(printenv *)",
       "WebSearch",
       "WebFetch(domain:playwright.dev)",
       "WebFetch(domain:claude.com)",
