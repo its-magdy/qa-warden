@@ -281,6 +281,20 @@ check "precondition: .gitignore no longer mentions qa-bak" test "$(grep -c 'qa-b
 # Edit EVERY toolkit-owned file, plus the three user-owned ones that must survive.
 owned=$(manifest_files)
 check_nonzero "resync-set.txt resolves to template files" "$(printf '%s\n' "$owned" | grep -c .)"
+# manifest_files drops an entry with no template behind it, and so do qa-scaffold and doctor, so a
+# dead entry (a file moved out of templates/ but left in the list) stays green everywhere else.
+# dead_entries <manifest> — every non-comment, non-blank line with no file under templates/.
+dead_entries() {
+  sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$1" | grep -v '^$' | while IFS= read -r rel; do
+    if [ ! -f "$TEMPLATES/$rel" ]; then printf ' %s' "$rel"; fi
+  done
+}
+check_eq "every resync-set.txt entry exists under templates/" "" "$(dead_entries "$MANIFEST")"
+# Vacuity guard: a copy of the manifest with a dead entry added must be caught.
+new_dir; DEADM=$DIR/resync-set.txt
+cp "$MANIFEST" "$DEADM"
+printf 'scripts/review-marker.sh\n' >> "$DEADM"
+check_eq "  and a dead entry added to a copy is reported" " scripts/review-marker.sh" "$(dead_entries "$DEADM")"
 for rel in $owned; do printf '\n# local edit\n' >> "$D/$rel"; done
 printf '\n# my project policy\n' >> "$D/CLAUDE.md"
 printf 'QA_USER_EMAIL=me@staging.dev\n' >> "$D/.env"
@@ -505,6 +519,30 @@ check "  and the line names both of its settings.json rules" \
 check_eq "  as INFO, so doctor still exits 0" "0" "$DR_RC"
 newlines=$(diff <(printf '%s\n' "$fresh_out") <(printf '%s\n' "$DR_OUT") | grep '^>' | grep -v '^> doctor: ')
 check_eq "  and it is the only new line" "1" "$(printf '%s\n' "$newlines" | grep -c .)"
+
+echo "  -- Check 15 hashes with shasum when sha256sum is found but cannot run"
+# An x86-only sha256sum on Apple silicon is on PATH but exits 126 ("Bad CPU type"). Doctor used
+# to pick it by `command -v` alone, hash every file to "" and WARN on every reviewed pair.
+STALE_RV="demo/widget: changed since last review"
+new_dir; SHAP=$DIR
+stamp "$SHAP"
+mkdir -p "$SHAP/specs/demo" "$SHAP/tests/demo"
+printf '# Widget\n' > "$SHAP/specs/demo/widget.md"
+printf "import { test } from '@playwright/test';\n" > "$SHAP/tests/demo/widget.spec.ts"
+(cd "$SHAP" && "$BASH" "$here/skills/review/scripts/review-marker.sh" \
+   specs/demo/widget.md tests/demo/widget.spec.ts PASS) >/dev/null 2>&1
+check "precondition: the review skill's script wrote a marker" test -s "$SHAP/reports/review/demo/widget.reviewed"
+new_dir; FAKESHA=$DIR
+printf '#!/bin/sh\necho "fake sha256sum: Bad CPU type in executable" >&2\nexit 126\n' > "$FAKESHA/sha256sum"
+chmod +x "$FAKESHA/sha256sum"
+run_doctor "$SHAP"
+check "a fresh marker is accepted (normal PATH)" test "$(grep -cF "$STALE_RV" <<<"$DR_OUT")" = "0"
+run_doctor "$SHAP" PATH="$FAKESHA:$PATH"
+check "a fresh marker is accepted when sha256sum exits 126" test "$(grep -cF "$STALE_RV" <<<"$DR_OUT")" = "0"
+# Vacuity guard: with the broken sha256sum still first, a real change must still be reported.
+printf '// edited\n' >> "$SHAP/tests/demo/widget.spec.ts"
+run_doctor "$SHAP" PATH="$FAKESHA:$PATH"
+check "  and an edited test is still reported as changed" grep -qF "$STALE_RV" <<<"$DR_OUT"
 
 # ------------------------------------------------------------------------------------------
 echo "prod-guard.sh — URL classification"

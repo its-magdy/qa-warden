@@ -517,7 +517,7 @@ Checks 2c/2e/7/12/14/15 are WARN-level (2c has two mechanically-decidable FAIL s
 working tree and untracked files (`git ls-files --others --exclude-standard`), so a
 freshly generated, uncommitted spec is in scope. It runs these as separate single git
 commands, which match the allow list (`git ls-files *` among them) and so also work
-headless in CI. With no baseline it reviews the whole tree.
+headless (`claude -p`). With no baseline it reviews the whole tree.
 
 Fail-closed on inconclusive runs. Escape hatch: a `// reviewer-skip-check-<N>:
 bugs/…` comment. Tools: `Read, Bash` (read-only by contract).

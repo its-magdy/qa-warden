@@ -1153,16 +1153,21 @@ done < <(ctx_grep_l '^[[:space:]]*mutates_server_state:[[:space:]]*true')
 # fall back to Perl-based `shasum -a 256` (macOS/BSD). Both print "<hash>  <file>", so `awk
 # {print $1}` extracts the digest either way — and the digest value is identical regardless of
 # tool. Assuming only `shasum` made every reviewed spec falsely WARN "changed since review" on a
-# `sha256sum`-only image (empty hash ≠ recorded hash). Resolved ONCE here, not per file.
-if command -v sha256sum >/dev/null 2>&1; then SHA_CMD=sha256sum; else SHA_CMD='shasum -a 256'; fi
-sha256_of() { $SHA_CMD "$1" 2>/dev/null | awk '{print $1}'; }
+# `sha256sum`-only image (empty hash ≠ recorded hash).
+# The fallback is decided at RUN time, per file, the same way the review skill's
+# review-marker.sh digest() does it. Choosing by `command -v sha256sum` once was not enough: a
+# sha256sum that is found but cannot run (an x86-only binary on Apple silicon: "Bad CPU type",
+# exit 126) yielded an empty hash, so every reviewed pair WARNed "changed since last review".
+sha256_of() {
+  (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1" 2>/dev/null) | awk '{print $1}'
+}
 
 # 14. Unmanaged tests — see Check 4+14 above; scripts/post-run-checks.sh owns that scan.
 
 # 15. Review attestation — for each spec with a compiled test, a reports/review/<area>/<feature>.reviewed
 #     marker must exist and its recorded hashes must match the CURRENT spec+test. Markers are
-#     agent-writable convenience — the unforgeable layer is the CI required-status; this catches
-#     FORGOTTEN reviews, not malicious ones.
+#     agent-writable convenience, not proof — the anti-forgery layer is a human approving the PR
+#     (a required approval in branch protection); this catches FORGOTTEN reviews, not malicious ones.
 while read -r spec; do
   [ -n "$spec" ] || continue
   base=$(spec_base "$spec")
