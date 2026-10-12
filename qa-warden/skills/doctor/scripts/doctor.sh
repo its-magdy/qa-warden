@@ -583,6 +583,21 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   if [ -f scripts/review-marker.sh ]; then
     echo "ℹ️  scripts/review-marker.sh is a leftover from an older stamp — nothing calls it now (/qa-warden:review runs the plugin's copy); safe to delete, together with its two .claude/settings.json rules: \"Bash(bash scripts/review-marker.sh*)\" (allow) and \"Edit(scripts/review-marker.sh)\" (deny)"
   fi
+  # And for the two allow rules the stamped doctor needed: /qa-warden:doctor runs this file, so
+  # nothing Claude runs calls scripts/doctor.sh (now a launcher for terminal runs, which need no
+  # allow rule). Named here, not retired by Check 9c, for the same reason as above: all they
+  # pre-approve is running the edit-denied launcher, which ignores $CLAUDE_PLUGIN_ROOT. The file
+  # stays (it is the launcher, toolkit-owned); only the rules are leftovers.
+  old_doctor_rules=""
+  if [ -f .claude/settings.json ]; then
+    for rule in 'Bash(bash scripts/doctor.sh*)' 'Bash(CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh*)'; do
+      grep -qF "\"$rule\"" .claude/settings.json 2>/dev/null || continue
+      old_doctor_rules="${old_doctor_rules:+$old_doctor_rules and }\"$rule\""
+    done
+  fi
+  if [ -n "$old_doctor_rules" ]; then
+    echo "ℹ️  .claude/settings.json still allows $old_doctor_rules — a leftover from an older stamp: /qa-warden:doctor runs the plugin's own doctor and nothing calls scripts/doctor.sh any more (keep the file, it is the launcher for terminal runs); the rule(s) are safe to delete"
+  fi
 else
   # A skipped drift check must be VISIBLE (WARN, counted), not a silent green INFO — this check
   # guards the highest-value propagation class (F-015/F-027); a quiet skip hides exactly that drift.

@@ -12,7 +12,7 @@
 # permits `Bash(bash scripts/retire-delete.sh*)` — the permission matcher sees only
 # the top-level command STRING (`bash scripts/retire-delete.sh <file>`), which no
 # deny pattern matches; the `rm` inside runs as a child process the matcher never
-# inspects. Same pattern the toolkit already uses for prod-guard.sh / doctor.sh.
+# inspects. Same pattern the toolkit already uses for prod-guard.sh.
 # Keeping deletion behind this script (not a broad `rm` allow) means the safety
 # rails below are the ONLY delete path, and they are enforced in one place.
 #

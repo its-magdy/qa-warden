@@ -172,7 +172,10 @@ does not fix anything — each finding names its repair:
   leftover is not a finding: those manifests now live only in the plugin, nothing in the project
   reads the old copies, and the user can delete them. Likewise an ℹ️ naming
   `scripts/review-marker.sh`: `/qa-warden:review` runs the plugin's copy, so the user can delete
-  the stamped one together with its two `settings.json` rules. A ⚠️ drift on `scripts/doctor.sh`
+  the stamped one together with its two `settings.json` rules. An ℹ️ naming
+  `Bash(bash scripts/doctor.sh*)` or `Bash(CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh*)` is the
+  same: nothing calls the stamped path now, so the user can delete those rules, but keeps
+  `scripts/doctor.sh` itself. A ⚠️ drift on `scripts/doctor.sh`
   after a plugin update is expected: that stamped file is now only a launcher for running doctor
   by hand, and `--resync` replaces the old full copy with it.
 - **Check 10 (site↔project routing):** never edit `playwright.config.ts` (toolkit-owned; it

@@ -306,6 +306,45 @@ projects.
   factory resolution, `must_fail_when:`/`fail_if:` invariants) sat under `## Situation steps ->
   page.route / page.clock`, which is about `fault:`/`clock:` only. Text unchanged; no behaviour change.
 
+### The doctor launcher stops running another project's install; stale wording in stamped files
+
+- **`scripts/doctor.sh` no longer runs another project's plugin install.** The launcher tried this
+  project's local- or project-scope install, then the user-scope one, then every record. That last
+  tier included local- and project-scope installs recorded for other directories, so on a machine
+  where qa-warden was installed only for another project, `bash scripts/doctor.sh` ran that
+  project's copy here. Claude Code applies a local- or project-scope install only to its own
+  repository, so that copy is not the plugin this project runs, and its version can be older or
+  newer than this project's stamp. The last tier now takes only records not tied to a project (a
+  managed install, for example). When the only installs belong to other projects, the launcher
+  exits 2, runs nothing, and names those projects. A record whose `projectPath` matches this directory in
+  either form (`pwd` or `pwd -P`) still counts as this project.
+- **Doctor names the stamped doctor's two old allow rules as leftovers.** Projects stamped before
+  `/qa-warden:doctor` moved into the plugin still carry `Bash(bash scripts/doctor.sh*)` and
+  `Bash(CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh*)`, because the settings merge never removes
+  a rule. Doctor now prints one ℹ️ line (not counted as a warning) naming whichever of them is
+  present as safe to delete, the way it already names `scripts/review-marker.sh`. Check 9c does not
+  flag them: they only pre-approve running the edit-denied launcher, which ignores
+  `$CLAUDE_PLUGIN_ROOT`. Delete the rules, not `scripts/doctor.sh`, which is the launcher.
+- **Stale wording in three stamped files.** `playwright.config.ts` and `scripts/runtime-dirs.txt`
+  pointed at `scripts/resync-set.txt`, which is no longer stamped; they now name the plugin's
+  `manifests/resync-set.txt`. `scripts/runtime-dirs.txt` also said the stamped settings have a
+  `Write`/`Edit` allowlist; they have only `Edit(...)` rules. `scripts/retire-delete.sh` said
+  its allow-listed wrapper pattern was the one used for `doctor.sh`, which no longer has an allow
+  rule; it now names `prod-guard.sh` only. Comments only; no behaviour changes in these three.
+- **Already-stamped projects:** doctor reports one ⚠️ `substrate drift` line for each of the four
+  changed stamped files (`playwright.config.ts`, `scripts/doctor.sh`, `scripts/retire-delete.sh`,
+  `scripts/runtime-dirs.txt`) until you run `/qa-warden:init --resync`, which backs each one up to
+  `.qa-bak` and refreshes it. Measured on a project stamped from the previous commit: 2 warnings
+  before, 6 after the plugin update, 2 again after `--resync`. A fresh stamp's doctor output is
+  unchanged. Doctor still runs 32 numbered checks.
+- `bin/qa-scaffoldtest` gains 14 cases (270 → 284). For the launcher: it exits 2, names the other
+  project and runs nothing when that project's install is the only one; the same record with this
+  project's path is picked (the control); a managed install beats another project's newer one;
+  and a record holding the real path or the symlink path is picked when run through a symlink.
+  Restoring the old fallback tier fails four of them. For the leftover rules: neither is in the
+  template, a fresh stamp gets no line, both named on one ℹ️ line with exit 0, no Check 9c warning,
+  and no other output change; one rule left alone is named alone.
+
 ---
 
 ## 0.5.6 — nightly CI hardening, a truncated hook message, shellcheck cleanup (2026-10-09)

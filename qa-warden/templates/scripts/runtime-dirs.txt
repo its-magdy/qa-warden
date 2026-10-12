@@ -6,10 +6,10 @@
 # Both entry points MUST produce the same tree. That invariant used to live in two paired prose
 # comments ("Keep this list IDENTICAL to …") on two hand-kept brace lists — a comment cannot
 # enforce anything, and the pair had already drifted elsewhere. Single-source it here, mirroring
-# scripts/resync-set.txt: adding a runtime dir is a ONE-line edit.
+# the plugin's manifests/resync-set.txt: adding a runtime dir is a ONE-line edit.
 #
 # A missing dir means the first agent write into it hits an approval wall, so the set must also
-# stay consistent with the `Write`/`Edit` allowlist in the stamped .claude/settings.json and the
+# stay consistent with the `Edit(...)` allowlist in the stamped .claude/settings.json and the
 # writable-paths list in CLAUDE.md §"Tooling allowed paths".
 #
 # `steps/` holds reusable YAML step fragments (planner `include:`, generator resolves them) — it is

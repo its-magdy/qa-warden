@@ -22,7 +22,8 @@
 #   4. doctor          the plugin's skills/doctor/scripts/doctor.sh finds its baseline beside
 #                      itself (no drift on a fresh stamp, real drift reported, CLAUDE_PLUGIN_ROOT
 #                      ignored), and the stamped scripts/doctor.sh launcher runs it from the
-#                      recorded install, or exits 2 without guessing; the spec format's move from
+#                      recorded install (never another project's), or exits 2 without guessing;
+#                      old stamps' leftover doctor allow rules named as INFO; the spec format's move from
 #                      CLAUDE.md into the test-case-contract skill (old section warned, a missing
 #                      pointer nudged, Check 2 compares key sets with the skill exactly,
 #                      fault:/clock: no longer demanded in CLAUDE.md)
@@ -474,6 +475,36 @@ record "$CFG" "[{\"scope\": \"user\", \"installPath\": \"$NODOC\", \"lastUpdated
                 {\"scope\": \"user\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
 run_launcher "$D" "$CFG"
 check "launcher picks the newest record within a scope, not the first" grep -qF "recorded plugin install → $here" <<<"$LN_OUT"
+# Another project's local- or project-scope install is never used: that scope applies only to its
+# own repository. The launcher used to fall back to EVERY record, so a record holding nothing but
+# another project's install ran that install here.
+new_dir; OTHERP=$DIR
+record "$CFG" "[{\"scope\": \"local\", \"projectPath\": \"$OTHERP\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
+run_launcher "$D" "$CFG"
+check_eq "launcher exits 2 when the only install is another project's" "2" "$LN_RC"
+check "  and names that project" grep -qF "only for other projects ($OTHERP)" <<<"$LN_OUT"
+check "  and runs nothing" test "$(grep -c '^doctor: ' <<<"$LN_OUT")" = "0"
+# The control: the same record with THIS project's path is picked, so the exit above is the
+# projectPath and not a broken entry.
+record "$CFG" "[{\"scope\": \"local\", \"projectPath\": \"$D\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
+run_launcher "$D" "$CFG"
+check "  control: the same record for this project is picked" grep -qF "recorded plugin install → $here" <<<"$LN_OUT"
+# A record not tied to a project (managed here) beats another project's NEWER install. The other
+# project's install has no doctor, so picking it would exit 2 with "older than this launcher".
+record "$CFG" "[{\"scope\": \"managed\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-09-01T00:00:00Z\"},
+                {\"scope\": \"project\", \"projectPath\": \"$OTHERP\", \"installPath\": \"$NODOC\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
+run_launcher "$D" "$CFG"
+check "launcher prefers a managed install over another project's newer one" grep -qF "recorded plugin install → $here" <<<"$LN_OUT"
+# Either form of this directory still counts as this project: run from a symlink to it, the
+# launcher sees the link path (pwd) and the real path (pwd -P), and a record may hold either.
+new_dir; LINKP="$DIR/link-to-project"
+ln -s "$D" "$LINKP"
+record "$CFG" "[{\"scope\": \"local\", \"projectPath\": \"$D\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
+run_launcher "$LINKP" "$CFG"
+check "run through a symlink, a record holding the real path is this project's" grep -qF "recorded plugin install → $here" <<<"$LN_OUT"
+record "$CFG" "[{\"scope\": \"local\", \"projectPath\": \"$LINKP\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
+run_launcher "$LINKP" "$CFG"
+check "  and so is a record holding the symlink path" grep -qF "recorded plugin install → $here" <<<"$LN_OUT"
 record "$CFG" "[{\"scope\": \"user\", \"installPath\": \"$NODOC\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
 run_launcher "$D" "$CFG"
 check_eq "launcher exits 2 when the recorded plugin has no doctor" "2" "$LN_RC"
@@ -585,6 +616,34 @@ check "  and the line names both of its settings.json rules" \
 check_eq "  as INFO, so doctor still exits 0" "0" "$DR_RC"
 newlines=$(diff <(printf '%s\n' "$fresh_out") <(printf '%s\n' "$DR_OUT") | grep '^>' | grep -v '^> doctor: ')
 check_eq "  and it is the only new line" "1" "$(printf '%s\n' "$newlines" | grep -c .)"
+
+echo "  -- the stamped doctor's two old allow rules are named leftovers, not warnings"
+OLD_DR_ALLOW='Bash(bash scripts/doctor.sh*)'
+OLD_DR_ROOT='Bash(CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh*)'
+LEFTOVER_DR=".claude/settings.json still allows"
+check "templates/settings.json allows neither old doctor rule" \
+  jq -e --arg a "$OLD_DR_ALLOW" --arg b "$OLD_DR_ROOT" \
+     '.permissions.allow | (index($a) | not) and (index($b) | not)' "$TEMPLATES/settings.json"
+check "a fresh stamp gets no old-doctor-rule line" test "$(grep -cF "$LEFTOVER_DR" <<<"$fresh_out")" = "0"
+# A project stamped before doctor moved into the plugin still carries both: the merge never removes a rule.
+new_dir; ODP=$DIR
+stamp "$ODP"
+jq --arg a "$OLD_DR_ALLOW" --arg b "$OLD_DR_ROOT" '.permissions.allow += [$a, $b]' \
+  "$ODP/.claude/settings.json" > "$ODP/settings.new"
+mv "$ODP/settings.new" "$ODP/.claude/settings.json"
+run_doctor "$ODP"
+check "an old stamp's two doctor allow rules are named on one INFO line" \
+  grep -qF "ℹ️  $LEFTOVER_DR \"$OLD_DR_ALLOW\" and \"$OLD_DR_ROOT\"" <<<"$DR_OUT"
+check_eq "  as INFO, so doctor still exits 0" "0" "$DR_RC"
+check "  and Check 9c does not call them retired" test "$(grep -c 'retired permission rule' <<<"$DR_OUT")" = "0"
+newlines=$(diff <(printf '%s\n' "$fresh_out") <(printf '%s\n' "$DR_OUT") | grep '^>')
+check_eq "  and it is the only new line (the rollup count is unchanged)" "1" "$(printf '%s\n' "$newlines" | grep -c .)"
+# One rule alone is named alone. Delete it with jq, not by hand, so the rest of the file is untouched.
+jq --arg a "$OLD_DR_ALLOW" '.permissions.allow -= [$a]' "$ODP/.claude/settings.json" > "$ODP/settings.new"
+mv "$ODP/settings.new" "$ODP/.claude/settings.json"
+run_doctor "$ODP"
+check "with only the CLAUDE_PLUGIN_ROOT rule left, the line names just that one" \
+  grep -qxF "ℹ️  $LEFTOVER_DR \"$OLD_DR_ROOT\" — a leftover from an older stamp: /qa-warden:doctor runs the plugin's own doctor and nothing calls scripts/doctor.sh any more (keep the file, it is the launcher for terminal runs); the rule(s) are safe to delete" <<<"$DR_OUT"
 
 echo "  -- Check 15 hashes with shasum when sha256sum is found but cannot run"
 # An x86-only sha256sum on Apple silicon is on PATH but exits 126 ("Bad CPU type"). Doctor used
