@@ -407,5 +407,5 @@ ODC (IEEE TSE 1992) · Chen MT survey (ACM CSUR 2018) · LTM test minimization (
 
 **Internal:** [DESIGN.md](./DESIGN.md) (the design rationale — oracle-defense
 philosophy, the hooks decision (why the layer is narrow), honest limits). Operational
-facts — the subagent roster, oracle vocabulary, and reviewer checks — live in `templates/CLAUDE.md`,
-`skills/test-case-contract/SKILL.md` and `agents/**`.
+facts — the subagent roster, oracle vocabulary, and reviewer checks — live in
+`templates/CLAUDE.md`, `skills/test-case-contract/SKILL.md` and `agents/**`.

@@ -250,36 +250,40 @@ projects.
   `❌ not a QA Warden project (run from the project root, or /qa-warden:init)` and exits 1. Before,
   it ran every check and reported each missing substrate file, which looks like a broken project
   rather than the wrong directory. Any one of the three present still runs the full pass, so a
-  damaged project still gets every finding. The stamped launcher runs the doctor in your directory,
-  so the same line appears through `bash scripts/doctor.sh`. Not a numbered check; doctor stays at 32.
+  damaged project still gets every finding. The test runs before doctor loads `.env`, so a stray
+  `.env` in the wrong directory is never executed, and before the jq check. The stamped launcher
+  runs the doctor in your directory, so the same line appears through `bash scripts/doctor.sh`.
+  Not a numbered check; doctor stays at 32. The doctor skill tells the agent what the line means.
 - **`Bash(printenv *)` leaves the shipped `settings.json`, and doctor Check 9c now warns when a
   project still has it.** Nothing in the toolkit runs `printenv`: agents resolve base URLs with
   `bash scripts/prod-guard.sh --list-targets`, and doctor's own `printenv` is a shell call, not a
-  tool call. The rule did pre-approve `printenv QA_ADMIN_PASSWORD` (or any other secret in the
-  shell's environment, such as a CI secret) with no prompt, which puts the value into the
+  tool call. The rule did pre-approve `printenv QA_ADMIN_PASSWORD` (or any other named secret in
+  the shell's environment, such as a CI secret) with no prompt, which puts the value into the
   transcript. That is the reason the bare `Bash(printenv)` was retired earlier, so Check 9c treats
   this one the same way: the settings merge is a union and never removes a rule, so without the
   warning every existing project would keep the grant. The warning appears once, in projects
   stamped before this change, and the fix is deleting one line by hand. The ⚠️ for the bare rule no
   longer says `agents/exploration.md` mandates `printenv $base_url_env`; that file stopped using it
   when base URLs moved to `--list-targets`.
-- **`bin/qa-selfcheck` Check 9b matches oracle keys as whole tokens.** It used a substring scan, so
-  a key appended to `oracle-keys.txt` that is part of a longer word in the mirrors passed: `lock`
-  was found inside `clock:`. The mirrors are now split into identifier tokens and each key must
-  equal one. Appending `lock` now fails 9b for the skill and `agents/planner.md` (the generator
-  and reviewer mention Playwright's `test lock:`, so they still contain the word).
+- **`bin/qa-selfcheck` Check 9b requires each oracle key in a key spelling.** It used a substring
+  scan, so a key appended to `oracle-keys.txt` that occurs inside other text passed: `lock` was
+  found inside `clock:`. A whole-word scan would not help, because the mirrors use `lock`, `value`
+  and `state` as plain words. A key now counts only backticked on its own (`` `text_visible` ``) or
+  backticked with a colon at the start of a list item (`` - `storage_state: {…}` → … ``), which is
+  how `agents/generator.md` writes six of the keys. All 16 keys meet that in all four mirrors, and appending `lock` now fails 9b for all four.
 - **Check 9bb compares the argument-shape table's key set with `oracle-keys.txt` and fails on a
   difference.** It compared row counts and only warned, so CI passed (it is one of the ⚠️ arms
-  listed under "Doctor stops running checks no project can fix" above), and a table that swapped one key for another with the same count passed
-  outright. Both files ship in the same commit and the manifest's header requires every
-  enumerating mirror to change together, so a difference is always a bug. Doctor Check 2, which
-  compares a project that may be older than the plugin, keeps its ⚠️ for a key the project lacks.
-  qa-selfcheck stays at 14 checks.
-- `reference/test-case-ideation.md` no longer calls the hooks rationale in `DESIGN.md` "the no-hooks
-  decision". `bin/qa-scaffoldtest` gains 19 cases (182 → 201): doctor and the launcher in an empty
-  directory (exit 1, that one ❌, no rollup), each of the three markers alone still running the full
-  pass, and the `printenv` rule absent from the template and a fresh stamp and warned (exit 0) when
-  added back.
+  listed under "Doctor stops running checks no project can fix" above), and a table that swapped
+  one key for another with the same count passed outright. Both files ship in the same commit and
+  the manifest's header requires every enumerating mirror to change together, so a difference is
+  always a bug. A key listed twice in the manifest, or a row repeated in the table, also fails.
+  Doctor Check 2, which compares a project that may be older than the plugin, keeps its ⚠️ for a
+  key the project lacks. qa-selfcheck stays at 14 checks.
+- `reference/test-case-ideation.md` no longer calls the hooks rationale in `DESIGN.md` "the
+  no-hooks decision". `bin/qa-scaffoldtest` gains 21 cases (182 → 203): doctor and the launcher in
+  an empty directory (exit 1, that one ❌, no rollup), a stray `.env` not sourced, each of the
+  three markers alone still running the full pass, and the `printenv` rule absent from the
+  template and a fresh stamp and warned (exit 0) when added back.
 
 ---
 

@@ -375,6 +375,12 @@ check_eq "doctor in an empty directory exits 1" "1" "$DR_RC"
 check "  and prints the not-a-project line" grep -qxF "$NOTPROJ" <<<"$DR_OUT"
 check_eq "  and no other ❌" "1" "$(grep -c '❌' <<<"$DR_OUT")"
 check "  and runs no checks (no rollup line)" test "$(grep -c '^doctor: ' <<<"$DR_OUT")" = "0"
+# The guard runs before the .env load: a stray .env in the wrong directory is never executed.
+new_dir; STRAYP=$DIR
+printf 'echo STRAY-ENV-WAS-SOURCED\n' > "$STRAYP/.env"
+run_doctor "$STRAYP"
+check_eq "a directory with only a stray .env is not a project either (exit 1)" "1" "$DR_RC"
+check "  and its .env is not sourced" test "$(grep -c 'STRAY-ENV-WAS-SOURCED' <<<"$DR_OUT")" = "0"
 # The stamped launcher must run the doctor in the caller's directory, or this guard would read
 # the plugin's directory instead. Run the template copy (byte-identical to the stamped one) from
 # the empty directory against an install record that points at this plugin.

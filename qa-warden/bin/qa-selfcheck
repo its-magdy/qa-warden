@@ -40,16 +40,22 @@ fail=0; warn=0
 # manifest is the only copy there is.
 KEYS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$TMPL/scripts/oracle-keys.txt" 2>/dev/null | grep -v '^$')
 [ -n "$KEYS" ] || { echo "❌ templates/scripts/oracle-keys.txt missing or empty — the vocab checks below are VACUOUS"; fail=$((fail+1)); }
-# missing_keys <file> — prints each key that does not occur in <file> as a WHOLE token, i.e. as a
-# maximal run of [A-Za-z0-9_]. It used to be a substring scan (grep -oF of each key), and that let
-# a manifest key that is only part of a longer word pass: `lock` was "found" inside `clock:` and
-# `value` inside `value_between`, so a bogus key appended to oracle-keys.txt drew no ❌ here. The
-# file is split into tokens and each key must equal one of them. A `:` or a backtick is not an
-# identifier character, so `text_visible:` and `` `text_visible` `` still count, while `clock:` is
-# the token `clock` and never stands in for `lock`.
+# missing_keys <file> — prints each key that <file> never names AS A KEY. A key counts in two
+# spellings only: backticked on its own (`text_visible`), or opening a list item as `key: …`
+# (generator.md's Oracle -> expect mapping writes six keys only that way, e.g.
+# "- `storage_state: { … }` → …"). It used to be a substring scan (grep -oF of each key), so a
+# bogus manifest key that occurs inside other text passed: `lock` was "found" in `clock:`. A
+# whole-word scan is no better, because the mirrors use `lock`, `value` and `state` as plain words
+# (Playwright's `test lock:` in generator.md and reviewer.md). Measured on this commit: all 16 keys
+# appear in one of the two spellings in all four mirrors, and `lock`, `value` and `state` in none.
 missing_keys() {
   [ -n "$KEYS" ] || return 0
-  grep -vxFf <(grep -oE '[A-Za-z0-9_]+' "$1" 2>/dev/null | sort -u) <(printf '%s\n' "$KEYS")
+  grep -vxFf <(
+    {
+      grep -oE '`[A-Za-z0-9_]+`' "$1" 2>/dev/null | tr -d '`'
+      grep -oE '^[[:space:]]*[-*][[:space:]]+`[A-Za-z0-9_]+:' "$1" 2>/dev/null | sed -E 's/^[^`]*`//; s/:$//'
+    } | sort -u
+  ) <(printf '%s\n' "$KEYS")
 }
 
 # 9b. Plugin-side vocab drift (F-09). The 16 keys are defined in the plugin's test-case-contract
@@ -175,6 +181,15 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
       # oracle-keys.txt header requires every enumerating mirror to change together, so there is
       # no legitimate state in which they differ.
       if [ -n "$KEYS" ]; then
+        # The set comparison below is blind to a key listed twice, which the row count did see.
+        while IFS= read -r k; do
+          [ -n "$k" ] || continue
+          echo "❌ oracle key '$k' is listed more than once in templates/scripts/oracle-keys.txt — the manifest counts $n_keys lines but the vocabulary has fewer keys; delete the duplicate"; fail=$((fail+1))
+        done < <(printf '%s\n' "$KEYS" | sort | uniq -d)
+        while IFS= read -r k; do
+          [ -n "$k" ] || continue
+          echo "❌ arg-shape row '$k' appears more than once in skills/test-case-contract/SKILL.md — one key pinned twice, so the table can contradict itself"; fail=$((fail+1))
+        done < <(printf '%s\n' "$sot_shapes" | cut -f1 | sort | uniq -d)
         sot_keys=$(printf '%s\n' "$sot_shapes" | cut -f1 | sort -u)
         while IFS= read -r k; do
           [ -n "$k" ] || continue
