@@ -179,7 +179,8 @@ than fails, because the repair is a hand-merge rather than a command. The spec f
 (the oracle keys, `fault:`, `clock:`) no longer has this problem: it moved out of `CLAUDE.md`
 into the plugin's `test-case-contract` skill, which updates with the plugin. If your
 `CLAUDE.md` still has the old `## Test case format contract` section, doctor warns and asks
-you to delete it.
+you to replace it with the shipped template's `## Spec format` pointer (run `--resync` first,
+and move any project-specific rules out of it before deleting it).
 
 The other two shared-ownership files used to cost you something as well, and no longer do —
 both were fixed by making the resync do slightly more, rather than by detecting the shortfall.

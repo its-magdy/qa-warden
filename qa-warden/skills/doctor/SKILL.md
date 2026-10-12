@@ -96,8 +96,10 @@ does not fix anything — each finding names its repair:
   a repair the toolkit cannot perform must not be louder than the ones it can.
 - **Check 9, old spec-format section in CLAUDE.md (WARN):** a project stamped before the spec
   format moved into the `test-case-contract` skill still has a `## Test case format contract`
-  section in its `CLAUDE.md`. Delete it, from that heading down to the next `## ` heading. The
-  agents preload the skill, so the old copy only drifts away from it.
+  section in its `CLAUDE.md`. Run `/qa-warden:init --resync` first, move any project-specific
+  rules out of the section, then replace it (down to the next `## ` heading) with the shipped
+  template's `## Spec format` pointer. The agents preload the skill, so the old copy only drifts
+  away from it. The containment check above asks for that pointer (`test-case-contract`) too.
 - **Check 9k (unmanifested-walk ownership):** "which compiled tests carry no route manifest" is
   one rule with two consumers that must never disagree — `/qa-warden:impact` prints it as
   `### BLIND SPOTS` (a zero-match there is only honest if the caller is told which specs were

@@ -77,25 +77,34 @@ KEYS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' scripts/oracle-keys.txt 2>/dev/n
 if [ -z "$KEYS" ]; then
   echo "❌ scripts/oracle-keys.txt missing or empty — the oracle vocabulary is UNVERIFIED (run /qa-warden:init --resync)"; fail=$((fail+1))
 fi
-# missing_keys <file> — prints the keys ABSENT from <file>, one per line. `bin/qa-selfcheck` Check 9b (plugin-side) runs the
-# same scan over the plugin's agent mirrors (planner, generator, reviewer); one helper instead of two copies of the loop, and one pass over
-# each file instead of 16 (the per-key `grep -q` form re-read every file end to end, 16× per file).
-# `grep -oFf` lists the keys the file DOES contain; `grep -vxFf` subtracts them from the full set.
-# An empty pattern file matches nothing, so a file with ZERO keys correctly reports all 16 missing.
-missing_keys() {
-  [ -n "$KEYS" ] || return 0
-  grep -vxFf <(grep -oFf <(printf '%s\n' "$KEYS") "$1" 2>/dev/null | sort -u) <(printf '%s\n' "$KEYS")
-}
 # The skill ships beside this script: <plugin>/skills/doctor/scripts/doctor.sh -> <plugin>/skills/.
+# Its key SET is read from the arg-shape table rows, with the same extractor bin/qa-selfcheck
+# Check 9bb uses (a row is "| `key` | `shape` |"; the `fault:`/`clock:` rows keep their trailing
+# colon precisely so this pattern skips them). The sets are compared EXACTLY. A substring scan
+# (grep -oF of each key over the file) used to be enough for CLAUDE.md, but it passes a manifest
+# that gains `value`, `url` or `lock`, because those words occur inside the skill's prose.
 TCC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)/test-case-contract/SKILL.md"
 if [ -n "$KEYS" ]; then
   if [ ! -f "$TCC" ]; then
     echo "⚠️  the plugin's test-case-contract skill was not found at $TCC — the vocabulary the agents load is UNVERIFIED (run doctor from the plugin: /qa-warden:doctor)"; warn=$((warn+1))
   else
-    while read -r k; do
-      [ -n "$k" ] || continue
-      echo "❌ oracle key '$k' (scripts/oracle-keys.txt) is not in the plugin's test-case-contract skill — the planner and reviewer do not know it, so a spec using it fails review. The project and the installed plugin disagree: run /qa-warden:init --resync, or update the plugin if this project is newer"; fail=$((fail+1))
-    done < <(missing_keys "$TCC")
+    SKILL_KEYS=$(sed -nE 's/^\| `([a-z0-9_]+)` \| `.*/\1/p' "$TCC" | sort -u)
+    PROJ_KEYS=$(printf '%s\n' "$KEYS" | sort -u)
+    if [ -z "$SKILL_KEYS" ]; then
+      echo "⚠️  the arg-shape table in $TCC did not parse — the project's oracle keys are UNVERIFIED against the vocabulary the agents load"; warn=$((warn+1))
+    else
+      # In the project's manifest, not in the skill: a spec using the key fails review.
+      while read -r k; do
+        [ -n "$k" ] || continue
+        echo "❌ oracle key '$k' (scripts/oracle-keys.txt) is not in the plugin's test-case-contract skill — the planner and reviewer do not know it, so a spec using it fails review. The project and the installed plugin disagree: run /qa-warden:init --resync, or update the plugin if this project is newer"; fail=$((fail+1))
+      done < <(comm -23 <(printf '%s\n' "$PROJ_KEYS") <(printf '%s\n' "$SKILL_KEYS"))
+      # In the skill, not in the manifest: the project is older than the plugin, and
+      # /qa-warden:coverage (which builds its pattern from the manifest) does not count that key.
+      while read -r k; do
+        [ -n "$k" ] || continue
+        echo "⚠️  oracle key '$k' is in the plugin's test-case-contract skill but not in scripts/oracle-keys.txt — /qa-warden:coverage does not count it. Run /qa-warden:init --resync"; warn=$((warn+1))
+      done < <(comm -13 <(printf '%s\n' "$PROJ_KEYS") <(printf '%s\n' "$SKILL_KEYS"))
+    fi
   fi
 fi
 
@@ -658,7 +667,7 @@ fi
 # Keyed on the section's own heading, which the shipped template no longer carries. WARN, for the
 # same reason as the two checks above: the repair is a hand-edit.
 if [ -f CLAUDE.md ] && grep -qE '^##[[:space:]]+Test case format contract[[:space:]]*$' CLAUDE.md; then
-  echo "⚠️  CLAUDE.md still has the '## Test case format contract' section. It moved into the plugin's test-case-contract skill, which the agents preload, so delete it from CLAUDE.md: from that heading down to the next '## ' heading (its '### Situation steps' subsection goes too). Otherwise the two copies drift apart. /qa-warden:init --resync does not edit CLAUDE.md."
+  echo "⚠️  CLAUDE.md still has the '## Test case format contract' section. It moved into the plugin's test-case-contract skill, which the agents preload, and the two copies will drift apart. Run /qa-warden:init --resync first (it does not edit CLAUDE.md). Then move any project-specific rules out of the section, replace it (from that heading down to the next '## ' heading, '### Situation steps' included) with the shipped template's '## Spec format' section, and in '## Oracle defense' change 'Closed vocabulary — see above' to name the skill."
   warn=$((warn+1))
 fi
 

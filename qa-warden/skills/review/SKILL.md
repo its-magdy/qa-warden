@@ -179,10 +179,10 @@ serializing it behind two live browser scans wastes the whole audit's wall-clock
    `site:`+area maps to the route). Then branch on the result — **never return a bare PASS on an
    unresolved URL:**
    - **≥1 spec references the URL:** pass that explicit spec list to the reviewer as its
-     explicit-file-list scope, and run the
-     **closed-vocab audit** — confirm every assertion uses the canonical closed oracle
-     vocabulary (**the 16-key set defined in the `test-case-contract` skill**, which the reviewer preloads; do NOT restate the key
-     list — defer to reviewer Check 4). Flag free-form assertions and missing `must_fail_when` contracts.
+     explicit-file-list scope. The reviewer's **Check 4 result is the closed-vocab audit**: it
+     confirms every assertion uses the canonical closed oracle vocabulary (**the 16-key set defined
+     in the `test-case-contract` skill**, which the reviewer preloads; do NOT restate the key list
+     here). Report its free-form-assertion and missing-`must_fail_when` findings.
    - **ZERO specs reference the URL:** emit a **structured `COVERAGE-GAP`** line in the report
      (`COVERAGE-GAP: no spec references <url> — this page is UNTESTED (vocab-clean ≠ covered)`),
      distinct from PASS. A wholly-untested page must read as an explicit gap, never a green

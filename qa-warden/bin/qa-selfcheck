@@ -55,6 +55,15 @@ missing_keys() {
 #     that agent silently works without the vocabulary — for the reviewer, Check 4 has no SoT and
 #     passes whatever it is shown. And a skill with `disable-model-invocation: true` cannot be
 #     preloaded at all (sub-agents docs), so that flag would cut all five links at once.
+#     Arm 3 (COMPACTION). After a compaction Claude Code re-attaches each invoked skill but keeps
+#     only its first 5,000 tokens (code.claude.com/docs/en/skills.md). The docs do not say
+#     whether that also applies to a preload, so assume it does. The skill is longer than that, so
+#     the rules come first and the explanatory notes last. This arm checks that order: every
+#     normative anchor must lie inside the first 17,500 BYTES, which is 5,000 tokens at 3.5
+#     chars/token. Bytes are stricter than chars because the file has multi-byte dashes and
+#     arrows. A whole-file size cap would be simpler, but the file is ~20 KB and the tail that
+#     goes past the cap (the honest limits) is explanation, so a cap would mean cutting real
+#     content to satisfy a check.
 if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   # coverage.sh is NOT in this list: it builds KEYS_RE at runtime from scripts/oracle-keys.txt, so it
   # holds no key copy to drift (it refuses, exit 2, if the manifest is missing).
@@ -92,6 +101,27 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
       printf '%s\n' "$preloads" | grep -qx 'test-case-contract' \
         || { echo "❌ agents/$ag.md does not preload test-case-contract (frontmatter skills:) — that agent reads or writes specs but no longer has the spec format or the oracle vocabulary in context"; fail=$((fail+1)); }
     done
+    # Arm 3: the normative rules sit inside the part a compaction keeps.
+    tcc_head=$(head -c 17500 "$tcc")
+    while IFS= read -r anchor; do
+      [ -n "$anchor" ] || continue
+      if ! grep -qF -- "$anchor" "$tcc"; then
+        echo "❌ skills/test-case-contract/SKILL.md no longer contains the anchor '$anchor' — Check 9b arm 3 cannot place that rule; re-anchor it on the rule's new wording"; fail=$((fail+1))
+      elif ! printf '%s\n' "$tcc_head" | grep -qF -- "$anchor"; then
+        echo "❌ skills/test-case-contract/SKILL.md: '$anchor' is not wholly inside the first 17,500 bytes — after a compaction only the first ~5,000 tokens of a skill are re-attached, so this rule would be dropped. Move it above '## Authoring notes and honest limits'"; fail=$((fail+1))
+      fi
+    done <<'ANCHORS'
+invariant_holds_when:
+**Smoke-lane rule.**
+Closed **oracle vocabulary**
+| `a11y_violations_below` |
+**Two assertions with the same key
+| `clock:` |
+**The fired-proof rule
+**A scenario with a `fault:` step may not be tagged `smoke`.**
+**HAR replay is BANNED.**
+## Authoring notes and honest limits
+ANCHORS
   fi
 fi
 

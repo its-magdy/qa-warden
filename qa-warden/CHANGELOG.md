@@ -152,6 +152,12 @@ projects.
   section was ~19 KB of it (~4.7k of ~15.6k tokens) that only the agents reading or writing specs
   use. A fresh `CLAUDE.md` is now ~44 KB (~11k tokens) and keeps a one-sentence pointer under
   `## Spec format`.
+- **Rules first, explanation last.** The skill is ~20 KB, longer than the first ~5,000 tokens of a
+  skill that Claude Code re-attaches after a compaction. The docs do not say whether that cap
+  applies to a preload, so the skill is ordered as if it does: schema, keys, argument shapes, the
+  duplicate-key rule and the situation-step rules (fired-proof, no `fault:` on `smoke`, the HAR ban,
+  the `clock:` rules) come first, and the native-validation note and the two honest limits come last
+  under `## Authoring notes and honest limits`. The text is unchanged; only its order is.
 - **Who gets it:** the planner, generator, verifier, reviewer and ideation agents preload it
   (frontmatter `skills:`; a preload needs no `Skill` tool, so the reviewer keeps `Read, Bash`).
   `/qa-warden:import-cases`, the one main-session command that maps cases to oracle keys itself,
@@ -159,23 +165,40 @@ projects.
   model-invocable, because a `disable-model-invocation: true` skill cannot be preloaded. Its
   description adds ~52 tokens to the skill listing (1,054 → 1,106).
 - **Doctor:** Check 2 now compares the project's `scripts/oracle-keys.txt` with the plugin's
-  skill instead of grepping `CLAUDE.md` for the 16 keys. `fault:` and `clock:` leave
-  `manifests/claude-md-vocab.txt`: their definition ships with the plugin now, so a `CLAUDE.md`
-  without them is missing nothing. **New Check 9 warning:** a `CLAUDE.md` that still has the
-  `## Test case format contract` section is told to delete it.
-- **Upgrading:** `/qa-warden:init --resync` does not touch `CLAUDE.md`, so an existing project
-  keeps the old section and doctor warns until you delete it by hand (from that heading down to
-  `## Assertion style`, `### Situation steps` included). If you edited it, those edits never
-  reached the plugin's agents; the skill is what they read. `--resync` also refreshes four stamped
+  skill instead of grepping `CLAUDE.md` for the 16 keys. It compares the two key SETS exactly
+  (the skill's set is read from its argument-shape table), so a manifest that gains a word like
+  `value` or `lock` now fails, where a substring scan let it through. A key in the manifest that
+  the skill lacks is ❌; a skill key missing from the manifest is ⚠️ (run `--resync`). `fault:`
+  and `clock:` leave `manifests/claude-md-vocab.txt`: their definition ships with the plugin now,
+  so a `CLAUDE.md` without them is missing nothing. `test-case-contract` joins it, so a
+  `CLAUDE.md` without the pointer is nudged to add it. **New Check 9 warning:** a `CLAUDE.md`
+  that still has the `## Test case format contract` section is told to replace it with the
+  pointer.
+- **Upgrading — run `/qa-warden:init --resync` FIRST, then edit `CLAUDE.md`.** A project
+  stamped before this change carries a full stamped doctor that still greps `CLAUDE.md` for the 16
+  keys; delete the section before `--resync` and that doctor prints 11 false ❌ (one per key the
+  section alone carried). `--resync` replaces it with the launcher and also refreshes four stamped
   files whose comments pointed at the old section (`scripts/oracle-keys.txt`, `scripts/README.md`,
   `specs/_context/_templates/app.context.md`, `specs/_context/_templates/basis.md`); doctor reports
-  them as substrate drift until then.
+  them as substrate drift until then. `--resync` does not touch `CLAUDE.md`, so doctor then warns
+  about the old section (and the missing pointer) until you edit it by hand:
+  - **Move any project-specific rules out of the section first.** Your agents did read your
+    copy (subagents load the project `CLAUDE.md`), so customisations there were live, and they
+    are lost when you delete it.
+  - Replace the section (from its heading down to `## Assertion style`, `### Situation steps`
+    included) with the shipped template's `## Spec format` section.
+  - In `## Oracle defense`, change "Closed vocabulary — see above" to name the skill.
+  - Your own `specs/_context/app.context.md` keeps
+    `oracle_vocab_ref: CLAUDE.md#test-case-format-contract`. Nothing machine-reads that field;
+    change it to `oracle_vocab_ref: test-case-contract` by hand if you like.
 - `bin/qa-selfcheck` Checks 9b, 9bb, 9be and 9i read the skill where they read
-  `templates/CLAUDE.md`, and 9b gains an arm that fails if any of the five agents drops the preload
-  or the skill gains `disable-model-invocation: true`. `bin/qa-scaffoldtest` gains 12 cases: no
-  warning on a fresh stamp, one warning and nothing else for the old section, no warning for a
-  prose mention or a different heading, no `fault:`/`clock:` demand, and a Check 2 failure for a
-  key the skill does not define.
+  `templates/CLAUDE.md`. 9b gains two arms: one fails if any of the five agents drops the preload
+  or the skill gains `disable-model-invocation: true`, the other fails if a normative rule starts
+  past byte 17,500 of the skill (≈5,000 tokens at 3.5 chars/token). `bin/qa-scaffoldtest` gains 21
+  cases (161 → 182): no warning on a fresh stamp, one warning and nothing else for the old section,
+  no warning for a prose mention or a different heading, no `fault:`/`clock:` demand, a nudge for
+  a missing pointer, Check 2 failures for `not_a_real_key`, `value` and `lock`, and a Check 2
+  warning for a skill key missing from the manifest.
 
 ---
 

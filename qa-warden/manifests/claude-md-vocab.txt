@@ -46,4 +46,5 @@
 # are ignored; `#` is NOT stripped mid-line, because the why-text is prose.
 lock:|the cross-file mutual-exclusion field the generator emits, together with the sharding caveat that VOIDS it. Absent, a reader adopts the sharding recipe and silently loses every lock
 verifier|the agent that grades the generator's output. Absent from the roster, the split reads as a single authoring agent and the `// verified:` stamp reviewer Check 2b trusts has no documented author
+test-case-contract|the pointer to the plugin skill that now holds the spec format (the YAML schema, the oracle keys and their argument shapes). Absent, a reader of CLAUDE.md finds no oracle vocabulary and no sign of where it went
 cli-fill-env.sh|the wrapper that types a credential through playwright-cli without the value reaching the command line. Absent, an agent that must log in reads `.env` and puts the literal password in the transcript, or skips the login and leaves auth unverified
