@@ -280,7 +280,7 @@ projects.
   Doctor Check 2, which compares a project that may be older than the plugin, keeps its ⚠️ for a
   key the project lacks. qa-selfcheck stays at 14 checks.
 - `reference/test-case-ideation.md` no longer calls the hooks rationale in `DESIGN.md` "the
-  no-hooks decision". `bin/qa-scaffoldtest` gains 21 cases (182 → 203): doctor and the launcher in
+  no-hooks decision". `bin/qa-scaffoldtest` gains 21 cases (195 → 216): doctor and the launcher in
   an empty directory (exit 1, that one ❌, no rollup), a stray `.env` not sourced, each of the
   three markers alone still running the full pass, and the `printenv` rule absent from the
   template and a fresh stamp and warned (exit 0) when added back.
