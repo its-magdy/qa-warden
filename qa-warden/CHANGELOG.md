@@ -200,6 +200,34 @@ projects.
   a missing pointer, Check 2 failures for `not_a_real_key`, `value` and `lock`, and a Check 2
   warning for a skill key missing from the manifest.
 
+### `review-marker.sh` ships with the review skill, not in your project
+
+- **`scripts/review-marker.sh` moved from `templates/scripts/` to the plugin's
+  `skills/review/scripts/review-marker.sh`,** and `/qa-warden:review` runs that file
+  (`bash "${CLAUDE_SKILL_DIR}/scripts/review-marker.sh" <spec> <test> PASS|FAIL`, pre-approved by
+  the skill's `allowed-tools`, as `/qa-warden:doctor` does). Nothing else ever called it, so the
+  stamped copy was one more toolkit-owned file to resync and two `settings.json` rules to keep in
+  step. A plugin update now changes the marker writer without a `--resync`. Its README section
+  became the script's header comment.
+- **Leaving the shipped files:** the `scripts/review-marker.sh` line in `manifests/resync-set.txt`,
+  and two rules in `settings.json`: `Bash(bash scripts/review-marker.sh*)` (allow) and
+  `Edit(scripts/review-marker.sh)` (deny). The review skill no longer tells you to `--resync` when
+  the script is missing: it cannot be missing now.
+- **`/qa-warden:review` no longer points at a CI section that is gone.** Three sentences still
+  referred to the "CI wiring" section removed in 0.5.3 ("wire it into CI (below)", "the CI-gate
+  hardening above", "the CI required-status above"). They now say the review runs locally before
+  a commit, that a marker written from a guessed verdict defeats the reviewer's fail-closed rule,
+  and that the anti-forgery layer is a human reading the PR (a required approval in
+  branch protection), because an agent-writable marker is not proof.
+- **Already-stamped projects:** `scripts/review-marker.sh` and its two rules stay; nothing calls
+  them, and `--resync` no longer touches the file. Doctor prints one ℹ️ line (not counted as a
+  warning) naming the file and both rules as safe to delete together. Doctor Check 9c does not
+  flag the rules, since they are harmless. `--resync` refreshes `scripts/README.md`, which doctor
+  reports as substrate drift until then. Doctor still runs 32 numbered checks.
+- `bin/qa-scaffoldtest` gains 7 cases (182 → 189): the review skill carries the script, a fresh
+  stamp neither has the file nor gets the ℹ️ line, and a planted `scripts/review-marker.sh` gets
+  that line, naming both rules, as the only new output, with doctor still exiting 0.
+
 ---
 
 ## 0.5.6 — nightly CI hardening, a truncated hook message, shellcheck cleanup (2026-10-09)

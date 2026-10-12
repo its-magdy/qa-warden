@@ -563,6 +563,13 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
     [ -f "$rel" ] || continue
     echo "ℹ️  $rel is a leftover from an older stamp — that manifest now lives only in the plugin (manifests/) and nothing in this project reads it; safe to delete"
   done
+  # Same story for the review marker writer: /qa-warden:review now runs the plugin's own copy
+  # (skills/review/scripts/review-marker.sh), so the stamped one is called by nothing. Its two
+  # settings.json rules are named here but NOT retired by Check 9c: they are harmless, and the
+  # file and its rules should go together, by hand.
+  if [ -f scripts/review-marker.sh ]; then
+    echo "ℹ️  scripts/review-marker.sh is a leftover from an older stamp — nothing calls it now (/qa-warden:review runs the plugin's copy); safe to delete, together with its two .claude/settings.json rules: \"Bash(bash scripts/review-marker.sh*)\" (allow) and \"Edit(scripts/review-marker.sh)\" (deny)"
+  fi
 else
   # A skipped drift check must be VISIBLE (WARN, counted), not a silent green INFO — this check
   # guards the highest-value propagation class (F-015/F-027); a quiet skip hides exactly that drift.

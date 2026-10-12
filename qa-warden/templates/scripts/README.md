@@ -148,13 +148,6 @@ literal password into `fill` (it lands in the transcript) or skips the login. Ta
 NAME, suppresses the CLI's echo of the value, and refuses to put a secret-looking variable into
 anything but an `<input type="password">`.
 
-## `review-marker.sh` — write the `/qa-warden:review` attestation marker
-
-`bash scripts/review-marker.sh <spec.md> <test.spec.ts> PASS|FAIL` writes
-`reports/review/<area>/<feature>.reviewed` (commit, both sha256 digests, date, result) — the
-file `/qa-warden:doctor` Check 15 reads. One allow-listed call instead of an improvised compound
-command; it records a verdict the caller already confirmed and judges nothing itself.
-
 ## `runtime-dirs.txt` — the runtime-directory manifest
 
 Also not a script: the single list of directories the subagents write into

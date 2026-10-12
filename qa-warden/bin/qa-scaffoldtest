@@ -489,6 +489,23 @@ run_doctor "$VKP"
 check "Check 2 warns on a skill key missing from the manifest" grep -qF "oracle key 'clipboard_contains' is in the plugin's test-case-contract skill" <<<"$DR_OUT"
 check_eq "  as a warning (exit 0)" "0" "$DR_RC"
 
+echo "  -- review-marker.sh ships in the plugin; an older stamp's copy is a named leftover"
+LEFTOVER_RM="scripts/review-marker.sh is a leftover"
+check "the review skill carries review-marker.sh" test -f "$here/skills/review/scripts/review-marker.sh"
+check "a fresh stamp has no scripts/review-marker.sh" test ! -e "$D/scripts/review-marker.sh"
+check "a fresh stamp gets no review-marker leftover line" test "$(grep -cF "$LEFTOVER_RM" <<<"$fresh_out")" = "0"
+# A project stamped before the move still has the file. Doctor names it as INFO, uncounted.
+new_dir; RMP=$DIR
+stamp "$RMP"
+printf '#!/bin/sh\necho old stamped copy\n' > "$RMP/scripts/review-marker.sh"
+run_doctor "$RMP"
+check "an old stamp's scripts/review-marker.sh is named as a leftover" grep -qF "ℹ️  $LEFTOVER_RM" <<<"$DR_OUT"
+check "  and the line names both of its settings.json rules" \
+  grep -qF '"Bash(bash scripts/review-marker.sh*)" (allow) and "Edit(scripts/review-marker.sh)" (deny)' <<<"$DR_OUT"
+check_eq "  as INFO, so doctor still exits 0" "0" "$DR_RC"
+newlines=$(diff <(printf '%s\n' "$fresh_out") <(printf '%s\n' "$DR_OUT") | grep '^>' | grep -v '^> doctor: ')
+check_eq "  and it is the only new line" "1" "$(printf '%s\n' "$newlines" | grep -c .)"
+
 # ------------------------------------------------------------------------------------------
 echo "prod-guard.sh — URL classification"
 new_dir; EMPTY=$DIR   # a CLAUDE_PROJECT_DIR with no .env, so only the variables below are seen
