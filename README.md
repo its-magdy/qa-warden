@@ -273,7 +273,7 @@ If product copy changed, the healer does not absorb it. It routes the question (
 | `/qa-warden:new-spec <area/feature>` | Draft a Markdown spec with a YAML oracle | You only |
 | `/qa-warden:gen <spec-path>` | Compile a spec to a `.spec.ts`, run it green, verify it can fail | You only |
 | `/qa-warden:review [path \| url=<url>]` | Reviewer gate over the diff, or a live-URL audit | You or Claude |
-| `/qa-warden:run mode=single\|smoke\|repeat\|changed` | Run tests (no LLM) | You only |
+| `/qa-warden:run mode=single\|smoke\|repeat\|changed` | Run tests (no LLM) | You or Claude |
 | `/qa-warden:heal <failing-test-id>` | Triage one failure; fix selectors/waits or file a bug | You only |
 | `/qa-warden:batch-fix <path-or-filter>` | Apply one healer fix across matching failures | You only |
 | `/qa-warden:retire <area/feature>` | Retire a feature and every linked artifact (dry-run first) | You only |

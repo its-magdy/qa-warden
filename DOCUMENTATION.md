@@ -362,12 +362,14 @@ What *is* new is that each skill declares **who may invoke it** — see
 `reference/DESIGN.md` §"Why the invocation policy is what it is" for the reasoning:
 
 - **You only** — anything with side effects (`init`, `gen`, `new-spec`, `heal`, `batch-fix`,
-  `retire`, `approve`, `run`, `import-cases`, `intake`,
-  `ideate`). Claude will not run these on its own. `/qa-warden:approve` is the load-bearing case:
-  it stamps the human-approval banner, so a model able to invoke it could rubber-stamp its
-  own test plan.
+  `retire`, `approve`, `import-cases`, `intake`, `ideate`). Claude will not run these on its own.
+  `/qa-warden:approve` is the load-bearing case: it stamps the human-approval banner, so a model
+  able to invoke it could rubber-stamp its own test plan.
 - **You or Claude** — the read-only ones (`help`, `review`, `coverage`, `doctor`,
-  `impact`, `report`, `explore`). `/qa-warden:explore` in particular MUST stay reachable by Claude:
+  `impact`, `report`, `explore`), plus `run`. `run` uses no model, and Claude can already run
+  `npx playwright test` without a prompt, so letting Claude invoke `run` means it takes the guarded
+  wrapper (zero-test and freshness checks, the report paths) instead of a bare Playwright call.
+  `/qa-warden:explore` in particular MUST stay reachable by Claude:
   the planner and healer stop on stale context and rely on the orchestrator re-running it.
   `metamorphic-relations` is also here even though it writes twin specs: the verifier
   applies it on every new spec during `/qa-warden:gen`.

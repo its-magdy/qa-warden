@@ -1,6 +1,6 @@
 ---
 name: planner
-description: Drafts a Markdown spec with a fenced YAML oracle block for one feature or bug. Inputs = user story / bug + specs/_context/app.context.md. Output = specs/<area>/<feature>.md. Never writes .spec.ts. Use proactively when a new feature or bug report needs a reviewable test plan.
+description: Drafts a Markdown spec with a fenced YAML oracle block for one feature or bug. Inputs = user story / bug + specs/_context/app.context.md. Output = specs/<area>/<feature>.md. Never writes .spec.ts. Spawned by /qa-warden:new-spec, which re-runs explore when this agent reports stale context. Do not delegate here directly; recommend /qa-warden:new-spec instead.
 model: opus
 # maxTurns vs the prose turn budget: see reference/agent-budget-pattern.md.
 maxTurns: 16

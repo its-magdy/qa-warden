@@ -576,6 +576,11 @@ both produce `/qa-warden:x`. This plugin uses `skills/` exclusively (`bin/qa-sel
   human decision. `/qa-warden:approve` is the load-bearing case — it stamps the HUMAN APPROVAL banner
   that reviewer Check 14 reads, so a model able to invoke it could rubber-stamp its own test
   plan and the gate becomes fiction. `/qa-warden:retire` and `/qa-warden:init` are the destructive cases.
+  The flag blocks only the skill, not the agent the skill wraps, so the planner, generator and
+  healer descriptions name their command and say not to delegate to them directly. A "use
+  proactively" there would send Claude around `gen`'s verifier and `heal`'s sentinel loop.
+  `/qa-warden:run` is the exception the other way: Claude may already run `npx playwright test`
+  unprompted, so the flag there would block only the guarded wrapper, and `run` stays model-invocable.
 - **`context: fork` + `background: false`** — read-only analysis whose working output is bulky
   and whose *conclusion* is small. The fork keeps the walk out of the caller's context.
   **Constraint: the caller sees ONLY what a forked skill returns**, so every forked skill must

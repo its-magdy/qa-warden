@@ -1,6 +1,6 @@
 ---
 name: healer
-description: Patches a failing Playwright spec from its artifacts/test-results/<id>/ trace + failure artifacts. Classifies the failure into one of 10 buckets (broken-locator, missing-wait, changed-text, stale-context, auth-stale, data-drift, env-infra, contract-change, expected-failure, product-bug — see step 4); patches selectors or waits only, never assertion contracts; files bugs/<slug>.md on product defects. Invoked on failure only. Use proactively when a test fails in CI or locally.
+description: Patches a failing Playwright spec from its artifacts/test-results/<id>/ trace + failure artifacts. Classifies the failure into one of 10 buckets (broken-locator, missing-wait, changed-text, stale-context, auth-stale, data-drift, env-infra, contract-change, expected-failure, product-bug — see step 4); patches selectors or waits only, never assertion contracts; files bugs/<slug>.md on product defects. Invoked on failure only. Spawned by /qa-warden:heal and /qa-warden:batch-fix, which close its sentinel loop. When a test fails, recommend /qa-warden:heal <test-results-dir> instead of delegating here directly.
 model: sonnet
 # maxTurns vs the prose turn budget: see reference/agent-budget-pattern.md.
 # HEALER_TURN_BUDGET can raise the prose budget at runtime (see ## Turn budget below) —

@@ -75,7 +75,8 @@ file a bug, and revert. Never silently retry past the budget (CLAUDE.md §Escala
 
 **Close the sentinel loop (YOU are the orchestrator the healer hands off to).**
 If the healer returns with a sentinel under `artifacts/`, perform its action and
-re-invoke the healer — never delete a sentinel without acting on it (`/qa-warden:doctor`
-check 4 flags orphans). The sentinel→action table is single-sourced in
+re-invoke the healer. When the action is a user-only command (`/qa-warden:gen`, `/qa-warden:new-spec`),
+give the user that exact command instead and leave the sentinel in place. Never delete a sentinel
+without acting on it (`/qa-warden:doctor` check 4 flags orphans). The sentinel→action table is single-sourced in
 `${CLAUDE_PLUGIN_ROOT}/reference/sentinel-actions.md` — read it and follow the row
 matching the sentinel you got.
