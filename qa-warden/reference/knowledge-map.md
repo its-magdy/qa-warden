@@ -57,7 +57,7 @@ context; THIS file is read on demand for catalog / workflow-order / "what does X
 | Checker | Looks at | Answers | Run it |
 |---|---|---|---|
 | `/qa-warden:review` | the working diff / a named spec+test | "Is this test honest?" (assertion contract) | every PR touching tests/ or specs/ |
-| `/qa-warden:doctor` | project substrate + artifacts, static | "Is the harness healthy?" | when things look wrong; weekly; CI |
+| `/qa-warden:doctor` | project substrate + artifacts, static | "Is the harness healthy?" | when things look wrong; weekly; CI (no plugin installed there: check out the plugin and run `bash <checkout>/qa-warden/skills/doctor/scripts/doctor.sh` from the project root) |
 | `/qa-warden:coverage` | basis/cases/specs/manifests, static | "What am I NOT testing?" (named gaps, no %) | after generating an area |
 | `/qa-warden:review url=<url>` | one live URL | "Is this page accessible / visually regressed?" | ad-hoc probe |
 

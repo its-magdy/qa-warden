@@ -482,14 +482,16 @@ delete them to make the toolkit sound more complete than it is.
   the user who removed a rule on purpose. The two decisions were made separately and their combination
   is the real limit — **the user is neither warned nor obeyed.** Deleting a rule permanently requires a
   settings file the toolkit does not write.
-  **If this is ever fixed it belongs in the MERGE, not in a check** — a detector cannot read intent, and
-  `scripts/doctor.sh` is itself a resynced file, so a check reaches a project only through the same
-  command that performs the repair. The mechanism that does work is a **delivery receipt**: record the
+  **If this is ever fixed it belongs in the MERGE, not in a check** — a detector cannot read intent.
+  (A second argument used to stand here: doctor was itself a resynced file, so a new check reached a
+  project one repair behind. Doctor now runs from the plugin, as `skills/doctor/scripts/doctor.sh`, so
+  a new check arrives with the plugin update; only the stamped launcher `scripts/doctor.sh` is resynced.)
+  The mechanism that does work is a **delivery receipt**: record the
   rule set each stamp actually delivered, and on the next merge treat `(delivered − present)` as a
   tombstone the union must subtract. That discriminates exactly where a template gate cannot — a rule
-  absent-and-previously-delivered is a deletion, a rule absent-and-never-delivered is a gap — and unlike
-  a doctor check it ships with the **plugin** (`bin/qa-scaffold` is not in `resync-set.txt`), so it is
-  present on the first `/qa-warden:init` after an upgrade rather than one repair behind.
+  absent-and-previously-delivered is a deletion, a rule absent-and-never-delivered is a gap — and it
+  ships with the **plugin** (`bin/qa-scaffold` is not in `resync-set.txt`), so it is present on the
+  first `/qa-warden:init` after an upgrade.
   Two properties any implementation has to accept, both established before writing one:
   **(a) it is blind for exactly one upgrade** — every project today has no receipt, so the first run can
   only record what it delivers and start honouring deletions from the run after; and **(b) `allow` and
@@ -500,9 +502,14 @@ delete them to make the toolkit sound more complete than it is.
   defensible split is to honour `allow` deletions and, for `deny`, keep re-adding but **say so** — a
   receipt makes the report possible even where the obedience is not granted, which is the half of
   "neither warned nor obeyed" that costs nothing to fix.
+- **Plugin scripts call the project's STAMPED helpers, so a helper change must stay compatible with
+  older stamps.** The plugin doctor runs the project's `check-last-run.sh`, `spec-links.sh`,
+  `post-run-checks.sh`, `bug-status.sh` and `prod-guard.sh`, as `coverage.sh` and `impact.sh` already
+  do with `spec-links.sh` and `run.sh` with three others; those copies change only on `/qa-warden:init --resync`, so a new plugin
+  can meet an old helper until the user resyncs.
 - **Mobile is deliberately out of scope, and the successor is a sibling plugin, not a mode here.**
   Playwright does mobile-**web** emulation only (viewport/touch) — no native iOS/Android — so the entire
-  template layer (`playwright.config.ts`, fixtures, `prod-guard.ts`, `doctor.sh`) is Playwright-shaped
+  template layer (`playwright.config.ts`, fixtures, `prod-guard.ts`) and the doctor are Playwright-shaped
   and does not transfer. The 2026 substrate pick is **Maestro** (YAML flows, an official MCP server that
   plugs into Claude Code the same way the exploration lane does); **Appium** stays the standard for
   deep/hybrid/system-level coverage but is much heavier to author and heal — an escape hatch, not a
@@ -530,7 +537,7 @@ spec at all, so nothing in the roll-up distinguishes "never ran" from "was never
 If a path-routed project is ever added, it must be tag-routed too.
 
 **Site projects are derived, not hand-written.** `playwright.config.ts` is toolkit-owned: it is in
-`scripts/resync-set.txt`, so doctor Check 9 flags any local edit and `/qa-warden:init --resync`
+`manifests/resync-set.txt`, so doctor Check 9 flags any local edit and `/qa-warden:init --resync`
 overwrites it. Doctor Check 10 used to tell a user with a third site to add its project by hand;
 the next resync deleted that project and the site's specs ran in no project. So `app` is the one
 literal site project, and every other site gets its project from the environment: a set, non-empty

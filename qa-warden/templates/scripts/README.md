@@ -48,15 +48,21 @@ phantom zero-test "green" run. Used by `/qa-warden:gen`, `/qa-warden:new-spec`,
 `/qa-warden:run mode=single`, `/qa-warden:run mode=repeat`, and `/qa-warden:review` — the mapping lives here
 and only here.
 
-## `doctor.sh` — deterministic self-check pass
+## `doctor.sh` — launcher for the deterministic self-check pass
 
-`bash scripts/doctor.sh` (what `/qa-warden:doctor` runs) — checks 0–21 + rollup, all
-read-only: reruns no tests, heals nothing, hits no network, writes nothing.
-Verifies the substrate itself: `last-run.json` freshness/zero-test (via
-`check-last-run.sh`), oracle-vocab lockstep (`oracle-keys.txt` vs `CLAUDE.md`),
-prod-guard presence + regex lockstep, sentinel files, context staleness,
-`bugs/` Status hygiene, site-id↔config match, and more. Exit 1 on any ❌ —
-wire it as a cheap CI pre-step or run it whenever the project "feels off".
+The checks behind `/qa-warden:doctor` (0–21 + rollup, all read-only: reruns no tests, heals
+nothing, hits no network, writes nothing) ship in the plugin as `skills/doctor/scripts/doctor.sh`,
+so they are always the same build as the templates they compare this project against. They verify
+the substrate itself: `last-run.json` freshness/zero-test (via `check-last-run.sh`), oracle-vocab
+lockstep (`oracle-keys.txt` vs `CLAUDE.md`), prod-guard presence + regex lockstep, substrate drift,
+sentinel files, context staleness, `bugs/` Status hygiene, site-id↔config match, and more. Exit 1
+on any ❌.
+
+This file is only a launcher for running it from a terminal: `bash scripts/doctor.sh` finds the
+plugin install Claude Code recorded (`~/.claude/plugins/installed_plugins.json`) and runs that
+plugin's doctor here. It exits 2, having run nothing, when no install is recorded. In CI, where no
+plugin is installed, check out the plugin at the tag you use and run its doctor from this
+directory: `bash <checkout>/qa-warden/skills/doctor/scripts/doctor.sh`.
 
 ## `check-last-run.sh` — canonical last-run.json gate
 

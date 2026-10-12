@@ -19,7 +19,11 @@
 #                      duplicates, and a re-run is byte-stable
 #   3. --resync        toolkit-owned files restored with a .qa-bak, `*.qa-bak` gitignored exactly
 #                      once, CLAUDE.md / .env / .gitignore never overwritten, rules re-merged
-#   4. prod-guard.sh   the URL table: staging passes, a word-boundary prod marker refuses,
+#   4. doctor          the plugin's skills/doctor/scripts/doctor.sh finds its baseline beside
+#                      itself (no drift on a fresh stamp, real drift reported, CLAUDE_PLUGIN_ROOT
+#                      ignored), and the stamped scripts/doctor.sh launcher runs it from the
+#                      recorded install, or exits 2 without guessing
+#   5. prod-guard.sh   the URL table: staging passes, a word-boundary prod marker refuses,
 #                      QA_ALLOW_PROD=1 lifts the marker refusal ONLY, placeholders never pass
 #
 # The prod-guard.ts twin is not tested here: qa-hooktest only copies it as a project marker, and
@@ -320,6 +324,99 @@ stamp "$D"
 printf '\n# local edit\n' >> "$D/playwright.config.ts"
 stamp "$D" --resync
 check_eq "template .gitignore keeps its single *.qa-bak rule through a resync" "1" "$(grep -c '^\*\.qa-bak$' "$D/.gitignore")"
+
+# ------------------------------------------------------------------------------------------
+echo "doctor — runs from the plugin; the stamped scripts/doctor.sh only launches it"
+# run_doctor <dir> [VAR=value ...] — the plugin's doctor, run from <dir> the way the skill runs it.
+# CLAUDE_PROJECT_DIR is dropped so the doctor reads <dir>/.env, not the caller's project.
+run_doctor() {
+  local dir=$1; shift
+  DR_OUT=$(cd "$dir" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$@" "$BASH" "$DOCTOR" 2>&1)
+  DR_RC=$?
+}
+# run_launcher <dir> <config-dir> [VAR=value ...] — the stamped launcher, with a fake
+# CLAUDE_CONFIG_DIR so the install record it reads is the one this test wrote.
+run_launcher() {
+  local dir=$1 cfg=$2; shift 2
+  LN_OUT=$(cd "$dir" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT CLAUDE_CONFIG_DIR="$cfg" "$@" \
+             "$BASH" scripts/doctor.sh 2>&1)
+  LN_RC=$?
+}
+# record <config-dir> <json-array-of-installs> — writes plugins/installed_plugins.json.
+record() {
+  mkdir -p "$1/plugins"
+  printf '{ "version": 2, "plugins": { "qa-warden@qa-warden": %s } }\n' "$2" > "$1/plugins/installed_plugins.json"
+}
+DOCTOR="$here/skills/doctor/scripts/doctor.sh"
+check "the doctor ships in the plugin at skills/doctor/scripts/doctor.sh" test -f "$DOCTOR"
+new_dir; D=$DIR
+stamp "$D"
+run_doctor "$D"
+check_eq "doctor on a fresh stamp exits 0 (warnings only)" "0" "$DR_RC"
+check "doctor prints its rollup line" grep -q '^doctor: ' <<<"$DR_OUT"
+check "doctor finds its baseline beside itself (no drift-check SKIPPED)" test "$(grep -c 'SKIPPED' <<<"$DR_OUT")" = "0"
+check "a fresh stamp shows no substrate drift or missing file" \
+  test "$(grep -c -e 'substrate drift' -e 'substrate missing' <<<"$DR_OUT")" = "0"
+fresh_out=$DR_OUT
+run_doctor "$D" CLAUDE_PLUGIN_ROOT=/nonexistent
+check_same "doctor ignores CLAUDE_PLUGIN_ROOT (output identical)" "$fresh_out" "$DR_OUT"
+# The vacuity guard for the "no drift" case: a real edit must be reported.
+printf '\n# local edit\n' >> "$D/scripts/prod-guard.sh"
+run_doctor "$D"
+check "an edited toolkit-owned file is reported as drift" grep -q 'substrate drift: scripts/prod-guard.sh' <<<"$DR_OUT"
+cp "$TEMPLATES/scripts/prod-guard.sh" "$D/scripts/prod-guard.sh"
+
+new_dir; CFG=$DIR
+record "$CFG" "[{\"scope\": \"user\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-01T00:00:00Z\"}]"
+run_launcher "$D" "$CFG"
+check_eq "launcher passes the doctor's exit code through" "$DR_RC" "$LN_RC"
+check "launcher names the plugin it runs" grep -qF "recorded plugin install → $here" <<<"$LN_OUT"
+check_same "launcher output is the doctor's, after its one notice line" "$fresh_out" "$(tail -n +2 <<<"$LN_OUT")"
+# The 0 == 0 case above cannot tell a pass-through from a launcher that always exits 0. Make the
+# doctor FAIL (a toolkit-owned file missing is a ❌) and require the same non-zero code.
+mv "$D/playwright.config.ts" "$D/playwright.config.ts.away"
+run_doctor "$D"
+check_eq "precondition: doctor exits 1 with playwright.config.ts missing" "1" "$DR_RC"
+run_launcher "$D" "$CFG"
+check_eq "launcher passes a failing doctor's exit code through (1)" "1" "$LN_RC"
+mv "$D/playwright.config.ts.away" "$D/playwright.config.ts"
+# A project-scope record for THIS directory outranks a user-scope one.
+new_dir; NODOC=$DIR   # a "plugin" with no doctor in it
+record "$CFG" "[{\"scope\": \"user\", \"installPath\": \"$NODOC\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"},
+                {\"scope\": \"project\", \"projectPath\": \"$D\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-01T00:00:00Z\"}]"
+run_launcher "$D" "$CFG"
+check "launcher prefers this project's install over the user-scope one" grep -qF "recorded plugin install → $here" <<<"$LN_OUT"
+# Within one tier the newest record wins, not the first in the file: the stale one comes first here.
+record "$CFG" "[{\"scope\": \"user\", \"installPath\": \"$NODOC\", \"lastUpdated\": \"2026-09-01T00:00:00Z\"},
+                {\"scope\": \"user\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
+run_launcher "$D" "$CFG"
+check "launcher picks the newest record within a scope, not the first" grep -qF "recorded plugin install → $here" <<<"$LN_OUT"
+record "$CFG" "[{\"scope\": \"user\", \"installPath\": \"$NODOC\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
+run_launcher "$D" "$CFG"
+check_eq "launcher exits 2 when the recorded plugin has no doctor" "2" "$LN_RC"
+check "  and says the plugin is older than the launcher" grep -qF "older than this launcher" <<<"$LN_OUT"
+record "$CFG" "[{\"scope\": \"user\", \"installPath\": \"$NODOC/gone\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
+run_launcher "$D" "$CFG"
+check_eq "launcher exits 2 when the recorded install path is gone" "2" "$LN_RC"
+check "  and says the record is stale, not that the plugin is old" grep -qF "no longer exists" <<<"$LN_OUT"
+printf '{ not json\n' > "$CFG/plugins/installed_plugins.json"
+run_launcher "$D" "$CFG"
+check_eq "launcher exits 2 on a malformed install record" "2" "$LN_RC"
+check "  and says jq failed to read it" grep -qF "jq failed to read" <<<"$LN_OUT"
+# A jq that is found but cannot run (this is what an x86-only jq does on Apple silicon).
+new_dir; FAKEJQ=$DIR
+printf '#!/bin/sh\necho "fake jq cannot execute" >&2\nexit 126\n' > "$FAKEJQ/jq"
+chmod +x "$FAKEJQ/jq"
+record "$CFG" "[{\"scope\": \"user\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
+run_launcher "$D" "$CFG" PATH="$FAKEJQ:$PATH"
+check_eq "launcher exits 2 when jq cannot run" "2" "$LN_RC"
+check "  and shows jq's own error" grep -qF "fake jq cannot execute" <<<"$LN_OUT"
+new_dir; EMPTYCFG=$DIR
+run_launcher "$D" "$EMPTYCFG"
+check_eq "launcher exits 2 with no install record (no guessing)" "2" "$LN_RC"
+check "  and runs nothing" test "$(grep -c '^doctor: ' <<<"$LN_OUT")" = "0"
+run_launcher "$D" "$EMPTYCFG" CLAUDE_PLUGIN_ROOT="$here"
+check_eq "launcher ignores CLAUDE_PLUGIN_ROOT (still exits 2)" "2" "$LN_RC"
 
 # ------------------------------------------------------------------------------------------
 echo "prod-guard.sh — URL classification"

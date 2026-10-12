@@ -91,13 +91,57 @@ never carry the same number**, or the second one has no way to announce itself.
   plugin-only manifest is stamped and that the resync set lists none of them.
 - **Already-stamped projects:** the three old files stay under `scripts/`. They do nothing and
   `--resync` no longer touches them. Doctor prints one ℹ️ line per leftover (not counted as a
-  warning) saying it is safe to delete. Update the plugin and run `/qa-warden:init --resync`
-  before running `/qa-warden:doctor`, as the upgrade path already says. A doctor stamped by 0.5.6 or
-  earlier, run against this plugin, cannot find the moved manifests: it prints a ❌ for
-  `prod-guard-rails.txt`, a ⚠️ for `claude-md-vocab.txt` (both say to run `--resync`) and a ⚠️ that
-  substrate drift is unverified. Running `--resync` clears all three, because it installs the new
-  doctor. A newer doctor run against an older plugin install falls back to the old
-  `templates/scripts/` paths.
+  warning) saying it is safe to delete. A doctor stamped by 0.5.6 or earlier cannot find the moved
+  manifests and would print a ❌ for `prod-guard-rails.txt` and two ⚠️ until `--resync`.
+  `/qa-warden:doctor` no longer runs that stamped copy (next section), so this does not show up.
+
+### `/qa-warden:doctor` runs from the plugin, not from a copy in your project
+
+Ships together with the section above: it is what keeps that move from breaking doctor in existing
+projects.
+
+- **The checks moved from the stamped `scripts/doctor.sh` to the plugin's
+  `skills/doctor/scripts/doctor.sh`,** and `/qa-warden:doctor` runs that file
+  (`bash "${CLAUDE_SKILL_DIR}/scripts/doctor.sh"`, pre-approved by the skill's `allowed-tools`, as
+  `/qa-warden:coverage`, `impact` and `run` already do). The doctor and the templates it compares
+  your project against are now always the same build. Before, the stamped copy changed only on
+  `/qa-warden:init --resync`, so every new check arrived one repair late, and a copy older than the
+  plugin misread it: a 0.5.6 project run against the previous section's plugin printed
+  1 ❌ + 2 ⚠️ until `--resync`. Measured on a 0.5.6-stamped scratch project: the plugin doctor
+  prints no ❌, only the real substrate drift, and after `--resync` only the expected
+  fresh-project warnings. On a fresh stamp its output is byte-identical to the old stamped doctor's.
+- **No more guessing which plugin to compare against.** The stamped doctor had to find a plugin:
+  `$CLAUDE_PLUGIN_ROOT`, else the install recorded in `installed_plugins.json`, else the newest cached
+  version by mtime, which could be a stale orphaned one ("baseline GUESSED by newest mtime"). The
+  plugin doctor uses the plugin it sits in and reads no environment variable for it.
+- **`scripts/doctor.sh` is now a small launcher** for running doctor from a terminal. It reads the
+  install Claude Code recorded (this project's install, then your user install, the newest record
+  first within each), runs that plugin's doctor and passes its exit code through. With no recorded
+  install it exits 2 and runs nothing, and it says which case it hit: no record, a record jq could
+  not read (a broken jq, malformed JSON), an install path that no longer exists, or a plugin older
+  than the launcher. It never guesses, and it ignores `$CLAUDE_PLUGIN_ROOT` (it executes what it finds, and older projects
+  carry an allow rule for `CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh`). In CI, where no plugin is
+  installed, check out the plugin and run `bash <checkout>/qa-warden/skills/doctor/scripts/doctor.sh`
+  from the project root. It is still toolkit-owned (in `resync-set.txt`, edit-denied).
+- **Two allow rules leave the shipped `settings.json`:** `Bash(bash scripts/doctor.sh*)` and
+  `Bash(CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh*)`. Nothing Claude runs calls the stamped path
+  any more. The merge never removes a rule, so existing projects keep both; they are harmless
+  (they pre-approve running the edit-denied launcher), so doctor Check 9c does not flag them.
+- **Upgrading:** update the plugin, then run `/qa-warden:init --resync`. Until then doctor reports
+  `substrate drift: scripts/doctor.sh` (and `scripts/README.md`); `--resync` backs up the old full
+  copy to `scripts/doctor.sh.qa-bak` and puts the launcher in its place. **Delete that backup**
+  (`find . -name '*.qa-bak' -not -path './node_modules/*' -delete`, as the resync banner says): it is
+  the old full doctor, and the `Bash(bash scripts/doctor.sh*)` rule your project still carries
+  pre-approves running it, since that pattern also matches `scripts/doctor.sh.qa-bak`. A teammate whose plugin is
+  older than this keeps running their own plugin's `/qa-warden:doctor`, which calls the stamped
+  path. That now reaches the launcher, which finds no doctor in their plugin, exits 2 and tells
+  them to update it (in a project first stamped by this version the call also prompts, because the
+  allow rule it relied on is no longer shipped).
+- `bin/qa-scaffoldtest` gains 25 cases: the plugin doctor finds its baseline (no drift on a fresh
+  stamp, a real edit reported, `CLAUDE_PLUGIN_ROOT` ignored) and the launcher (a failing doctor's
+  exit 1 passed through, project install before user install, newest record within a scope, and
+  exit 2 with a distinct message for no record, a malformed record, a jq that cannot run, a missing
+  install path and a doctor-less plugin).
 
 ---
 
