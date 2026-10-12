@@ -30,9 +30,11 @@ bash "${CLAUDE_SKILL_DIR}/scripts/doctor.sh"
 ```
 
 The script prints ✅ / ⚠️ / ❌ per check plus a rollup line, and exits 1 on any ❌
-(0 on healthy or warnings-only). **Never silently pass.** If `playwright.config.ts` and
-`package.json` are both absent (the run prints `❌ substrate missing` for each), the project was
-*never scaffolded* → `/qa-warden:init`; a substrate that exists but is missing some files is stale →
+(0 on healthy or warnings-only). **Never silently pass.** A lone
+`❌ not a QA Warden project` line means the wrong directory: cd to the project root, or run
+`/qa-warden:init` if there is none. If `playwright.config.ts` and `package.json` are both absent
+(the run prints `❌ substrate missing` for each), the project was *never scaffolded* →
+`/qa-warden:init`; a substrate that exists but is missing some files is stale →
 `/qa-warden:init --resync`.
 
 ## Interpreting the output (what to run per failure)

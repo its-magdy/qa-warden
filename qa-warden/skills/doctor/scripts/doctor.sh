@@ -13,6 +13,19 @@
 # where an older plugin kept them). Now the checks and the baseline they compare against are
 # always the same build.
 
+# Not a project at all. Every check below reads a path relative to the current directory, so a
+# doctor started anywhere else (a home directory, the plugin repo, a fresh mktemp) used to print
+# some thirty ❌ — one per missing substrate file — which reads as a broken project rather than
+# the wrong directory. When none of the three things a scaffold always leaves is here, say that
+# once and stop. ANY one of them present means a project, however damaged, and the full pass runs
+# so that it can name what is missing. Not a numbered check: it gates whether the checks run.
+# It comes before the .env load (a stray .env in the wrong directory is not ours to execute) and
+# before the jq check (so a machine without jq still gets this one line, not two ❌).
+if [ ! -e playwright.config.ts ] && [ ! -e CLAUDE.md ] && [ ! -d scripts ]; then
+  echo "❌ not a QA Warden project (run from the project root, or /qa-warden:init)"
+  exit 1
+fi
+
 # Load the project's .env the way the stamped scripts do (prod-guard.sh, cli-fill-env.sh): inside
 # this process, so Check 10 sees the BASE_URL_<SITE> values. One statement per line on purpose:
 # qa-selfcheck Check 20 fails any line under agents/ or skills/ that chains the export toggle and
@@ -713,7 +726,8 @@ if [ -f .claude/settings.json ]; then
     grep -qF "\"$retired\"" .claude/settings.json 2>/dev/null || continue
     case "$retired" in
       "Bash(sed "*) why="It over-blocks ordinary sed (the deny cannot be interactively approved); the replacements are \"Bash(sed *e'*)\" and \"Bash(sed *e\\\"*)\"." ;;
-      "Bash(printenv)") why="It auto-approves a BARE printenv — a full dump of every .env secret loaded into that shell (QA_ADMIN_PASSWORD, QA_TOTP_SECRET, QA_CLIENT_CERT_PASSPHRASE) into the transcript — and nothing ever consumed it: the mandated form is the SCOPED \"printenv \$base_url_env\" (agents/exploration.md), still covered by \"Bash(printenv *)\"." ;;
+      "Bash(printenv)") why="It auto-approves a BARE printenv — a full dump of every .env secret loaded into that shell (QA_ADMIN_PASSWORD, QA_TOTP_SECRET, QA_CLIENT_CERT_PASSPHRASE) into the transcript — and nothing in the toolkit uses it." ;;
+      "Bash(printenv *)") why="It auto-approves printenv of any named variable(s) without a prompt, so 'printenv QA_ADMIN_PASSWORD' puts that secret into the transcript — and nothing in the toolkit uses it: agents resolve base URLs with 'bash scripts/prod-guard.sh --list-targets'." ;;
       *) why="It was retracted from the shipped template." ;;
     esac
     echo "⚠️  retired permission rule still in .claude/settings.json: \"$retired\" — the scaffold's jq merge is additive (union) and never removes a rule, so this must be deleted BY HAND. $why"
@@ -723,6 +737,7 @@ Bash(sed *e)
 Bash(sed *e *)
 Bash(sed *e;*)
 Bash(printenv)
+Bash(printenv *)
 RETIRED
   # 9c-ii. Path-scoped `Write(...)` rules — never consulted. Claude Code checks file permissions
   #        against `Edit(path)` and `Read(path)` rules ONLY; a `Write(<path>)` rule is accepted,
