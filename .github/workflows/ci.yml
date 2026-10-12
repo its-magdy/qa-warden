@@ -42,7 +42,7 @@ jobs:
         # awk it was. The ubuntu-24.04 runner's default awk is gawk (the Docker image's is mawk).
         # BSD awk on macOS has no -W version, hence the guard.
         if: runner.os == 'Linux'
-        run: awk -W version 2>&1 | head -1 || true
+        run: awk -W version </dev/null 2>&1 | head -1 || true
       - name: qa-scaffoldtest
         # Same reason: qa-scaffold and prod-guard.sh run under the stock macOS bash here.
         run: /bin/bash qa-warden/bin/qa-scaffoldtest
@@ -56,7 +56,7 @@ jobs:
           mawk_bin=$(command -v mawk) || { echo "mawk is not on the runner"; exit 1; }
           mkdir -p "$RUNNER_TEMP/mawk"
           ln -sf "$mawk_bin" "$RUNNER_TEMP/mawk/awk"
-          "$RUNNER_TEMP/mawk/awk" -W version 2>&1 | head -1
+          "$RUNNER_TEMP/mawk/awk" -W version </dev/null 2>&1 | head -1
           export PATH="$RUNNER_TEMP/mawk:$PATH"
           export QA_EXPECT_AWK=mawk
           /bin/bash qa-warden/bin/qa-scaffoldtest

@@ -60,6 +60,11 @@ done
 # hide the append path under test. Make git read nothing but the repo.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 
+# No case reads input, so none may wait on the terminal. A run from a shell has an open stdin, and
+# anything that takes a program or a file from it (BSD awk handed `-W version` takes `version` as its
+# PROGRAM and reads stdin to EOF) hangs forever there while passing in CI, where stdin is at EOF.
+exec </dev/null
+
 # Every case gets its own scratch directory; the trap removes them all, pass or fail.
 SCRATCH=()
 trap 'for d in "${SCRATCH[@]}"; do rm -rf "$d"; done' EXIT
@@ -852,8 +857,11 @@ AWKLOG="$AWKSHIM/awk.log"
 # wraps that one. Say which, and let CI pin it: QA_EXPECT_AWK=mawk fails the case below if the
 # stand-in is not wrapping mawk, so the mawk step cannot quietly measure another awk.
 REAL_AWK=$(command -v awk)
-REAL_AWK_VERSION=$("$REAL_AWK" -W version 2>/dev/null | head -1)
-if [ -z "$REAL_AWK_VERSION" ]; then REAL_AWK_VERSION=$("$REAL_AWK" --version 2>/dev/null | head -1); fi
+# Both probes read nothing: BSD awk does not know -W, treats `version` as the program and then reads
+# stdin, so each is given /dev/null (the exec above already guarantees it; this keeps the lines safe
+# if they are ever copied). mawk and gawk answer -W version; BSD awk answers --version.
+REAL_AWK_VERSION=$("$REAL_AWK" -W version </dev/null 2>/dev/null | head -1)
+if [ -z "$REAL_AWK_VERSION" ]; then REAL_AWK_VERSION=$("$REAL_AWK" --version </dev/null 2>/dev/null | head -1); fi
 echo "  -- awk under test: $REAL_AWK (${REAL_AWK_VERSION:-no version reported})"
 if [ -n "${QA_EXPECT_AWK:-}" ]; then
   check "the awk under test is the expected one ($QA_EXPECT_AWK)" grep -qi -e "$QA_EXPECT_AWK" <<<"$REAL_AWK_VERSION"
