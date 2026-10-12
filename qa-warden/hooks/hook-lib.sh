@@ -49,7 +49,7 @@ hook_require_jq() { command -v jq >/dev/null 2>&1 || exit 0; return 0; }
 #   2. the nearest scaffolded QA project above the file is the one that directory belongs to.
 #
 # The marker pair is `playwright.config.ts` + `scripts/prod-guard.ts`. Both are stamped by
-# bin/qa-scaffold on every /qa-warden:init and both are in scripts/resync-set.txt, so they exist
+# bin/qa-scaffold on every /qa-warden:init and both are in manifests/resync-set.txt, so they exist
 # from the first minute of a project's life and are force-restored by --resync. Plain
 # `playwright.config.ts` alone is NOT enough: it is present in thousands of unrelated
 # repositories, and matching on it would make this plugin lint every Playwright project

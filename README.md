@@ -366,6 +366,7 @@ qa-warden/                        the plugin
 │               assertion prohibition (see qa-warden/hooks/README.md)
 ├── reference/  DESIGN.md, tutorial, how-to, glossary, ideation and sentinel references
 ├── templates/  the runtime substrate /qa-warden:init stamps into each project
+├── manifests/  plugin-only data lists (resync set, CLAUDE.md symbols, prod-guard rails); never stamped
 ├── bin/qa-scaffold      deterministic substrate installer (used by /qa-warden:init)
 ├── bin/qa-selfcheck     plugin consistency checks (not stamped into projects)
 ├── bin/qa-hooktest      hook regression tests (not stamped into projects)
@@ -380,7 +381,7 @@ Agents, skills, hooks and `reference/` update automatically with the plugin. Eve
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs all of these except the evals, plus shellcheck, on every pull request and push to `main`, on Ubuntu and on macOS (the macOS job is the one that parses every script with bash 3.2). It makes no model calls and needs no secrets; the Claude Code CLI is installed only for `claude plugin validate`. Run them locally before every plugin commit anyway:
 
 ```bash
-qa-warden/bin/qa-selfcheck                    # 8 consistency checks over agents/ skills/ hooks/ reference/
+qa-warden/bin/qa-selfcheck                    # 14 consistency checks over the plugin's own source
 qa-warden/bin/qa-hooktest                     # 58 real payloads through the two PreToolUse hooks
 qa-warden/bin/qa-scaffoldtest                 # qa-scaffold stamp, settings merge and --resync in temp dirs, plus the prod-guard.sh URL table
 claude plugin validate --strict ./qa-warden   # mandatory after any frontmatter edit
@@ -389,9 +390,9 @@ claude plugin validate --strict ./qa-warden   # mandatory after any frontmatter 
 Expected tail:
 
 ```
-qa-selfcheck: ✅ plugin is self-consistent — all 8 checks passed
+qa-selfcheck: ✅ plugin is self-consistent — all 14 checks passed
 qa-hooktest: ✅ all 58 cases passed
-qa-scaffoldtest: ✅ all 133 cases passed
+qa-scaffoldtest: ✅ all 136 cases passed
 ```
 
 When you change `qa-warden/agents/reviewer.md`, also run the behavioural evals. They make real model calls (on 2026-09-30, about $0.4 and 2 minutes per case; all five cost $1.97), so run them per change, not per commit. Details: [`qa-warden/evals/README.md`](qa-warden/evals/README.md).

@@ -4,10 +4,11 @@
 # One consumer reads this file:
 #   - scripts/doctor.sh Check 9 (CLAUDE.md vocabulary containment) : every symbol listed here
 #     must appear in the SHIPPED templates/CLAUDE.md *and* in the project's own CLAUDE.md.
+# Doctor reads it from the plugin (manifests/), never from the project, so it is not stamped.
 #
 # WHY THIS EXISTS. CLAUDE.md is shared-ownership: users customise project policy, so it is
 # excluded from `--resync` (bin/qa-scaffold) and from Check 9's byte-compare (see the
-# exclusion list in scripts/resync-set.txt). Both exclusions are correct in isolation. Together
+# exclusion list in manifests/resync-set.txt). Both exclusions are correct in isolation. Together
 # they leave a hole, and it is the widest one in the upgrade path: CLAUDE.md is where every new
 # AUTHORING feature is documented, and the in-project agents read THAT file, not the plugin.
 # Measured on a real 0.2.0 -> HEAD upgrade: after a clean, green, exit-0 `/qa-warden:init --resync`
@@ -34,7 +35,7 @@
 # the repair is not a command — CLAUDE.md is shared-ownership, so it is a hand-merge.
 #
 # ADDING A FEATURE THAT SHIPS IN CLAUDE.md: add one line here. Symbols are matched literally,
-# anchored the way Check 9i anchors the step forms — `(^|[^a-zA-Z_])<symbol>` — so `lock:`
+# anchored the way Check 9i (bin/qa-selfcheck) anchors the step forms — `(^|[^a-zA-Z_])<symbol>` — so `lock:`
 # does not match `unlock:`.
 #
 # Format: <symbol>|<why its absence costs something>. Full-line `#` comments and blank lines

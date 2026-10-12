@@ -3,6 +3,10 @@
 # Two consumers read this file; neither hand-enumerates the set any more:
 #   - bin/qa-scaffold  --resync : force-refreshes exactly these files (backing each up to .qa-bak)
 #   - scripts/doctor.sh Check 9 : byte-compares exactly these files against the shipped templates
+# Both read THIS copy, in the plugin. That is why it lives in manifests/ and not in templates/:
+# bin/qa-scaffold stamps every file under templates/, and a stamped copy of this list was read
+# by nothing — editing it in a project changed no behaviour and only fired a drift warning.
+# claude-md-vocab.txt and prod-guard-rails.txt sit beside it for the same reason.
 # Detection and repair MUST cover the SAME set (M-8): a file resynced but never drift-checked is
 # silently repaired yet never NUDGES the user to run --resync; a file drift-checked but never
 # resynced nags forever with no repair path. Two hand-kept lists could not hold that invariant —
@@ -24,7 +28,12 @@
 #   page-objects/README.md — user-authored notes land here
 #
 # Blank lines and `#` comments are ignored. Paths are relative to the project root and to
-# templates/. This file lists ITSELF so a change to the manifest propagates like any other.
+# templates/. Every line must name a file under templates/ — both consumers silently skip a
+# line whose template does not exist. This file used to list ITSELF (and the two other plugin-
+# only manifests) so that a change propagated; it no longer needs to, because a project never
+# receives a copy. A project stamped before the move keeps an inert scripts/resync-set.txt,
+# scripts/claude-md-vocab.txt and scripts/prod-guard-rails.txt; doctor names them as safe to
+# delete.
 package.json
 package-lock.json
 playwright.config.ts
@@ -44,11 +53,8 @@ scripts/retire-delete.sh
 scripts/cli-fill-env.sh
 scripts/review-marker.sh
 scripts/README.md
-scripts/resync-set.txt
 scripts/runtime-dirs.txt
 scripts/oracle-keys.txt
-scripts/claude-md-vocab.txt
-scripts/prod-guard-rails.txt
 .github/workflows/qa-nightly.yml.example
 specs/_context/_templates/area.md
 specs/_context/_templates/app.context.md

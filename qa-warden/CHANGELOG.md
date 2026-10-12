@@ -61,6 +61,44 @@ never carry the same number**, or the second one has no way to announce itself.
   `playwright.config.ts.qa-bak` and replaced; if it used `BASE_URL_<ID>` and the matching id, it
   comes back on its own. Otherwise Check 10 names the id or variable to rename.
 
+### Doctor stops running checks no project can fix; three manifests stop being stamped
+
+- **Six more checks moved from `scripts/doctor.sh` to the plugin's own `bin/qa-selfcheck`:** 9bb
+  (oracle arg-shape drift), 9bd (prod-guard rail coverage), arm 1 of 9f (healer `tools:` vs the
+  shipped MCP grants), 9g (the generator → verifier chain), 9i (the `fault:`/`clock:` chain) and 20.
+  Each one read only plugin files, so when one fired in a project there was nothing the user could
+  do, and the repo's CI never ran doctor, so none of them gated a plugin change either. Their ❌
+  findings now fail CI on every PR. Their ⚠️ arms still do not, because CI fails on ❌ only. Those
+  arms are: the 9bb row-count mismatch, the 9bd skill-with-a-rail-but-not-listed direction, and the
+  "UNVERIFIED" notices of 9f and 9i. Ids are unchanged. Doctor keeps 9f arms 2 and 3, which compare
+  the plugin's grants with your `.claude/settings.json`. Doctor now runs 32 numbered checks,
+  qa-selfcheck 14.
+- **Check 20 has a new job under the same id.** It used to warn when the `.env`-load one-liner
+  copied into agents and skills drifted into more than one form. Every copy has since been replaced
+  by `prod-guard.sh --list-targets`, so it compared nothing and could not fire. It now **fails** if
+  any file under `agents/` or `skills/` chains a `.env` load. That covers the canonical one-liner on
+  any line, and a `set -a` + `. …/.env` in a fenced code block or a script line. CLAUDE.md
+  §Environment already forbids this, because such a command prompts, is denied headless, and its
+  exports die with the call.
+- **`resync-set.txt`, `claude-md-vocab.txt` and `prod-guard-rails.txt` moved from
+  `templates/scripts/` to the plugin's `manifests/`**, so `/qa-warden:init` no longer copies them
+  into a project. Nothing in a project ever read them: `qa-scaffold` and doctor read the plugin's
+  copies. Editing a stamped copy changed nothing and only raised a substrate-drift warning, and
+  two doctor messages told you to run `/qa-warden:init --resync` to fix a manifest that resync
+  cannot deliver. Those messages now say to update the plugin. `oracle-keys.txt` and
+  `runtime-dirs.txt` stay stamped, because doctor, `coverage.sh` and `init.sh` read them in the project.
+  `bin/qa-scaffoldtest` reads the resync set from `manifests/` and now also asserts that no
+  plugin-only manifest is stamped and that the resync set lists none of them.
+- **Already-stamped projects:** the three old files stay under `scripts/`. They do nothing and
+  `--resync` no longer touches them. Doctor prints one ℹ️ line per leftover (not counted as a
+  warning) saying it is safe to delete. Update the plugin and run `/qa-warden:init --resync`
+  before running `/qa-warden:doctor`, as the upgrade path already says. A doctor stamped by 0.5.6 or
+  earlier, run against this plugin, cannot find the moved manifests: it prints a ❌ for
+  `prod-guard-rails.txt`, a ⚠️ for `claude-md-vocab.txt` (both say to run `--resync`) and a ⚠️ that
+  substrate drift is unverified. Running `--resync` clears all three, because it installs the new
+  doctor. A newer doctor run against an older plugin install falls back to the old
+  `templates/scripts/` paths.
+
 ---
 
 ## 0.5.6 — nightly CI hardening, a truncated hook message, shellcheck cleanup (2026-10-09)

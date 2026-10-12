@@ -59,25 +59,12 @@ does not fix anything — each finding names its repair:
 - **Check 0b (ripgrep missing, WARN):** `rg` is an undeclared plugin-wide dependency (the healer,
   reviewer and planner greps use it). `/qa-warden:retire` checks for it and falls back to
   `grep -rlE` for its consumer checks; install it anyway (`brew install ripgrep`).
-- **Check 9bb (arg-shape drift):** a key's argument shape diverged between
-  `templates/CLAUDE.md` and `agents/planner.md` — reconcile to CLAUDE.md (the stamped SoT).
-  Only the shape expression is compared; rewording the trailing prose never fires this.
-  A `did not parse` FAIL means the table format moved and shapes are UNCHECKED, not in sync.
-  It also pins `invariant_holds_when:` to the LIST form (`- invariant:`/`holds_when:` pairs) in
-  both mirrors — a bare scalar FAILs. That key is in the YAML schema block, not the table, so
-  the shape extractor cannot see it; it shipped scalar in CLAUDE.md and list in planner.md,
-  and the reviewer reads shapes from the stamped CLAUDE.md.
-- **Check ids 9b / 9bc / 9be / 9d / 9e / 9h / 9j belong to `bin/qa-selfcheck`, not doctor.** They read only the
-  plugin's own source, so nothing in a project could fix one; they run from the toolkit repo as
-  `bin/qa-selfcheck` (same ids, same messages). If a user reports one of those ids, the fault is in
-  the plugin build, not their project — the remedy is updating the plugin, not editing anything here.
-- **Check 9bd (prod-guard rail coverage):** a skill listed in `scripts/prod-guard-rails.txt`
-  either lost its `bash scripts/prod-guard.sh` invocation or stopped acting on the exit code.
-  **Restore the rail; never delete one to make this pass** — on the `gen`/`new-spec`/`intake`/
-  `explore`/`review` CLI-driving paths that prose is the only prod rail, because the enforced
-  `prod-guard.ts` globalSetup fires only under `npx playwright test`. Only invocation + the STOP
-  clause are compared, so rewording a rail body never fires this. A WARN naming a skill missing
-  from the manifest means a new rail shipped unpoliced — add the line.
+- **Check ids 9b / 9bb / 9bc / 9bd / 9be / 9d / 9e / 9g / 9h / 9i / 9j / 20, and 9f arm 1, belong to
+  `bin/qa-selfcheck`, not doctor.** They read only the plugin's own source (agents, skills, hooks,
+  the shipped templates, the plugin's `manifests/`), so nothing in a project could fix one; they run
+  from the toolkit repo as `bin/qa-selfcheck` (same ids). If a user reports one of those ids, the
+  fault is in the plugin build, not their project — the remedy is updating the plugin, not editing
+  anything here.
 - **Check 9c (retired permission rule still in settings.json):** `.claude/settings.json` is
   excluded from Check 9's byte-compare and from `--resync` (shared ownership — users add their own
   rules), and the scaffold's jq merge is an additive UNION that can only ADD. So a rule the toolkit
@@ -87,14 +74,9 @@ does not fix anything — each finding names its repair:
   file permissions against `Edit(...)`/`Read(...)` rules only, so such a rule is never consulted
   (and is warned about at startup). The template shipped 30 of them, each with an `Edit` twin,
   until 0.4.0. Delete them; give any rule without an `Edit` twin one.
-- **Check 9f (healer MCP grant ↔ settings.json mirror):** the 17 `mcp__playwright__*` entries
-  are hand-typed twice — as `agents/healer.md`'s `tools:` list and as `templates/settings.json`'s
-  `permissions.allow[]` — and were the last hand-mirrored pair in the substrate with no check.
-  **FAIL, either direction.** Declared but not allowed: the healer is a SUBAGENT, so the tool
-  prompts with nobody to answer and a step its own prose mandates (HEAL01's `browser_evaluate`
-  re-probe) silently cannot run. Allowed but not declared: a standing pre-approval no agent can
-  reach, since an explicit `tools:` list is a restriction. Fix by editing both files together.
-  A separate **WARN** arm compares the shipped MCP grants against this project's
+- **Check 9f (healer MCP grants reaching this project):** arm 1 — the plugin's own
+  `agents/healer.md` `tools:` list against `templates/settings.json` — is a `bin/qa-selfcheck`
+  check, because both sides are plugin source. What doctor runs is the **WARN** arm that compares the shipped MCP grants against this project's
   `.claude/settings.json`: this is the complement of 9c — 9c catches a rule the toolkit
   RETRACTED and stranded downstream, this catches one it ADDED that never reached a project
   scaffolded earlier. Repair is a plain `/qa-warden:init` (the permission merge is additive and runs
@@ -109,54 +91,18 @@ does not fix anything — each finding names its repair:
   successful merge deletes the file, so the signal cannot go stale; a hand-merged leftover is
   reported separately as stale. The presence test sits outside the `jq` gate, because the state
   it detects is `jq` being absent.
-- **Check 9g (`/qa-warden:gen`'s compiler → verifier chain + the manifest gate):** `generator` and
-  `verifier` are two agents on purpose — the agent that wrote an `expect(...)` never decides
-  at steps 8b/8c whether it catches an injected defect, because its cheapest path is to claim
-  it does. No subagent can spawn another, so the chain exists **only** as prose in
-  `skills/gen/SKILL.md`; if that prose drops the second call, `/qa-warden:gen` goes green with every
-  spec compiled but ungraded. **FAIL** if
-  `agents/verifier.md` is gone, or if that prose stops naming either agent (presence, not
-  wording — same doctrine as 9bd). The third arm is the load-bearing one: the route manifest is
-  the *ship* signal (`/qa-warden:impact` counts a spec as live coverage only once its manifest exists)
-  and it is gated on verification passing, so **exactly one agent may declare
-  `Write(artifacts/route-manifests/**)`, and it must be the verifier.** If the generator ever
-  reclaims that write, the gate detaches from the thing it gates and a never-verified spec ships
-  looking covered. Fix by restoring the two-call chain in `skills/gen/SKILL.md` and leaving the
-  manifest grant with the verifier — never by re-adding it to the generator to make the check
-  pass.
 - **Check 9, CLAUDE.md vocabulary containment:** the delivery half of the upgrade path.
   `CLAUDE.md` is shared-ownership, so it is excluded from `--resync` *and* from Check 9's
   byte-compare — yet it is where every new authoring feature is documented, and the in-project
   agents read it rather than the plugin. After a clean, green, exit-0 `/qa-warden:init --resync` the
   stamped `CLAUDE.md` can therefore lack every new authoring feature (`fault:`, `clock:`,
-  `lock:`, `verifier`) while doctor says nothing else. The symbols come from
-  `scripts/claude-md-vocab.txt` and are gated on the shipped template, the same derive-don't-
+  `lock:`, `verifier`) while doctor says nothing else. The symbols come from the plugin's
+  `manifests/claude-md-vocab.txt` (never stamped into a project) and are gated on the shipped template, the same derive-don't-
   hand-enumerate shape as the `.env.example` stock-var containment beside it. The check is
   symbol-level, not section-level: new rules land inside pre-existing sections, so a heading
   diff reports green on exactly the release it was built for. **WARNs, never FAILs:** alone among
   Check 9's findings the repair is a hand-merge against the shipped template, not a command, and
   a repair the toolkit cannot perform must not be louder than the ones it can.
-- **Check 9i (the situation-step chain — `fault:` / `clock:`):** the two structured `steps:`
-  forms that make the SFDIPOT Interfaces/Operations and Time lenses generatable. They are
-  deliberately **not** oracle keys, so `scripts/oracle-keys.txt` does not carry them — the whole
-  contract is prose across four files. **Arm 1, chain
-  completeness:** the planner AUTHORS the step, the generator COMPILES it, the reviewer
-  VALIDATES it, and `templates/CLAUDE.md` is what gets STAMPED into a project (the in-*project*
-  reviewer reads its own copy and cannot read the plugin). Each link, dropped, fails in its own
-  silent direction — a missing planner mirror is the audit's own *"a capability that only lands
-  in the generator is one the planner can never ask for"*. Keyed on the step SYMBOLS, never on
-  wording. **Read arm 1 as the shipping SOURCE, not delivery:** all four links are plugin-side
-  files, so it stays green however stale an already-scaffolded project's own `CLAUDE.md` is. The
-  delivered copy is Check 9's CLAUDE.md containment sub-check (below), which is where `fault:`
-  and `clock:` are actually policed downstream. **Arm 2, scope
-  ownership:** the healer's prohibition on *introducing* a stub or a clock call is enforced by
-  `assertion-contract.sh`, and that arm must scope to the **healer alone** — widen it to the
-  verifier and its step-8b fault injection (which *is* a `page.route`) gets denied, breaking the
-  negative control the oracle-defense layer rests on; narrow it to nobody and the healer can stub
-  a genuinely-broken backend green. **Arm 3, stranded contract** (the 9c shape): the fired-proof
-  for a response-fabricating `fault:` is a paired `network_response_status` oracle — chosen so the
-  feature needs no 17th key, which makes the rule depend on a key it does not own. Retire that key
-  and every `fault:` spec becomes unauthorable while four files still demand the pairing.
 - **Check 9k (unmanifested-walk ownership):** "which compiled tests carry no route manifest" is
   one rule with two consumers that must never disagree — `/qa-warden:impact` prints it as
   `### BLIND SPOTS` (a zero-match there is only honest if the caller is told which specs were
@@ -222,7 +168,12 @@ does not fix anything — each finding names its repair:
   the template, and the file itself is shared-ownership and never byte-compared. The
   drift baseline is the RECORDED active plugin install; a "baseline GUESSED by newest
   mtime" ⚠️ means the install record didn't resolve — re-run via `/qa-warden:doctor` (which
-  resolves `CLAUDE_PLUGIN_ROOT`) before trusting a drift verdict.
+  resolves `CLAUDE_PLUGIN_ROOT`) before trusting a drift verdict. An ℹ️ naming
+  `scripts/resync-set.txt`, `scripts/claude-md-vocab.txt` or `scripts/prod-guard-rails.txt` as a
+  leftover is not a finding: those manifests now live only in the plugin, nothing in the project
+  reads the old copies, and the user can delete them. A ❌ or ⚠️ about `prod-guard-rails.txt`,
+  `resync-set.txt` or `claude-md-vocab.txt` right after a plugin update means the stamped
+  `scripts/doctor.sh` predates the plugin: run `/qa-warden:init --resync`, then re-run doctor.
 - **Check 10 (site↔project routing):** never edit `playwright.config.ts` (toolkit-owned; it
   derives a project per set `BASE_URL_<SITE>`). ❌ — make the id lowercase `[a-z0-9-]` and its
   `base_url_env` exactly `BASE_URL_<ID>` (`-`→`_`). ⚠️ — set that var in `.env`.
@@ -267,10 +218,6 @@ does not fix anything — each finding names its repair:
 - **Check 19 (unattested interview, WARN):** a `.basis.md` with `[human-answered]` oracle rules but
   `interview: none`/absent — the human grounding is unattested (a fabricated basis looks identical).
   `/qa-warden:intake` should stamp the real question count in the basis `interview:` field.
-- **Check 20 (`.env`-load idiom drift, WARN):** the canonical `.env`-load one-liner is duplicated
-  verbatim across several plugin skill/agent files (a run-verbatim command belongs at its point
-  of use); this WARNs only if more than one distinct form exists. Re-sync every
-  copy to the canonical `${CLAUDE_PROJECT_DIR:-.}`-anchored form in CLAUDE.md §Environment.
 - **Check 21 (fresh-project readiness, INFO):** not a warning — on a brand-new project (no
   `app.context.md`/specs) it prints a "setup looks healthy — next run `/qa-warden:explore`" verdict so the
   expected empty-project WARNs read as "expected at this stage", not "something's broken".

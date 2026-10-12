@@ -27,7 +27,7 @@
 # 0-failure JSON — F-04 — or a resolver/validation failure).
 #
 # NOTE: prod-guard is invoked by the SKILL body (not here) so the STOP-on-non-zero
-# rail stays on the same line doctor Check 9bd expects — do not move it into this
+# rail stays on the same line qa-selfcheck Check 9bd expects — do not move it into this
 # script.
 #
 # NOTE: deliberately NO `-e`. $PW_EXIT must be captured even though Playwright can
