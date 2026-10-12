@@ -583,20 +583,15 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   if [ -f scripts/review-marker.sh ]; then
     echo "ℹ️  scripts/review-marker.sh is a leftover from an older stamp — nothing calls it now (/qa-warden:review runs the plugin's copy); safe to delete, together with its two .claude/settings.json rules: \"Bash(bash scripts/review-marker.sh*)\" (allow) and \"Edit(scripts/review-marker.sh)\" (deny)"
   fi
-  # And for the two allow rules the stamped doctor needed: /qa-warden:doctor runs this file, so
+  # And for the plain allow rule the stamped doctor needed: /qa-warden:doctor runs this file, so
   # nothing Claude runs calls scripts/doctor.sh (now a launcher for terminal runs, which need no
-  # allow rule). Named here, not retired by Check 9c, for the same reason as above: all they
-  # pre-approve is running the edit-denied launcher, which ignores $CLAUDE_PLUGIN_ROOT. The file
-  # stays (it is the launcher, toolkit-owned); only the rules are leftovers.
-  old_doctor_rules=""
-  if [ -f .claude/settings.json ]; then
-    for rule in 'Bash(bash scripts/doctor.sh*)' 'Bash(CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh*)'; do
-      grep -qF "\"$rule\"" .claude/settings.json 2>/dev/null || continue
-      old_doctor_rules="${old_doctor_rules:+$old_doctor_rules and }\"$rule\""
-    done
-  fi
-  if [ -n "$old_doctor_rules" ]; then
-    echo "ℹ️  .claude/settings.json still allows $old_doctor_rules — a leftover from an older stamp: /qa-warden:doctor runs the plugin's own doctor and nothing calls scripts/doctor.sh any more (keep the file, it is the launcher for terminal runs); the rule(s) are safe to delete"
+  # allow rule). Named here, not retired by Check 9c: the rule starts with the program, so an
+  # allow match cannot carry a variable assignment in front of it, and a compound command is
+  # matched per subcommand. All it pre-approves is running the edit-denied launcher. The file
+  # stays (it is the launcher, toolkit-owned); only the rule is a leftover. Its sibling,
+  # `Bash(CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh*)`, is NOT harmless and is in Check 9c.
+  if [ -f .claude/settings.json ] && grep -qF '"Bash(bash scripts/doctor.sh*)"' .claude/settings.json 2>/dev/null; then
+    echo "ℹ️  .claude/settings.json still allows \"Bash(bash scripts/doctor.sh*)\" — a leftover from an older stamp: /qa-warden:doctor runs the plugin's own doctor and nothing calls scripts/doctor.sh any more (keep the file, it is the launcher for terminal runs); the rule is safe to delete"
   fi
 else
   # A skipped drift check must be VISIBLE (WARN, counted), not a silent green INFO — this check
@@ -743,6 +738,7 @@ if [ -f .claude/settings.json ]; then
       "Bash(sed "*) why="It over-blocks ordinary sed (the deny cannot be interactively approved); the replacements are \"Bash(sed *e'*)\" and \"Bash(sed *e\\\"*)\"." ;;
       "Bash(printenv)") why="It auto-approves a BARE printenv — a full dump of every .env secret loaded into that shell (QA_ADMIN_PASSWORD, QA_TOTP_SECRET, QA_CLIENT_CERT_PASSPHRASE) into the transcript — and nothing in the toolkit uses it." ;;
       "Bash(printenv *)") why="It auto-approves printenv of any named variable(s) without a prompt, so 'printenv QA_ADMIN_PASSWORD' puts that secret into the transcript — and nothing in the toolkit uses it: agents resolve base URLs with 'bash scripts/prod-guard.sh --list-targets'." ;;
+      "Bash(CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh*)") why="Its first * matches any text, spaces included, so it also auto-approves 'CLAUDE_PLUGIN_ROOT=x CLAUDE_CONFIG_DIR=artifacts/x bash scripts/doctor.sh' (the launcher reads CLAUDE_CONFIG_DIR, so an agent-written install record under artifacts/ names the doctor it runs) and 'CLAUDE_PLUGIN_ROOT=x bash -c <any command> bash scripts/doctor.sh' — and nothing calls it any more: /qa-warden:doctor runs the plugin's own doctor." ;;
       *) why="It was retracted from the shipped template." ;;
     esac
     echo "⚠️  retired permission rule still in .claude/settings.json: \"$retired\" — the scaffold's jq merge is additive (union) and never removes a rule, so this must be deleted BY HAND. $why"
@@ -753,6 +749,7 @@ Bash(sed *e *)
 Bash(sed *e;*)
 Bash(printenv)
 Bash(printenv *)
+Bash(CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh*)
 RETIRED
   # 9c-ii. Path-scoped `Write(...)` rules — never consulted. Claude Code checks file permissions
   #        against `Edit(path)` and `Read(path)` rules ONLY; a `Write(<path>)` rule is accepted,

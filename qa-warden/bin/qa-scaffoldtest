@@ -23,7 +23,8 @@
 #                      itself (no drift on a fresh stamp, real drift reported, CLAUDE_PLUGIN_ROOT
 #                      ignored), and the stamped scripts/doctor.sh launcher runs it from the
 #                      recorded install (never another project's), or exits 2 without guessing;
-#                      old stamps' leftover doctor allow rules named as INFO; the spec format's move from
+#                      old stamps' doctor allow rules (the plain one INFO, the CLAUDE_PLUGIN_ROOT=*
+#                      one a counted Check 9c warning); the spec format's move from
 #                      CLAUDE.md into the test-case-contract skill (old section warned, a missing
 #                      pointer nudged, Check 2 compares key sets with the skill exactly,
 #                      fault:/clock: no longer demanded in CLAUDE.md)
@@ -482,13 +483,25 @@ new_dir; OTHERP=$DIR
 record "$CFG" "[{\"scope\": \"local\", \"projectPath\": \"$OTHERP\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
 run_launcher "$D" "$CFG"
 check_eq "launcher exits 2 when the only install is another project's" "2" "$LN_RC"
-check "  and names that project" grep -qF "only for other projects ($OTHERP)" <<<"$LN_OUT"
+check "  and says the installs are other projects'" grep -qF "only for other projects, not for this one ($D)" <<<"$LN_OUT"
+check "  and names that project with the command that runs its doctor" \
+  grep -qxF "  $OTHERP: bash \"$here/skills/doctor/scripts/doctor.sh\"" <<<"$LN_OUT"
 check "  and runs nothing" test "$(grep -c '^doctor: ' <<<"$LN_OUT")" = "0"
+# A per-project record with no projectPath is not this project's either, and is still listed.
+record "$CFG" "[{\"scope\": \"project\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
+run_launcher "$D" "$CFG"
+check_eq "launcher exits 2 when the only install is a project record with no projectPath" "2" "$LN_RC"
+check "  and lists it as unnamed, with its doctor command" \
+  grep -qxF "  a project the record does not name: bash \"$here/skills/doctor/scripts/doctor.sh\"" <<<"$LN_OUT"
 # The control: the same record with THIS project's path is picked, so the exit above is the
 # projectPath and not a broken entry.
 record "$CFG" "[{\"scope\": \"local\", \"projectPath\": \"$D\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
 run_launcher "$D" "$CFG"
 check "  control: the same record for this project is picked" grep -qF "recorded plugin install → $here" <<<"$LN_OUT"
+# A trailing `/` on the recorded path is the same directory.
+record "$CFG" "[{\"scope\": \"local\", \"projectPath\": \"$D/\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-10-09T00:00:00Z\"}]"
+run_launcher "$D" "$CFG"
+check "  and so is a record whose projectPath ends in /" grep -qF "recorded plugin install → $here" <<<"$LN_OUT"
 # A record not tied to a project (managed here) beats another project's NEWER install. The other
 # project's install has no doctor, so picking it would exit 2 with "older than this launcher".
 record "$CFG" "[{\"scope\": \"managed\", \"installPath\": \"$here\", \"lastUpdated\": \"2026-09-01T00:00:00Z\"},
@@ -617,14 +630,19 @@ check_eq "  as INFO, so doctor still exits 0" "0" "$DR_RC"
 newlines=$(diff <(printf '%s\n' "$fresh_out") <(printf '%s\n' "$DR_OUT") | grep '^>' | grep -v '^> doctor: ')
 check_eq "  and it is the only new line" "1" "$(printf '%s\n' "$newlines" | grep -c .)"
 
-echo "  -- the stamped doctor's two old allow rules are named leftovers, not warnings"
+echo "  -- the stamped doctor's old allow rules: the plain one is INFO, the CLAUDE_PLUGIN_ROOT=* one is retired"
 OLD_DR_ALLOW='Bash(bash scripts/doctor.sh*)'
 OLD_DR_ROOT='Bash(CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh*)'
-LEFTOVER_DR=".claude/settings.json still allows"
+LEFTOVER_DR="ℹ️  .claude/settings.json still allows \"$OLD_DR_ALLOW\" — a leftover from an older stamp: /qa-warden:doctor runs the plugin's own doctor and nothing calls scripts/doctor.sh any more (keep the file, it is the launcher for terminal runs); the rule is safe to delete"
+RETIRED_DR="retired permission rule still in .claude/settings.json: \"$OLD_DR_ROOT\""
+# rollup_n <doctor output> — the warning count in the rollup line, so "counted" is asserted, not assumed.
+rollup_n() { grep '^doctor: ' <<<"$1" | grep -oE '\([0-9]+\)' | tr -d '()'; }
+fresh_n=$(rollup_n "$fresh_out")
 check "templates/settings.json allows neither old doctor rule" \
   jq -e --arg a "$OLD_DR_ALLOW" --arg b "$OLD_DR_ROOT" \
      '.permissions.allow | (index($a) | not) and (index($b) | not)' "$TEMPLATES/settings.json"
-check "a fresh stamp gets no old-doctor-rule line" test "$(grep -cF "$LEFTOVER_DR" <<<"$fresh_out")" = "0"
+check "a fresh stamp gets neither the INFO line nor the retired-rule warning" \
+  test "$(grep -cF -e "$LEFTOVER_DR" -e "$RETIRED_DR" <<<"$fresh_out")" = "0"
 # A project stamped before doctor moved into the plugin still carries both: the merge never removes a rule.
 new_dir; ODP=$DIR
 stamp "$ODP"
@@ -632,18 +650,30 @@ jq --arg a "$OLD_DR_ALLOW" --arg b "$OLD_DR_ROOT" '.permissions.allow += [$a, $b
   "$ODP/.claude/settings.json" > "$ODP/settings.new"
 mv "$ODP/settings.new" "$ODP/.claude/settings.json"
 run_doctor "$ODP"
-check "an old stamp's two doctor allow rules are named on one INFO line" \
-  grep -qF "ℹ️  $LEFTOVER_DR \"$OLD_DR_ALLOW\" and \"$OLD_DR_ROOT\"" <<<"$DR_OUT"
-check_eq "  as INFO, so doctor still exits 0" "0" "$DR_RC"
-check "  and Check 9c does not call them retired" test "$(grep -c 'retired permission rule' <<<"$DR_OUT")" = "0"
-newlines=$(diff <(printf '%s\n' "$fresh_out") <(printf '%s\n' "$DR_OUT") | grep '^>')
-check_eq "  and it is the only new line (the rollup count is unchanged)" "1" "$(printf '%s\n' "$newlines" | grep -c .)"
-# One rule alone is named alone. Delete it with jq, not by hand, so the rest of the file is untouched.
+check "an old stamp's plain doctor rule is named on an INFO line" grep -qxF "$LEFTOVER_DR" <<<"$DR_OUT"
+check "  and Check 9c warns on the CLAUDE_PLUGIN_ROOT=* rule" grep -qF "⚠️  $RETIRED_DR" <<<"$DR_OUT"
+rdl=$(grep -F "$RETIRED_DR" <<<"$DR_OUT")
+check "  saying its * also admits CLAUDE_CONFIG_DIR and bash -c" \
+  test "$(grep -cF 'CLAUDE_CONFIG_DIR=artifacts/x' <<<"$rdl")$(grep -cF 'bash -c' <<<"$rdl")" = "11"
+check "  and does not call the plain rule retired" \
+  test "$(grep -cF "retired permission rule still in .claude/settings.json: \"$OLD_DR_ALLOW\"" <<<"$DR_OUT")" = "0"
+check_eq "  as a warning, so doctor still exits 0" "0" "$DR_RC"
+check_eq "  and the warning is counted (one more than a fresh stamp)" "$((fresh_n + 1))" "$(rollup_n "$DR_OUT")"
+newlines=$(diff <(printf '%s\n' "$fresh_out") <(printf '%s\n' "$DR_OUT") | grep '^>' | grep -v '^> doctor: ')
+check_eq "  and those two are the only new lines" "2" "$(printf '%s\n' "$newlines" | grep -c .)"
+# Each rule on its own gets only its own line. Edit with jq so the rest of the file is untouched.
 jq --arg a "$OLD_DR_ALLOW" '.permissions.allow -= [$a]' "$ODP/.claude/settings.json" > "$ODP/settings.new"
 mv "$ODP/settings.new" "$ODP/.claude/settings.json"
 run_doctor "$ODP"
-check "with only the CLAUDE_PLUGIN_ROOT rule left, the line names just that one" \
-  grep -qxF "ℹ️  $LEFTOVER_DR \"$OLD_DR_ROOT\" — a leftover from an older stamp: /qa-warden:doctor runs the plugin's own doctor and nothing calls scripts/doctor.sh any more (keep the file, it is the launcher for terminal runs); the rule(s) are safe to delete" <<<"$DR_OUT"
+check "with only the CLAUDE_PLUGIN_ROOT=* rule: the warning, no INFO line" \
+  test "$(grep -cF "⚠️  $RETIRED_DR" <<<"$DR_OUT")$(grep -cxF "$LEFTOVER_DR" <<<"$DR_OUT")" = "10"
+jq --arg a "$OLD_DR_ALLOW" --arg b "$OLD_DR_ROOT" '.permissions.allow -= [$b] | .permissions.allow += [$a]' \
+  "$ODP/.claude/settings.json" > "$ODP/settings.new"
+mv "$ODP/settings.new" "$ODP/.claude/settings.json"
+run_doctor "$ODP"
+check "with only the plain rule: the INFO line, no warning" \
+  test "$(grep -cxF "$LEFTOVER_DR" <<<"$DR_OUT")$(grep -c 'retired permission rule' <<<"$DR_OUT")" = "10"
+check_eq "  and the rollup count is a fresh stamp's (INFO is not counted)" "$fresh_n" "$(rollup_n "$DR_OUT")"
 
 echo "  -- Check 15 hashes with shasum when sha256sum is found but cannot run"
 # An x86-only sha256sum on Apple silicon is on PATH but exits 126 ("Bad CPU type"). Doctor used
