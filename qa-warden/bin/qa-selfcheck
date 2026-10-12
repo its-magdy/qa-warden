@@ -518,7 +518,7 @@ fi
 #         declares. Harmless today, but it is how the two sides drift apart unnoticed, and an
 #         agent with an explicit `tools:` list cannot call it anyway.
 #     Arm 1 only. Arms 2 and 3 compare the shipped grants with a PROJECT's .claude/settings.json,
-#     so they stay in templates/scripts/doctor.sh under the same id.
+#     so they stay in skills/doctor/scripts/doctor.sh under the same id.
 if [ -n "$TMPL" ] && [ -f "$TMPL/settings.json" ] && [ -f "$TMPL/../agents/healer.md" ] && command -v jq >/dev/null 2>&1; then
   # `tools:` is a comma-separated frontmatter scalar; settings.json is a JSON array. Normalize
   # both to a sorted line set so the comparison is of SETS, not of formatting or order.

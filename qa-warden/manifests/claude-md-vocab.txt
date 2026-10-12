@@ -2,7 +2,7 @@
 # project's stamped CLAUDE.md.
 #
 # One consumer reads this file:
-#   - scripts/doctor.sh Check 9 (CLAUDE.md vocabulary containment) : every symbol listed here
+#   - skills/doctor/scripts/doctor.sh Check 9 (CLAUDE.md vocabulary containment) : every symbol listed here
 #     must appear in the SHIPPED templates/CLAUDE.md *and* in the project's own CLAUDE.md.
 # Doctor reads it from the plugin (manifests/), never from the project, so it is not stamped.
 #

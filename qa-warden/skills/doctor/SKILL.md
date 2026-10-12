@@ -3,6 +3,7 @@ description: Read-only scripted health check of a scaffolded QA project — last
 argument-hint: "[--verify-invariants specs/<area>/<feature>.md]"
 context: fork
 background: false
+allowed-tools: Bash(bash "${CLAUDE_SKILL_DIR}/scripts/doctor.sh" *)
 ---
 
 `/qa-warden:doctor` runs the deterministic self-checks (checks 0–21) the rest of the toolkit describes
@@ -17,33 +18,22 @@ Run from the QA project root (the dir with `playwright.config.ts` + `CLAUDE.md`)
 
 ## Run the scripted pass
 
-The entire deterministic check suite (checks 0–21 + rollup) lives in
-`scripts/doctor.sh`, stamped into the project by `/qa-warden:init`. Run it — do not
-re-derive the checks inline:
+The entire deterministic check suite (checks 0–21 + rollup) lives in this skill's own
+`scripts/doctor.sh`, inside the plugin. It is not stamped into the project, so it is always the same
+build as the templates it compares the project against. Run it — do not re-derive the checks inline.
 
-Run this ONE command, as its own Bash call (an `if …; fi` wrapper matches no allow rule and is
-denied headless). If it fails with "No such file" for `scripts/doctor.sh`, the script is missing:
-see the two cases below (Glob for `playwright.config.ts` / `package.json` to tell them apart).
+Run this ONE command, from the project root, as its own Bash call (an `if …; fi` wrapper matches
+no allow rule and is denied headless). The `allowed-tools` rule above pre-approves exactly this form:
 
 ```bash
-# Pass CLAUDE_PLUGIN_ROOT EXPLICITLY. Per the plugins reference, the three path placeholders are
-# exported as environment variables only "to hook processes and to MCP and LSP server subprocesses"
-# — NOT to the Bash tool — but they ARE substituted inline in "skill and agent content, anywhere the
-# placeholder appears". So the literal path below is baked into this skill's text before the shell
-# ever sees it (same pattern as `skills/init/SKILL.md`'s qa-scaffold call). Without this, doctor.sh's Check 9
-# `${CLAUDE_PLUGIN_ROOT:+…}` baseline is always EMPTY and the substrate-drift check silently falls
-# back to the installed_plugins.json record, or worse to the newest-mtime GUESS — which can compare
-# against a stale orphaned plugin version. The `Bash(CLAUDE_PLUGIN_ROOT=* bash scripts/doctor.sh*)`
-# allow rule in settings.json exists for exactly this form: the permission matcher does NOT strip a
-# leading assignment, so this would otherwise miss `Bash(bash scripts/doctor.sh*)` and prompt.
-CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}" bash scripts/doctor.sh
+bash "${CLAUDE_SKILL_DIR}/scripts/doctor.sh"
 ```
 
 The script prints ✅ / ⚠️ / ❌ per check plus a rollup line, and exits 1 on any ❌
-(0 on healthy or warnings-only). If the script is missing, that is itself a finding —
-**never silently pass**. Distinguish the two states: **no `playwright.config.ts`/`package.json`
-at all** means the project was *never scaffolded* → `/qa-warden:init`; a substrate that *exists but
-lacks `doctor.sh`* predates it → `/qa-warden:init --resync` (the repair path for a stale substrate).
+(0 on healthy or warnings-only). **Never silently pass.** If `playwright.config.ts` and
+`package.json` are both absent (the run prints `❌ substrate missing` for each), the project was
+*never scaffolded* → `/qa-warden:init`; a substrate that exists but is missing some files is stale →
+`/qa-warden:init --resync`.
 
 ## Interpreting the output (what to run per failure)
 
@@ -82,8 +72,7 @@ does not fix anything — each finding names its repair:
   scaffolded earlier. Repair is a plain `/qa-warden:init` (the permission merge is additive and runs
   every time), not a hand edit. Scoped to the `mcp__` entries on purpose: those are capability
   grants with one right answer, whereas a user may legitimately delete a policy rule, and a
-  whole-allow-list check would nag them forever. (`scripts/doctor.sh` is itself a resynced file, so a
-  wider check here could only reach a project through the same command that repairs the gap.)
+  whole-allow-list check would nag them forever.
   **Arm 3 (WARN)** covers what the repair cannot: the merge needs `jq`, and without it the
   scaffold parks the shipped rules in `.claude/settings.qa-suggested.json`. That file's presence
   is proof the merge never ran — unlike a subset check it cannot confuse *undelivered* with
@@ -166,14 +155,13 @@ does not fix anything — each finding names its repair:
   drifted files to `*.qa-bak`). A missing stock var in `.env.example` → restore it from
   the shipped template, or park it commented (`# VAR=`) — the stock list is derived from
   the template, and the file itself is shared-ownership and never byte-compared. The
-  drift baseline is the RECORDED active plugin install; a "baseline GUESSED by newest
-  mtime" ⚠️ means the install record didn't resolve — re-run via `/qa-warden:doctor` (which
-  resolves `CLAUDE_PLUGIN_ROOT`) before trusting a drift verdict. An ℹ️ naming
+  drift baseline is the plugin this doctor ships in, so it never compares against a different
+  build. An ℹ️ naming
   `scripts/resync-set.txt`, `scripts/claude-md-vocab.txt` or `scripts/prod-guard-rails.txt` as a
   leftover is not a finding: those manifests now live only in the plugin, nothing in the project
-  reads the old copies, and the user can delete them. A ❌ or ⚠️ about `prod-guard-rails.txt`,
-  `resync-set.txt` or `claude-md-vocab.txt` right after a plugin update means the stamped
-  `scripts/doctor.sh` predates the plugin: run `/qa-warden:init --resync`, then re-run doctor.
+  reads the old copies, and the user can delete them. A ⚠️ drift on `scripts/doctor.sh` after a
+  plugin update is expected: that stamped file is now only a launcher for running doctor by hand,
+  and `--resync` replaces the old full copy with it.
 - **Check 10 (site↔project routing):** never edit `playwright.config.ts` (toolkit-owned; it
   derives a project per set `BASE_URL_<SITE>`). ❌ — make the id lowercase `[a-z0-9-]` and its
   `base_url_env` exactly `BASE_URL_<ID>` (`-`→`_`). ⚠️ — set that var in `.env`.

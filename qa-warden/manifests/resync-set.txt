@@ -2,7 +2,7 @@
 #
 # Two consumers read this file; neither hand-enumerates the set any more:
 #   - bin/qa-scaffold  --resync : force-refreshes exactly these files (backing each up to .qa-bak)
-#   - scripts/doctor.sh Check 9 : byte-compares exactly these files against the shipped templates
+#   - skills/doctor/scripts/doctor.sh Check 9 : byte-compares exactly these files against the shipped templates
 # Both read THIS copy, in the plugin. That is why it lives in manifests/ and not in templates/:
 # bin/qa-scaffold stamps every file under templates/, and a stamped copy of this list was read
 # by nothing — editing it in a project changed no behaviour and only fired a drift warning.
@@ -34,6 +34,8 @@
 # receives a copy. A project stamped before the move keeps an inert scripts/resync-set.txt,
 # scripts/claude-md-vocab.txt and scripts/prod-guard-rails.txt; doctor names them as safe to
 # delete.
+# scripts/doctor.sh below is the stamped LAUNCHER (it finds the installed plugin and runs its
+# skills/doctor/scripts/doctor.sh). The checks themselves ship in the plugin and are not listed.
 package.json
 package-lock.json
 playwright.config.ts
