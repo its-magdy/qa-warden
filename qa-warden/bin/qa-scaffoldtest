@@ -28,6 +28,13 @@
 #                      fault:/clock: no longer demanded in CLAUDE.md)
 #   5. prod-guard.sh   the URL table: staging passes, a word-boundary prod marker refuses,
 #                      QA_ALLOW_PROD=1 lifts the marker refusal ONLY, placeholders never pass
+#   6. doctor awk +    the code a fresh stamp never reaches: on a stamp with real sites, area
+#      bug scripts     files, reviewed/stale spec+test pairs and bug files, every awk program in
+#                      doctor.sh runs on real input and its output is asserted, and so do
+#                      scripts/bug-status.sh and scripts/post-run-checks.sh (CRLF files, a
+#                      `## Status History` section, a quoted site id). CI runs this on macOS
+#                      (BSD awk), ubuntu-24.04 (gawk) and, in a second Linux step, with mawk first on
+#                      PATH, so a dialect gap in any of them fails here
 #
 # The prod-guard.ts twin is not tested here: qa-hooktest only copies it as a project marker, and
 # running it needs node + Playwright's dependencies, which this test deliberately does not install.
@@ -52,6 +59,11 @@ done
 # A developer's global git config (core.excludesFile, say) could already ignore `*.qa-bak` and
 # hide the append path under test. Make git read nothing but the repo.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+
+# No case reads input, so none may wait on the terminal. A run from a shell has an open stdin, and
+# anything that takes a program or a file from it (BSD awk handed `-W version` takes `version` as its
+# PROGRAM and reads stdin to EOF) hangs forever there while passing in CI, where stdin is at EOF.
+exec </dev/null
 
 # Every case gets its own scratch directory; the trap removes them all, pass or fail.
 SCRATCH=()
@@ -738,6 +750,271 @@ pg 1 ".env pointing at prod refuses"
 printf 'BASE_URL_APP=https://staging.acme.dev\n' > "$ENVDIR/.env"
 pg 0 ".env pointing at staging passes"
 EMPTY=$EMPTY_SAVED
+
+# ------------------------------------------------------------------------------------------
+echo "doctor awk programs and the bug scripts — on a stamp with sites, areas, reviews and bugs"
+# A fresh stamp has no sites, no area files, no review markers and no bug files, so of doctor's
+# awk programs only the spec-links.sh arm extractor runs there, and nothing ever calls
+# scripts/bug-status.sh or the bug scan of scripts/post-run-checks.sh. CI runs this file under
+# BSD awk (macOS), gawk (the ubuntu-24.04 runner) and mawk (a second Linux step puts it first on
+# PATH), so everything those programs parse is built here on
+# purpose, and every assertion is on a line the awk output decides.
+#
+# The five programs (skills/doctor/scripts/doctor.sh), and the case that reads each:
+#   Check 5b  volatility   awk '{print $2}' on the `volatility:` line   → the tier-budget cases
+#   Check 9   unmanifested awk arm extractor over scripts/spec-links.sh → the two arm cases
+#   Check 10  site rows    awk -v q=… (quoted ids, trailing comments)   → the site-routing cases
+#   Check 15  sha256_of    awk '{print $1}' on the digest line          → the review cases
+#   Check 15  marker       awk '{print $2}' on spec_sha256:/test_sha256: → the review cases
+# plus bug-status.sh's status parser and post-run-checks.sh's bug_title.
+#
+# Ordering: nothing here depends on `for (k in arr)` order or on $0/$NF surviving into END, which
+# BSD awk, gawk and mawk treat differently. Where the order of a listing is not the contract it is sorted.
+new_dir; F=$DIR
+stamp "$F"
+check_eq "section 6: the stamp this fixture is built on exits 0" "0" "$RC"
+
+# --- the fixture -------------------------------------------------------------------------
+# Three site shapes besides `app`: a double-quoted id, a single-quoted id with a trailing
+# comment on both the id and the env line, and an unquoted id whose base_url_env is wrong.
+mkdir -p "$F/specs/_context/shop"
+cat > "$F/specs/_context/app.context.md" <<'EOF'
+```yaml
+sites:
+  - id: app
+    base_url_env: BASE_URL_APP
+  - id: blog
+    base_url_env: BASE_URL_BLOG
+  - id: "shop"
+    base_url_env: BASE_URL_SHOP
+  - id: 'eu-store'   # the EU storefront
+    base_url_env: BASE_URL_EU_STORE   # derived from the id
+  - id: admin
+    base_url_env: BASE_URL_ADMIN_PORTAL
+
+staleness_tiers:
+  critical: 7
+  reference: 30
+  stable: 90
+```
+EOF
+# Three area files, one per tier, all long past every budget, so the only thing that tells the
+# budgets apart is which `volatility:` value the awk read. The critical one is padded with spaces.
+area_file() {
+  printf '# context: shop/%s\n\n```yaml\nsite: shop\narea: %s\nvolatility:%s%s\nlast_verified: 2020-01-01\n```\n' \
+    "$1" "$1" "$2" "$3" > "$F/specs/_context/shop/$1.md"
+}
+area_file auth    "   " critical
+area_file search  " "   reference
+area_file catalog " "   stable
+
+# Three spec + test pairs. Each gets a review marker; then one spec and one test are edited, so
+# the markers say: current (cart), spec changed since (coupon), test changed since (checkout).
+mkdir -p "$F/specs/shop" "$F/tests/shop"
+for feat in cart coupon checkout; do
+  printf '# %s\n\nsite: shop\n' "$feat" > "$F/specs/shop/$feat.md"
+  printf "import { test } from '@playwright/test';\n\ntest('%s @site:shop', async () => {});\n" "$feat" > "$F/tests/shop/$feat.spec.ts"
+done
+# The marker writer is toolkit-owned and has lived in two places; use whichever exists.
+REVIEW_MARKER=""
+for cand in "$here/skills/review/scripts/review-marker.sh" "$TEMPLATES/scripts/review-marker.sh"; do
+  if [ -z "$REVIEW_MARKER" ] && [ -f "$cand" ]; then REVIEW_MARKER=$cand; fi
+done
+check "section 6: a review-marker.sh to build the fixture's markers with exists" test -n "$REVIEW_MARKER"
+for feat in cart coupon checkout; do
+  (cd "$F" && "$BASH" "$REVIEW_MARKER" "specs/shop/$feat.md" "tests/shop/$feat.spec.ts" PASS) >/dev/null 2>&1
+done
+check "section 6: all three review markers were written" \
+  test "$(ls "$F"/reports/review/shop/*.reviewed 2>/dev/null | wc -l | tr -d ' ')" = "3"
+printf '\nA criterion added after the review.\n' >> "$F/specs/shop/coupon.md"
+printf '\n// edited after the review\n' >> "$F/tests/shop/checkout.spec.ts"
+
+# Bug files. A is CRLF; B carries a `## Status History` section before its real Status; C has a
+# bare `Status:` line and no summary; D is an inline `## Status:` with an inline `## Summary:`;
+# E has only a Status History; G is a verifier record (the -blind- name), with a blank line
+# between its Summary heading and the text.
+mkdir -p "$F/bugs"
+printf '## Status\r\nOpen - confirmed live\r\n\r\n## Summary\r\nCart total ignores the coupon.\r\n' \
+  > "$F/bugs/2026-01-02-checkout-total.md"
+printf '# Login redirect loops\n\n## Status History\n- 2026-01-01 filed by qa\n- 2026-01-05 fix merged\n\n## Status: Fixed - landed in #12\n' \
+  > "$F/bugs/2026-01-03-login-loop.md"
+printf 'Status: open\n\nSteps to reproduce: search for nothing.\n' \
+  > "$F/bugs/2026-02-03-search-empty-state.md"
+printf '## Status: open\n\n## Summary: Footer link 404s.\n' \
+  > "$F/bugs/2026-02-10-footer-link.md"
+printf '## Status History\n- 2026-03-05 filed by qa\n' \
+  > "$F/bugs/2026-03-05-history-only.md"
+printf '## Status\nopen\n\n## Summary\n\nThe oracle never fails.\n' \
+  > "$F/bugs/2026-03-07-cart-blind-oracle.md"
+
+# --- an awk that logs the program it was handed, to prove each one RAN --------------------
+# The assertions below are what catch a misparse. This is the other half: a doctor change that
+# stops reaching one of the programs (a guard that no longer holds on this fixture) would
+# otherwise leave its cases passing on nothing.
+new_dir; AWKSHIM=$DIR
+AWKLOG="$AWKSHIM/awk.log"
+# The REAL awk is whatever PATH resolves `awk` to now, so a run with mawk (or any awk) first on PATH
+# wraps that one. Say which, and let CI pin it: QA_EXPECT_AWK=mawk fails the case below if the
+# stand-in is not wrapping mawk, so the mawk step cannot quietly measure another awk.
+REAL_AWK=$(command -v awk)
+# Both probes read nothing: BSD awk does not know -W, treats `version` as the program and then reads
+# stdin, so each is given /dev/null (the exec above already guarantees it; this keeps the lines safe
+# if they are ever copied). mawk and gawk answer -W version; BSD awk answers --version.
+REAL_AWK_VERSION=$("$REAL_AWK" -W version </dev/null 2>/dev/null | head -1)
+if [ -z "$REAL_AWK_VERSION" ]; then REAL_AWK_VERSION=$("$REAL_AWK" --version </dev/null 2>/dev/null | head -1); fi
+echo "  -- awk under test: $REAL_AWK (${REAL_AWK_VERSION:-no version reported})"
+if [ -n "${QA_EXPECT_AWK:-}" ]; then
+  check "the awk under test is the expected one ($QA_EXPECT_AWK)" grep -qi -e "$QA_EXPECT_AWK" <<<"$REAL_AWK_VERSION"
+fi
+# The paths reach the stand-in through the environment (QA_AWKLOG, QA_REAL_AWK), so nothing is
+# interpolated into its text. It logs the awk PROGRAM: the first operand that is not an option and
+# not the operand of -v/-f/-F (a `-f FILE` run has no inline program, and logs an empty line).
+cat > "$AWKSHIM/awk" <<'EOF'
+#!/bin/sh
+prog=''
+skip=0
+for a in "$@"; do
+  if [ "$skip" = 1 ]; then skip=0; continue; fi
+  case "$a" in
+    (-v|-f|-F) skip=1; continue ;;
+    (-*) continue ;;
+  esac
+  prog=$a
+  break
+done
+squashed=$(printf '%s' "$prog" | tr '\n\t' '  ' | cut -c1-120)
+printf '%s\n' "$squashed" >> "$QA_AWKLOG"
+exec "$QA_REAL_AWK" "$@"
+EOF
+chmod +x "$AWKSHIM/awk"
+
+# --- doctor ------------------------------------------------------------------------------
+# The site vars are set empty so a developer's shell cannot decide the outcome; BASE_URL_ADMIN is
+# irrelevant (the admin entry names the wrong variable). The stamped .env defines BASE_URL_APP
+# (as a placeholder); it is dropped here so the `app` exemption is what keeps that site quiet, not
+# a value that happens to be set.
+grep -v '^BASE_URL_APP=' "$F/.env" > "$F/.env.new"
+mv "$F/.env.new" "$F/.env"
+check "precondition: the fixture's .env no longer sets BASE_URL_APP" \
+  test "$(grep -c '^BASE_URL_APP=' "$F/.env")" = "0"
+dr_awk() { run_doctor "$F" PATH="$AWKSHIM:$PATH" QA_AWKLOG="$AWKLOG" QA_REAL_AWK="$REAL_AWK" BASE_URL_APP= "$@"; }
+dr_awk BASE_URL_BLOG= BASE_URL_SHOP= BASE_URL_EU_STORE=
+unset_out=$DR_OUT
+dr_has() { check "$1" grep -qF -e "$2" <<<"$DR_OUT"; }
+dr_lacks() { check "$1" test "$(grep -cF -e "$2" <<<"$DR_OUT")" = "0"; }
+check "section 6: doctor prints its rollup on the fixture" grep -q '^doctor: ' <<<"$DR_OUT"
+
+echo "  -- every doctor awk program ran on real input"
+check_nonzero "the spec-links.sh arm extractor ran" "$(grep -cF 'unmanifested' "$AWKLOG")"
+check_nonzero "the site-row parser ran" "$(grep -cF 'function bare' "$AWKLOG")"
+check_nonzero "sha256_of ran" "$(grep -cF '{print $1}' "$AWKLOG")"
+# `{print $2}` is three programs: the volatility word (once per area file, plus once for the
+# stamped _templates/area.md) and the two marker hashes (once each per reviewed pair). At least
+# three areas + three pairs x two = nine; the template's run makes it ten today.
+check "the volatility and marker field extractors ran at least 3 + 3 x 2 times" \
+  test "$(grep -cF '{print $2}' "$AWKLOG")" -ge 9
+
+echo "  -- Check 5b: the tier budget follows the volatility word the awk read"
+dr_has "critical area, padded with spaces, is held to the 7d budget" \
+  "stale context: specs/_context/shop/auth.md (volatility=critical, last_verified 2020-01-01 = "
+check "  and says so in the budget" grep -qE -e 'shop/auth\.md \(volatility=critical, last_verified 2020-01-01 = [0-9]+d old > 7d tier budget\)' <<<"$DR_OUT"
+check "reference area is held to the 30d budget" grep -qE -e 'shop/search\.md \(volatility=reference, last_verified 2020-01-01 = [0-9]+d old > 30d tier budget\)' <<<"$DR_OUT"
+check "stable area is held to the 90d budget" grep -qE -e 'shop/catalog\.md \(volatility=stable, last_verified 2020-01-01 = [0-9]+d old > 90d tier budget\)' <<<"$DR_OUT"
+dr_has "  and the hint names the site and area from the path" "re-run /qa-warden:explore mode=area site=shop area=auth"
+
+echo "  -- Check 10: site rows, quoted ids and trailing comments"
+dr_has "a double-quoted id is read as 'shop' (its own unset var is reported)" \
+  "site 'shop': BASE_URL_SHOP is unset or empty"
+dr_has "a single-quoted id with a trailing comment is read as 'eu-store'" \
+  "site 'eu-store': BASE_URL_EU_STORE is unset or empty"
+dr_has "an entry naming the wrong env var is reported against its own id" \
+  "site 'admin' declares base_url_env: BASE_URL_ADMIN_PORTAL, but playwright.config.ts registers the 'admin' project only from BASE_URL_ADMIN"
+dr_lacks "no site id keeps its quote characters" "cannot match a playwright.config.ts project"
+dr_lacks "the exempt 'app' site is not reported, though its variable is unset" "site 'app'"
+dr_has "a plain id before the quoted one is read as 'blog'" "site 'blog': BASE_URL_BLOG is unset or empty"
+# A quoted entry must start its own row. Otherwise its base_url_env line lands on the entry before
+# it, and 'blog' would be reported as declaring BASE_URL_SHOP.
+dr_lacks "the quoted id did not take over the previous entry's env var" "site 'blog' declares"
+dr_awk BASE_URL_BLOG=https://blog.example.test BASE_URL_SHOP=https://shop.example.test BASE_URL_EU_STORE=https://eu.example.test
+dr_lacks "setting BASE_URL_BLOG clears the 'blog' warning" "site 'blog'"
+dr_lacks "setting BASE_URL_SHOP clears the 'shop' warning" "site 'shop'"
+dr_lacks "setting BASE_URL_EU_STORE clears the 'eu-store' warning" "site 'eu-store'"
+dr_has "  while the misdeclared 'admin' entry is still reported" "site 'admin' declares base_url_env: BASE_URL_ADMIN_PORTAL"
+
+echo "  -- Check 9: the spec-links.sh arm extractor"
+DR_OUT=$unset_out
+dr_lacks "an intact spec-links.sh has an unmanifested arm" 'has no `unmanifested)` arm'
+dr_lacks "  and its arm excludes the metamorphic twins" 'no longer excludes'
+SL="$F/scripts/spec-links.sh"
+cp "$SL" "$SL.keep"
+sed 's/\*\.metamorphic\.spec\.ts/*.twin.spec.ts/' "$SL.keep" > "$SL"
+# The word must still occur in the file, but after the arm ends: an extractor that runs past the
+# arm's closing `;;` would find it there and call the arm fine.
+printf '# metamorphic twins are handled elsewhere\n' >> "$SL"
+check "precondition: the edit renamed the one exclusion inside the arm" \
+  test "$(grep -c -e '\*\.twin\.spec\.ts' "$SL")" = "1"
+run_doctor "$F"
+dr_has "an arm that stopped excluding the twins is reported" 'no longer excludes *.metamorphic.spec.ts'
+dr_lacks "  and is not mistaken for a missing arm" 'has no `unmanifested)` arm'
+sed 's/^  unmanifested)/  unmanifested-gone)/' "$SL.keep" > "$SL"
+run_doctor "$F"
+dr_has "a spec-links.sh with no unmanifested arm is reported" 'scripts/spec-links.sh has no `unmanifested)` arm'
+mv "$SL.keep" "$SL"
+
+echo "  -- Check 15: review markers are read back and compared"
+DR_OUT=$unset_out
+dr_lacks "a spec and test unchanged since their review are not warned" "shop/cart: changed since last review"
+dr_has "a spec edited after its review is warned" "shop/coupon: changed since last review"
+dr_has "a test edited after its review is warned" "shop/checkout: changed since last review"
+check_eq "  and those are the only two" "2" "$(grep -c 'changed since last review' <<<"$DR_OUT")"
+
+echo "  -- Check 11: doctor reads the bug Status through bug-status.sh"
+dr_has "a bug with only a Status History section has no Status marker" \
+  "bug file missing Status marker: bugs/2026-03-05-history-only.md"
+check_eq "  and it is the only bug file missing one" "1" "$(grep -c 'bug file missing Status marker' <<<"$DR_OUT")"
+
+# --- scripts/bug-status.sh ---------------------------------------------------------------
+echo "  -- bug-status.sh"
+bs() { (cd "$F" && "$BASH" scripts/bug-status.sh "$@" 2>&1); }
+# CRs are dropped before comparing: what is pinned is that the CRLF heading is RECOGNISED and the
+# value found, not what the parser does with the carriage return left on the value line.
+check_eq "CRLF file: the canonical two-line heading is read, lowercased" \
+  "open - confirmed live" "$(bs bugs/2026-01-02-checkout-total.md | tr -d '\r')"
+check_eq "CRLF file: classified open" "open" "$(bs --class bugs/2026-01-02-checkout-total.md | tr -d '\r')"
+check_eq "a Status History section is skipped for the real inline Status after it" \
+  "fixed - landed in #12" "$(bs bugs/2026-01-03-login-loop.md)"
+check_eq "  and that bug is classified resolved" "resolved" "$(bs --class bugs/2026-01-03-login-loop.md)"
+check_eq "a bare Status: line is read" "open" "$(bs bugs/2026-02-03-search-empty-state.md)"
+check_eq "an inline '## Status: open' is read" "open" "$(bs bugs/2026-02-10-footer-link.md)"
+check_eq "a file with only a Status History prints no value" "" "$(bs bugs/2026-03-05-history-only.md)"
+check_eq "  and classifies as open, the fail-safe direction" "open" "$(bs --class bugs/2026-03-05-history-only.md)"
+check_eq "--list-open lists every bug that is not resolved (sorted; find order is not the contract)" \
+  "bugs/2026-01-02-checkout-total.md
+bugs/2026-02-03-search-empty-state.md
+bugs/2026-02-10-footer-link.md
+bugs/2026-03-05-history-only.md
+bugs/2026-03-07-cart-blind-oracle.md" \
+  "$(bs --list-open | tr -d '\r' | sort)"
+
+# --- scripts/post-run-checks.sh ----------------------------------------------------------
+echo "  -- post-run-checks.sh"
+PRC_OUT=$(cd "$F" && "$BASH" scripts/post-run-checks.sh 2>&1)
+prc_has() { check "$1" grep -qF -e "$2" <<<"$PRC_OUT"; }
+prc_has "bug title from '## Summary' on a CRLF file (CR and trailing dot stripped)" \
+  "bugs/2026-01-02-checkout-total.md: Cart total ignores the coupon. If a scenario is parked"
+prc_has "bug title from an inline '## Summary:'" \
+  "bugs/2026-02-10-footer-link.md: Footer link 404s. If a scenario is parked"
+prc_has "bug title falls back to the filename slug, date stripped" \
+  "bugs/2026-02-03-search-empty-state.md: search-empty-state. If a scenario is parked"
+prc_has "a Status History-only bug is surfaced under its slug" \
+  "bugs/2026-03-05-history-only.md: history-only. If a scenario is parked"
+prc_has "a -blind- record is a test-contract gap, titled from its Summary text after a blank line" \
+  "bugs/2026-03-07-cart-blind-oracle.md: The oracle never fails. A verifier record"
+check_eq "the resolved bug is not surfaced" "0" "$(grep -c 'login-loop' <<<"$PRC_OUT")"
+prc_has "the trailer counts 4 open bugs and 1 gap, with nothing stray" \
+  "post-run: sentinels=0 stray=0 open-bugs=4 test-gaps=1"
+only=$(cd "$F" && "$BASH" scripts/post-run-checks.sh --only stray 2>&1)
+check_eq "--only stray scans no bugs (what doctor passes)" "post-run: sentinels=0 stray=0 open-bugs=0 test-gaps=0" "$only"
 
 echo "---"
 if [ "$bad" -ne 0 ]; then echo "qa-scaffoldtest: ❌ $bad of $((pass+bad)) cases FAILED"; exit 1; fi

@@ -285,6 +285,20 @@ projects.
   three markers alone still running the full pass, and the `printenv` rule absent from the
   template and a fresh stamp and warned (exit 0) when added back.
 
+### `qa-scaffoldtest` feeds doctor real input, and runs the bug scripts
+
+- **Section 6 covers what a fresh stamp never reaches.** A fresh stamp has no sites, area files,
+  review markers or bug files, so of doctor's five awk programs only the `spec-links.sh` arm
+  extractor ran in CI (macOS BSD awk, the ubuntu-24.04 runner's gawk), and nothing ran `scripts/bug-status.sh`
+  or the bug scan of `scripts/post-run-checks.sh`. The new section builds that project in the test
+  (quoted site ids, one area file per volatility tier, current and stale review markers, CRLF and
+  `## Status History` bug files) and asserts doctor's Check 5b, 9, 10, 11 and 15 lines, `--class`
+  and `--list-open` (sorted), and the `post-run-checks.sh` titles and trailer. An `awk` stand-in
+  logs each program doctor runs, so a guard that stops reaching one fails a case instead of
+  passing on nothing. `bin/qa-scaffoldtest` goes from 216 to 270 cases. CI gains a Linux-only step
+  that runs `qa-scaffoldtest` and `qa-hooktest` again with mawk first on PATH, because the runner's
+  default awk is gawk and nothing else exercised mawk. Tests and CI only; no plugin behaviour changes.
+
 ---
 
 ## 0.5.6 — nightly CI hardening, a truncated hook message, shellcheck cleanup (2026-10-09)
