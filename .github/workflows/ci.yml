@@ -37,6 +37,11 @@ jobs:
       - name: qa-hooktest
         # /bin/bash on purpose: on macOS that is 3.2, the shell the hooks meet on a stock Mac.
         run: /bin/bash qa-warden/bin/qa-hooktest
+      - name: awk version (Linux only)
+        # qa-scaffoldtest runs doctor's awk programs on real input, so a red run should say which
+        # awk it was (mawk on ubuntu-24.04). BSD awk on macOS has no -W version, hence the guard.
+        if: runner.os == 'Linux'
+        run: awk -W version 2>&1 | head -1 || true
       - name: qa-scaffoldtest
         # Same reason: qa-scaffold and prod-guard.sh run under the stock macOS bash here.
         run: /bin/bash qa-warden/bin/qa-scaffoldtest
