@@ -295,7 +295,7 @@ projects.
   `## Status History` bug files) and asserts doctor's Check 5b, 9, 10, 11 and 15 lines, `--class`
   and `--list-open` (sorted), and the `post-run-checks.sh` titles and trailer. An `awk` stand-in
   logs each program doctor runs, so a guard that stops reaching one fails a case instead of
-  passing on nothing. `bin/qa-scaffoldtest` goes from 182 to 236 cases. CI gains a Linux-only step
+  passing on nothing. `bin/qa-scaffoldtest` goes from 216 to 270 cases. CI gains a Linux-only step
   that runs `qa-scaffoldtest` and `qa-hooktest` again with mawk first on PATH, because the runner's
   default awk is gawk and nothing else exercised mawk. Tests and CI only; no plugin behaviour changes.
 

@@ -887,15 +887,6 @@ printf '%s\n' "$squashed" >> "$QA_AWKLOG"
 exec "$QA_REAL_AWK" "$@"
 EOF
 chmod +x "$AWKSHIM/awk"
-# A sha256sum that is found but cannot run (an x86-only coreutils on Apple silicon, the same
-# trap as the jq check at the top) makes Check 15 read an empty digest and warn on every pair,
-# because doctor picks its hasher with `command -v`. Stand in for it so the case measures the
-# awk, not the machine. Where sha256sum runs, or is absent (macOS), nothing is shadowed.
-# drop once doctor's sha256_of falls back at run time (PR #9)
-if command -v sha256sum >/dev/null 2>&1 && ! sha256sum /dev/null >/dev/null 2>&1; then
-  printf '#!/bin/sh\nexec shasum -a 256 "$@"\n' > "$AWKSHIM/sha256sum"
-  chmod +x "$AWKSHIM/sha256sum"
-fi
 
 # --- doctor ------------------------------------------------------------------------------
 # The site vars are set empty so a developer's shell cannot decide the outcome; BASE_URL_ADMIN is
