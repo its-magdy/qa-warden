@@ -143,6 +143,40 @@ projects.
   exit 2 with a distinct message for no record, a malformed record, a jq that cannot run, a missing
   install path and a doctor-less plugin).
 
+### The spec format moves out of `CLAUDE.md` into a `test-case-contract` skill
+
+- **`CLAUDE.md` §"Test case format contract" is now the plugin skill `test-case-contract`**: the
+  YAML schema, the 16 oracle keys and their argument shapes, the `fault:`/`clock:` situation steps,
+  the smoke-lane rule and the honest limits, moved with only pointer wording changed.
+  `CLAUDE.md` is loaded into every session, subagent and forked skill on every turn, and this
+  section was ~19 KB of it (~4.7k of ~15.6k tokens) that only the agents reading or writing specs
+  use. A fresh `CLAUDE.md` is now ~44 KB (~11k tokens) and keeps a one-sentence pointer under
+  `## Spec format`.
+- **Who gets it:** the planner, generator, verifier, reviewer and ideation agents preload it
+  (frontmatter `skills:`; a preload needs no `Skill` tool, so the reviewer keeps `Read, Bash`).
+  `/qa-warden:import-cases`, the one main-session command that maps cases to oracle keys itself,
+  invokes it explicitly. It is `user-invocable: false` (not in the `/` menu) and stays
+  model-invocable, because a `disable-model-invocation: true` skill cannot be preloaded. Its
+  description adds ~52 tokens to the skill listing (1,054 → 1,106).
+- **Doctor:** Check 2 now compares the project's `scripts/oracle-keys.txt` with the plugin's
+  skill instead of grepping `CLAUDE.md` for the 16 keys. `fault:` and `clock:` leave
+  `manifests/claude-md-vocab.txt`: their definition ships with the plugin now, so a `CLAUDE.md`
+  without them is missing nothing. **New Check 9 warning:** a `CLAUDE.md` that still has the
+  `## Test case format contract` section is told to delete it.
+- **Upgrading:** `/qa-warden:init --resync` does not touch `CLAUDE.md`, so an existing project
+  keeps the old section and doctor warns until you delete it by hand (from that heading down to
+  `## Assertion style`, `### Situation steps` included). If you edited it, those edits never
+  reached the plugin's agents; the skill is what they read. `--resync` also refreshes four stamped
+  files whose comments pointed at the old section (`scripts/oracle-keys.txt`, `scripts/README.md`,
+  `specs/_context/_templates/app.context.md`, `specs/_context/_templates/basis.md`); doctor reports
+  them as substrate drift until then.
+- `bin/qa-selfcheck` Checks 9b, 9bb, 9be and 9i read the skill where they read
+  `templates/CLAUDE.md`, and 9b gains an arm that fails if any of the five agents drops the preload
+  or the skill gains `disable-model-invocation: true`. `bin/qa-scaffoldtest` gains 12 cases: no
+  warning on a fresh stamp, one warning and nothing else for the old section, no warning for a
+  prose mention or a different heading, no `fault:`/`clock:` demand, and a Check 2 failure for a
+  key the skill does not define.
+
 ---
 
 ## 0.5.6 — nightly CI hardening, a truncated hook message, shellcheck cleanup (2026-10-09)

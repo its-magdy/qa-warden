@@ -84,14 +84,20 @@ does not fix anything — each finding names its repair:
   `CLAUDE.md` is shared-ownership, so it is excluded from `--resync` *and* from Check 9's
   byte-compare — yet it is where every new authoring feature is documented, and the in-project
   agents read it rather than the plugin. After a clean, green, exit-0 `/qa-warden:init --resync` the
-  stamped `CLAUDE.md` can therefore lack every new authoring feature (`fault:`, `clock:`,
-  `lock:`, `verifier`) while doctor says nothing else. The symbols come from the plugin's
+  stamped `CLAUDE.md` can therefore lack every new authoring feature (`lock:`, `verifier`, …)
+  while doctor says nothing else. The spec format itself (`fault:`, `clock:`, the oracle keys)
+  is no longer in that set: it moved into the plugin's `test-case-contract` skill, which ships
+  with the plugin. The symbols come from the plugin's
   `manifests/claude-md-vocab.txt` (never stamped into a project) and are gated on the shipped template, the same derive-don't-
   hand-enumerate shape as the `.env.example` stock-var containment beside it. The check is
   symbol-level, not section-level: new rules land inside pre-existing sections, so a heading
   diff reports green on exactly the release it was built for. **WARNs, never FAILs:** alone among
   Check 9's findings the repair is a hand-merge against the shipped template, not a command, and
   a repair the toolkit cannot perform must not be louder than the ones it can.
+- **Check 9, old spec-format section in CLAUDE.md (WARN):** a project stamped before the spec
+  format moved into the `test-case-contract` skill still has a `## Test case format contract`
+  section in its `CLAUDE.md`. Delete it, from that heading down to the next `## ` heading. The
+  agents preload the skill, so the old copy only drifts away from it.
 - **Check 9k (unmanifested-walk ownership):** "which compiled tests carry no route manifest" is
   one rule with two consumers that must never disagree — `/qa-warden:impact` prints it as
   `### BLIND SPOTS` (a zero-match there is only honest if the caller is told which specs were
@@ -120,8 +126,9 @@ does not fix anything — each finding names its repair:
   pair can land in two shard processes that share no lock table. Fix by dropping the sharding or
   by taking the shard-safe fix (fold into one file, or give the mutator a throwaway entity).
   Both arms scan **code, not comments** (the 9k lesson).
-- **Check 2 / 9b (vocab drift):** re-sync the 16-key mirror with CLAUDE.md (and, for
-  9b, upgrade/re-stamp the plugin agents) in the same commit as any vocab change.
+- **Check 2 (vocab drift):** this project's `scripts/oracle-keys.txt` names a key the plugin's
+  `test-case-contract` skill does not. Run `/qa-warden:init --resync`, or update the plugin if the
+  project is newer. (The plugin-side half, 9b, is a `bin/qa-selfcheck` check.)
 - **Check 3 (vacuous smoke):** tag at least the P1 happy path `@smoke`, then
   `/qa-warden:run mode=smoke`.
 - **Check 4 (orphaned sentinels):** close the loop per the sentinel→action table in

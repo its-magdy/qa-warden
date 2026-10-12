@@ -115,8 +115,8 @@ hit=$(first_match '\.routeFromHAR[[:space:]]*\(')
 [ -n "$hit" ] && report "Check 11 (no HAR replay)" \
   "Replaying from a recorded HAR tests the frontend against a frozen backend — the suite stays
 green through every server-side regression, which is the opposite of what the nightly replay is
-for. To stub ONE dependency, have the planner declare a fault: step in the spec (CLAUDE.md
-section 'Situation steps'); it compiles to a narrow page.route with a mandatory fired-proof." "${hit#*:}"
+for. To stub ONE dependency, have the planner declare a fault: step in the spec (the
+test-case-contract skill, 'Situation steps'); it compiles to a narrow page.route with a mandatory fired-proof." "${hit#*:}"
 
 # --- Check 1: assertion on a literal ----------------------------------------------------
 # expect(true).toBe(true) / expect(1).toEqual(1): the asserted value is a constant in the test

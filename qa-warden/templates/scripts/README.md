@@ -54,7 +54,7 @@ The checks behind `/qa-warden:doctor` (0–21 + rollup, all read-only: reruns no
 nothing, hits no network, writes nothing) ship in the plugin as `skills/doctor/scripts/doctor.sh`,
 so they are always the same build as the templates they compare this project against. They verify
 the substrate itself: `last-run.json` freshness/zero-test (via `check-last-run.sh`), oracle-vocab
-lockstep (`oracle-keys.txt` vs `CLAUDE.md`), prod-guard presence + regex lockstep, substrate drift,
+lockstep (`oracle-keys.txt` vs the plugin's `test-case-contract` skill), prod-guard presence + regex lockstep, substrate drift,
 sentinel files, context staleness, `bugs/` Status hygiene, site-id↔config match, and more. Exit 1
 on any ❌.
 
@@ -126,9 +126,9 @@ byte-identically in places, with its own copy of the `testIgnore` lockstep filte
 
 ## `oracle-keys.txt` — the oracle vocabulary as data
 
-Not a script: the closed oracle vocabulary, one key per line. `CLAUDE.md` remains the human SoT
-(it owns the semantics and the per-key argument-shape table); this is the machine-readable key
-**set** that `doctor.sh` Check 2 compares this project's CLAUDE.md against (the plugin's own
+Not a script: the closed oracle vocabulary, one key per line. The plugin's `test-case-contract`
+skill remains the human SoT (it owns the semantics and the per-key argument-shape table); this is
+the machine-readable key **set** that `doctor.sh` Check 2 compares against that skill (the plugin's own
 `bin/qa-selfcheck` Check 9b compares the plugin's agents against the shipped copy). Doctor
 used to hold a hand-typed copy and police its peers with that copy as the baseline — a checker
 that needed a cardinality self-check on its own mirror. Same pattern as the toolkit-owned

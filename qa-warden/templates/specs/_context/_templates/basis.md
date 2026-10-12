@@ -56,7 +56,7 @@ integrity_invariants:
   - invariant: "<value/output A> == <value/output B>"   # why this equality IS the assertion
     holds_when: "<precondition domain — e.g. 'single-unit order'; 'always' if truly universal>"
 
-# NOTE — where must_fail_when comes from. The spec contract (CLAUDE.md) has a first-class
+# NOTE — where must_fail_when comes from. The spec contract (the test-case-contract skill) has a first-class
 # `must_fail_when:` block that the verifier's step-8b fault injection and reviewer Check 2b
 # ENFORCE. The basis tier does not repeat that key: `must_not` (above) + `integrity_invariants`
 # ARE its source — the planner compiles each into the spec's `must_fail_when:` items. So name every

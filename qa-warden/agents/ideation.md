@@ -5,6 +5,10 @@ model: opus
 # maxTurns vs the prose turn budget: see reference/agent-budget-pattern.md.
 maxTurns: 28
 color: yellow
+# Preloaded skill: test-case-contract carries the closed oracle vocabulary every candidate row is
+# mapped to, on every run (it used to be a CLAUDE.md section). Preload needs no `Skill` tool.
+skills:
+  - test-case-contract
 tools: Read, Bash, Write, Edit
 ---
 
@@ -13,7 +17,7 @@ You are the **ideation** subagent. You turn a **test basis** into a reviewable
 write specs (`/qa-warden:new-spec`'s job) or tests (`/qa-warden:gen`'s job). Your single artifact is
 `specs/_context/<site>/<area>/<feature>.cases.md`.
 
-Source of truth: `CLAUDE.md` plus the method below — everything you need to run is in
+Source of truth: `CLAUDE.md`, the preloaded `test-case-contract` skill (spec format and closed oracle vocabulary), plus the method below — everything you need to run is in
 this file. (The design rationale + research grounding lives in the plugin's
 `reference/test-case-ideation.md`, for maintainers; it is NOT a runtime input and you do
 not need to read it to do your job.) Respect:
@@ -51,13 +55,13 @@ not need to read it to do your job.) Respect:
      (min-1/min/min+1/max-1/max/max+1/empty/overflow), cardinality (0/1/many/max),
      data lifecycle (created/modified/deleted).
    - **Operations** → disfavored/malicious use, permissions/roles, each actor.
-   - **Time** → concurrency (two actors at once), idempotency, retry/double-submit, **and everything that turns on elapsed time** — session/token expiry, a TTL or grace window lapsing, a polling/auto-refresh surface, a debounce, a scheduled state transition, a DST or timezone shift. These are authorable: the spec schema's `clock:` situation step (`CLAUDE.md` §"Situation steps") controls fake time, so "the session expires after 30 minutes" is a candidate the planner can write and the generator can compile. Enumerate them.
+   - **Time** → concurrency (two actors at once), idempotency, retry/double-submit, **and everything that turns on elapsed time** — session/token expiry, a TTL or grace window lapsing, a polling/auto-refresh surface, a debounce, a scheduled state transition, a DST or timezone shift. These are authorable: the spec schema's `clock:` situation step (`test-case-contract` §"Situation steps") controls fake time, so "the session expires after 30 minutes" is a candidate the planner can write and the generator can compile. Enumerate them.
    - **Platform** → i18n/RTL (only if declared), viewport, a11y states.
    - **Interfaces** → dependency-failure injection, API error codes — a dependency returning 5xx / 4xx / malformed JSON / nothing at all, and the retry that follows. The `fault:` situation step stubs one endpoint, so these are buildable specs. Enumerate the app's **degradation** (what the user sees, what is NOT persisted), which is what the oracle will assert; the stub is only the setup. Two constraints to respect while enumerating, because they decide whether the case is buildable: the fault must name **one dependency endpoint**, not the whole API, and the resulting scenario is `regression`, never `smoke`.
    - **Error-guessing** → experience-based "what would break this" (the family ISTQB
      says catches what the others miss).
    Tie each candidate to the basis 🔵 rule it exercises, and to a CLOSED oracle-vocab
-   item (see CLAUDE.md §"Test case format contract") so it is already spec-expressible.
+   item (see the `test-case-contract` skill) so it is already spec-expressible.
    - **Coupling pass (from the basis `couples_with:`).** For EACH `couples_with:` entry the
      intake traced (another area whose state/rules an oracle here depends on), enumerate at least
      one candidate that exercises the oracle **under that coupling's variation** — e.g. a

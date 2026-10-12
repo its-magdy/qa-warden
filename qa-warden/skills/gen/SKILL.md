@@ -62,7 +62,7 @@ Requirements the generator must honour:
 - At least one failable `expect(...)` per oracle item and none without one; for a region's
   structure prefer `toMatchAriaSnapshot()`, which must still trace to oracle items (generator
   Hard rules 3–4).
-- Closed oracle vocabulary only (CLAUDE.md §Assertion style).
+- Closed oracle vocabulary only (the `test-case-contract` skill, which the generator and verifier preload).
 
 **Process scenarios SEQUENTIALLY if the spec contains multiple** (YAML
 `scenarios:` array or multiple fenced oracle blocks) — compile one at a time

@@ -5,7 +5,7 @@ diverge: the `/qa-warden:doctor --verify-invariants` mode, and the **verifier** 
 The **verifier**'s Process step 8b runs this exact injection inline on every new spec that declares a
 `must_fail_when:`/`fail_if:`. Do not invent a divergent mechanism in either place.
 
-`must_fail_when:` is optional to *declare* (CLAUDE.md §"Test case format contract")
+`must_fail_when:` is optional to *declare* (the `test-case-contract` skill)
 but enforced once declared — reviewer **Check 2b** proves each invariant is
 *reified as an oracle*, but not that the oracle *actually catches* the defect. This flag closes that last gap with
 a **targeted, per-invariant fault injection** — far cheaper than full mutation

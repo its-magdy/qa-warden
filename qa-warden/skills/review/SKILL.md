@@ -181,7 +181,7 @@ serializing it behind two live browser scans wastes the whole audit's wall-clock
    - **≥1 spec references the URL:** pass that explicit spec list to the reviewer as its
      explicit-file-list scope, and run the
      **closed-vocab audit** — confirm every assertion uses the canonical closed oracle
-     vocabulary (**the 16-key set defined in CLAUDE.md §"Test case format contract"**; do NOT restate the key
+     vocabulary (**the 16-key set defined in the `test-case-contract` skill**, which the reviewer preloads; do NOT restate the key
      list — defer to reviewer Check 4). Flag free-form assertions and missing `must_fail_when` contracts.
    - **ZERO specs reference the URL:** emit a **structured `COVERAGE-GAP`** line in the report
      (`COVERAGE-GAP: no spec references <url> — this page is UNTESTED (vocab-clean ≠ covered)`),

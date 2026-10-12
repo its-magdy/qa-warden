@@ -39,7 +39,7 @@
     - [6.1 Brownfield adoption](#61-brownfield-adoption)
 7. [Command reference (19 user-invocable skills)](#7-command-reference)
 8. [Agent reference (7 subagents)](#8-agent-reference)
-9. [Skill reference (5 skills)](#9-skill-reference)
+9. [Skill reference (6 skills)](#9-skill-reference)
 10. [Key concept — the closed oracle vocabulary (16 keys)](#10-the-closed-oracle-vocabulary)
 11. [Key concept — the oracle defenses (why tests can't fake green)](#11-the-oracle-defenses)
 12. [Key concept — three-tier context](#12-three-tier-context)
@@ -135,7 +135,7 @@ qa-warden/                          ← the MARKETPLACE (a git repo)
 └── qa-warden/                       ← the PLUGIN
     ├── .claude-plugin/plugin.json   ← the plugin manifest
     ├── agents/                      ← the "brain" (7 subagents)
-    ├── skills/                      ← 23 SKILL.md: 19 /qa-warden:* commands + 4 helpers
+    ├── skills/                      ← 24 SKILL.md: 19 /qa-warden:* commands + 5 helpers
     ├── hooks/                       ← 2 PreToolUse gates (the only real-time enforcement)
     ├── reference/                   ← DESIGN.md + research notes
     ├── templates/                   ← the "body" stamped into each project
@@ -170,13 +170,16 @@ backing each up to `<file>.qa-bak`, never touching `.env`/`CLAUDE.md`/your files
 
 **The shared-ownership files are the catch, and `CLAUDE.md` is the one that costs a
 feature.** `--resync` skips it on purpose — it is your project policy and you edit it —
-but it is also where every new *authoring* feature is documented (`fault:`, `clock:`,
-`lock:`, the `verifier` role), and the in-project agents read your copy rather than the
-plugin. So a clean, green resync can leave you on the current runtime with a vocabulary a
-release behind. Doctor's **CLAUDE.md vocabulary containment** sub-check (Check 9) now names
-exactly which toolkit-owned symbols your copy is missing, and points at the shipped template
-to diff against — it **warns** rather than fails, because the repair is a hand-merge rather
-than a command.
+but it is also where authoring features are documented (`lock:`, the `verifier` role), and
+the in-project agents read your copy rather than the plugin. So a clean, green resync can
+leave you on the current runtime with a vocabulary a release behind. Doctor's **CLAUDE.md
+vocabulary containment** sub-check (Check 9) names exactly which toolkit-owned symbols your
+copy is missing, and points at the shipped template to diff against — it **warns** rather
+than fails, because the repair is a hand-merge rather than a command. The spec format itself
+(the oracle keys, `fault:`, `clock:`) no longer has this problem: it moved out of `CLAUDE.md`
+into the plugin's `test-case-contract` skill, which updates with the plugin. If your
+`CLAUDE.md` still has the old `## Test case format contract` section, doctor warns and asks
+you to delete it.
 
 The other two shared-ownership files used to cost you something as well, and no longer do —
 both were fixed by making the resync do slightly more, rather than by detecting the shortfall.
@@ -556,6 +559,7 @@ directly slash-callable.
 | **test-data-seed** | Worker-scoped, API-seeded, teardown-by-tag fixtures that stay parallel-safe at 10+ workers (keyed on `workerInfo.parallelIndex`), plus a pluggable seed adapter. | auto (generator authoring) | no |
 | **axe-a11y** | Drop-in `@axe-core/playwright` WCAG scanning per UI **state** (not per page), plus an adversarial-pair pattern to prove the detector is live. | auto; `/qa-warden:review url=` | no |
 | **visual-regression** | `toHaveScreenshot()` layout/CSS/typography oracle with mandatory stable-state waits (`document.fonts.ready`, `reducedMotion`, masking). | `/qa-warden:review url=`; otherwise on request in the main session. Not reachable from a spec — no oracle key requests a screenshot. | no |
+| **test-case-contract** | The spec format: YAML schema, the closed 16-key oracle vocabulary and its argument shapes, the `fault:`/`clock:` situation steps, the smoke-lane rule. It used to be a section of the project's `CLAUDE.md`, which every session loads on every turn; as a skill it is loaded only by the agents that read or write specs. | preloaded by planner, generator, verifier, reviewer, ideation; `/qa-warden:import-cases` | no |
 | **metamorphic-relations** | Generate 2–3 invariant-preserving "twin" specs (`@metamorphic`+`@regression`, never `@smoke`) that catch spec drift plain assertions miss. **Authored by the verifier**; the reviewer only verifies they exist and agree. | verifier; reviewer; `/qa-warden:review url=`; human | **yes** |
 
 ---
@@ -598,11 +602,11 @@ and would let every other assertion pass for the wrong reason.
 > `value_between` only bounds one number against constants. This is intentional (a
 > relational key the reviewer couldn't structurally validate would weaken the
 > closed-vocab guarantee). Sanctioned workarounds and the recipe for adding a 17th key
-> are documented in the stamped `templates/CLAUDE.md`.
+> are documented in the plugin's `test-case-contract` skill.
 
-**Maintenance:** this exact set is *mirrored* across `planner.md`, `generator.md`,
+**Maintenance:** this exact set is defined in the `test-case-contract` skill and *mirrored* across `planner.md`, `generator.md`,
 reviewer Check 4, and `scripts/oracle-keys.txt` (`/qa-warden:coverage` reads that file at runtime, so it holds no copy)
-(`/qa-warden:new-spec` and `/qa-warden:review url=` **defer** to the stamped CLAUDE.md and hold no list —
+(`/qa-warden:new-spec` and `/qa-warden:review url=` **defer** to the `test-case-contract` skill and hold no list —
 nothing to edit there). Adding or removing a key means editing **all** enumerating
 mirrors in one commit (see [§20](#20-for-maintainers-where-each-fact-lives)).
 
@@ -792,7 +796,7 @@ copies every file), so new templates never strand.
 
 | File / dir | Purpose |
 |---|---|
-| **`CLAUDE.md`** | The stamped **source-of-truth policy**: mission, prod-guard, discovery rule, file layout, the **test-case format contract** (the 16 oracle keys + argument shapes), assertion style, oracle-defense layers, the page-object reuse rules, the subagent roster, MCP discipline, cost discipline, the bug-report schema, and escalation rules. |
+| **`CLAUDE.md`** | The stamped **source-of-truth policy**: mission, prod-guard, discovery rule, file layout, a pointer to the plugin's **`test-case-contract`** skill (the spec format, the 16 oracle keys + argument shapes, which used to be a section here), assertion style, oracle-defense layers, the page-object reuse rules, the subagent roster, MCP discipline, cost discipline, the bug-report schema, and escalation rules. |
 | **`playwright.config.ts`** | `globalSetup: prod-guard.ts`; run-of-record-gated `json → artifacts/last-run.json` reporter; `outputDir: ./artifacts/test-results`; `trace: retain-on-failure`; `video` retain-on-failure (or `on` when `QA_KEEP_VIDEO=1`); `reducedMotion:'reduce'`; `locale:'en-US'`; `grepInvert: /@quarantine/`; `setup → app →` one project per other set `BASE_URL_<SITE>` (e.g. `admin`), derived at load time, never hand-edited; **tag-routed** (`@site:*`) not path-routed. |
 | **`package.json`** | Pinned dev deps (see below) + `overrides` pinning `playwright`/`playwright-core` to one stable browser revision, and npm scripts (`test`, `test:smoke`, `test:regression`, `typecheck`, …). |
 | **`.mcp.json`** / **`.mcp.explore.json`** | Empty `{}` default vs the Playwright-MCP-registered explore/heal config (the two-config pattern of [§13](#13-cli-vs-mcp)). |
@@ -899,10 +903,10 @@ qa-warden/
     ├── README.md                   # plugin-level intro + authoring workflow
     ├── .claude-plugin/plugin.json  # manifest (name, description, keywords, version — bump to ship)
     ├── agents/                     # planner · generator · verifier · healer · reviewer · exploration · ideation
-    ├── skills/                     # 23 SKILL.md — one dir each.
+    ├── skills/                     # 24 SKILL.md — one dir each.
     │                               #   19 /qa-warden:* commands (init · gen · heal · review · …)
-    │                               #   + 4 helpers: playwright-cli · test-data-seed ·
-    │                               #     axe-a11y · visual-regression
+    │                               #   + 5 helpers: playwright-cli · test-data-seed ·
+    │                               #     axe-a11y · visual-regression · test-case-contract
     ├── hooks/
     │   ├── hooks.json              # registers both PreToolUse gates on Edit|Write
     │   ├── assertion-contract.sh   # denies the healer/verifier any assertion rewrite
@@ -1000,7 +1004,7 @@ Every operational fact has exactly one authoritative home — do **not** duplica
 
 | Fact | Authoritative home |
 |---|---|
-| Oracle vocabulary (16 keys) + argument shapes | `templates/CLAUDE.md` (the stamped SoT). **Enumerated** (editable list — change all in one commit) in `agents/planner.md`, `agents/generator.md`, reviewer Check 4. **Data file:** `templates/scripts/oracle-keys.txt` — `/qa-warden:doctor` Check 2 and `/qa-warden:coverage` read it and hold no copy. `/qa-warden:new-spec` and `/qa-warden:review url=` **defer** (hold no list). |
+| Oracle vocabulary (16 keys) + argument shapes | `qa-warden/skills/test-case-contract/SKILL.md` (the SoT; preloaded by the agents that read or write specs — it used to be a section of `templates/CLAUDE.md`). **Enumerated** (editable list — change all in one commit) in `agents/planner.md`, `agents/generator.md`, reviewer Check 4. **Data file:** `templates/scripts/oracle-keys.txt` — `/qa-warden:doctor` Check 2 (which compares it with the skill) and `/qa-warden:coverage` read it and hold no copy. `/qa-warden:new-spec` and `/qa-warden:review url=` **defer** (hold no list). |
 | Reviewer checks (the full suite) | `agents/reviewer.md` |
 | Sentinel → action contract (`.healer-needs-*`) | `reference/sentinel-actions.md` — single source; `/qa-warden:heal`, `/qa-warden:batch-fix` and doctor Check 4 all point at it |
 | Command catalog + workflow order | skill frontmatter under `skills/**`; `skills/help/SKILL.md` (or run `/qa-warden:help`) |
