@@ -33,7 +33,8 @@
 #                      doctor.sh runs on real input and its output is asserted, and so do
 #                      scripts/bug-status.sh and scripts/post-run-checks.sh (CRLF files, a
 #                      `## Status History` section, a quoted site id). CI runs this on macOS
-#                      (BSD awk) and ubuntu-24.04 (mawk), so a dialect gap in any of them fails here
+#                      (BSD awk), ubuntu-24.04 (gawk) and, in a second Linux step, with mawk first on
+#                      PATH, so a dialect gap in any of them fails here
 #
 # The prod-guard.ts twin is not tested here: qa-hooktest only copies it as a project marker, and
 # running it needs node + Playwright's dependencies, which this test deliberately does not install.
@@ -750,7 +751,8 @@ echo "doctor awk programs and the bug scripts — on a stamp with sites, areas, 
 # A fresh stamp has no sites, no area files, no review markers and no bug files, so of doctor's
 # awk programs only the spec-links.sh arm extractor runs there, and nothing ever calls
 # scripts/bug-status.sh or the bug scan of scripts/post-run-checks.sh. CI runs this file under
-# BSD awk (macOS) and mawk (ubuntu-24.04), so everything those programs parse is built here on
+# BSD awk (macOS), gawk (the ubuntu-24.04 runner) and mawk (a second Linux step puts it first on
+# PATH), so everything those programs parse is built here on
 # purpose, and every assertion is on a line the awk output decides.
 #
 # The five programs (skills/doctor/scripts/doctor.sh), and the case that reads each:
@@ -762,7 +764,7 @@ echo "doctor awk programs and the bug scripts — on a stamp with sites, areas, 
 # plus bug-status.sh's status parser and post-run-checks.sh's bug_title.
 #
 # Ordering: nothing here depends on `for (k in arr)` order or on $0/$NF surviving into END, which
-# BSD awk and mawk treat differently. Where the order of a listing is not the contract it is sorted.
+# BSD awk, gawk and mawk treat differently. Where the order of a listing is not the contract it is sorted.
 new_dir; F=$DIR
 stamp "$F"
 check_eq "section 6: the stamp this fixture is built on exits 0" "0" "$RC"
@@ -776,6 +778,8 @@ cat > "$F/specs/_context/app.context.md" <<'EOF'
 sites:
   - id: app
     base_url_env: BASE_URL_APP
+  - id: blog
+    base_url_env: BASE_URL_BLOG
   - id: "shop"
     base_url_env: BASE_URL_SHOP
   - id: 'eu-store'   # the EU storefront
@@ -835,7 +839,7 @@ printf '## Status: open\n\n## Summary: Footer link 404s.\n' \
   > "$F/bugs/2026-02-10-footer-link.md"
 printf '## Status History\n- 2026-03-05 filed by qa\n' \
   > "$F/bugs/2026-03-05-history-only.md"
-printf 'Status: open\n\n## Summary\n\nThe oracle never fails.\n' \
+printf '## Status\nopen\n\n## Summary\n\nThe oracle never fails.\n' \
   > "$F/bugs/2026-03-07-cart-blind-oracle.md"
 
 # --- an awk that logs the program it was handed, to prove each one RAN --------------------
@@ -844,35 +848,58 @@ printf 'Status: open\n\n## Summary\n\nThe oracle never fails.\n' \
 # otherwise leave its cases passing on nothing.
 new_dir; AWKSHIM=$DIR
 AWKLOG="$AWKSHIM/awk.log"
+# The REAL awk is whatever PATH resolves `awk` to now, so a run with mawk (or any awk) first on PATH
+# wraps that one. Say which, and let CI pin it: QA_EXPECT_AWK=mawk fails the case below if the
+# stand-in is not wrapping mawk, so the mawk step cannot quietly measure another awk.
 REAL_AWK=$(command -v awk)
-cat > "$AWKSHIM/awk" <<EOF
+REAL_AWK_VERSION=$("$REAL_AWK" -W version 2>/dev/null | head -1)
+if [ -z "$REAL_AWK_VERSION" ]; then REAL_AWK_VERSION=$("$REAL_AWK" --version 2>/dev/null | head -1); fi
+echo "  -- awk under test: $REAL_AWK (${REAL_AWK_VERSION:-no version reported})"
+if [ -n "${QA_EXPECT_AWK:-}" ]; then
+  check "the awk under test is the expected one ($QA_EXPECT_AWK)" grep -qi -e "$QA_EXPECT_AWK" <<<"$REAL_AWK_VERSION"
+fi
+# The paths reach the stand-in through the environment (QA_AWKLOG, QA_REAL_AWK), so nothing is
+# interpolated into its text. It logs the awk PROGRAM: the first operand that is not an option and
+# not the operand of -v/-f/-F (a `-f FILE` run has no inline program, and logs an empty line).
+cat > "$AWKSHIM/awk" <<'EOF'
 #!/bin/sh
 prog=''
 skip=0
-for a in "\$@"; do
-  if [ "\$skip" = 1 ]; then skip=0; continue; fi
-  case "\$a" in (-v) skip=1; continue ;; (-*) continue ;; esac
-  prog=\$a
+for a in "$@"; do
+  if [ "$skip" = 1 ]; then skip=0; continue; fi
+  case "$a" in
+    (-v|-f|-F) skip=1; continue ;;
+    (-*) continue ;;
+  esac
+  prog=$a
   break
 done
-squashed=\$(printf '%s' "\$prog" | tr '\\n\\t' '  ' | cut -c1-120)
-printf '%s\\n' "\$squashed" >> "$AWKLOG"
-exec "$REAL_AWK" "\$@"
+squashed=$(printf '%s' "$prog" | tr '\n\t' '  ' | cut -c1-120)
+printf '%s\n' "$squashed" >> "$QA_AWKLOG"
+exec "$QA_REAL_AWK" "$@"
 EOF
 chmod +x "$AWKSHIM/awk"
 # A sha256sum that is found but cannot run (an x86-only coreutils on Apple silicon, the same
 # trap as the jq check at the top) makes Check 15 read an empty digest and warn on every pair,
 # because doctor picks its hasher with `command -v`. Stand in for it so the case measures the
 # awk, not the machine. Where sha256sum runs, or is absent (macOS), nothing is shadowed.
-if command -v sha256sum >/dev/null 2>&1 && ! sha256sum --version >/dev/null 2>&1; then
+# drop once doctor's sha256_of falls back at run time (PR #9)
+if command -v sha256sum >/dev/null 2>&1 && ! sha256sum /dev/null >/dev/null 2>&1; then
   printf '#!/bin/sh\nexec shasum -a 256 "$@"\n' > "$AWKSHIM/sha256sum"
   chmod +x "$AWKSHIM/sha256sum"
 fi
 
 # --- doctor ------------------------------------------------------------------------------
-# BASE_URL_SHOP and BASE_URL_EU_STORE are set empty so a developer's shell cannot decide the
-# outcome; BASE_URL_ADMIN is irrelevant (the admin entry names the wrong variable).
-run_doctor "$F" PATH="$AWKSHIM:$PATH" BASE_URL_SHOP= BASE_URL_EU_STORE=
+# The site vars are set empty so a developer's shell cannot decide the outcome; BASE_URL_ADMIN is
+# irrelevant (the admin entry names the wrong variable). The stamped .env defines BASE_URL_APP
+# (as a placeholder); it is dropped here so the `app` exemption is what keeps that site quiet, not
+# a value that happens to be set.
+grep -v '^BASE_URL_APP=' "$F/.env" > "$F/.env.new"
+mv "$F/.env.new" "$F/.env"
+check "precondition: the fixture's .env no longer sets BASE_URL_APP" \
+  test "$(grep -c '^BASE_URL_APP=' "$F/.env")" = "0"
+dr_awk() { run_doctor "$F" PATH="$AWKSHIM:$PATH" QA_AWKLOG="$AWKLOG" QA_REAL_AWK="$REAL_AWK" BASE_URL_APP= "$@"; }
+dr_awk BASE_URL_BLOG= BASE_URL_SHOP= BASE_URL_EU_STORE=
 unset_out=$DR_OUT
 dr_has() { check "$1" grep -qF -e "$2" <<<"$DR_OUT"; }
 dr_lacks() { check "$1" test "$(grep -cF -e "$2" <<<"$DR_OUT")" = "0"; }
@@ -904,10 +931,13 @@ dr_has "a single-quoted id with a trailing comment is read as 'eu-store'" \
 dr_has "an entry naming the wrong env var is reported against its own id" \
   "site 'admin' declares base_url_env: BASE_URL_ADMIN_PORTAL, but playwright.config.ts registers the 'admin' project only from BASE_URL_ADMIN"
 dr_lacks "no site id keeps its quote characters" "cannot match a playwright.config.ts project"
-dr_lacks "the exempt 'app' site is not reported" "site 'app'"
-# A quoted entry must not hand its base_url_env to the entry before it, or to none at all.
-dr_lacks "the quoted id did not overwrite the previous entry's env var" "site 'app' declares"
-run_doctor "$F" PATH="$AWKSHIM:$PATH" BASE_URL_SHOP=https://shop.example.test BASE_URL_EU_STORE=https://eu.example.test
+dr_lacks "the exempt 'app' site is not reported, though its variable is unset" "site 'app'"
+dr_has "a plain id before the quoted one is read as 'blog'" "site 'blog': BASE_URL_BLOG is unset or empty"
+# A quoted entry must start its own row. Otherwise its base_url_env line lands on the entry before
+# it, and 'blog' would be reported as declaring BASE_URL_SHOP.
+dr_lacks "the quoted id did not take over the previous entry's env var" "site 'blog' declares"
+dr_awk BASE_URL_BLOG=https://blog.example.test BASE_URL_SHOP=https://shop.example.test BASE_URL_EU_STORE=https://eu.example.test
+dr_lacks "setting BASE_URL_BLOG clears the 'blog' warning" "site 'blog'"
 dr_lacks "setting BASE_URL_SHOP clears the 'shop' warning" "site 'shop'"
 dr_lacks "setting BASE_URL_EU_STORE clears the 'eu-store' warning" "site 'eu-store'"
 dr_has "  while the misdeclared 'admin' entry is still reported" "site 'admin' declares base_url_env: BASE_URL_ADMIN_PORTAL"
@@ -969,7 +999,7 @@ bugs/2026-03-07-cart-blind-oracle.md" \
 
 # --- scripts/post-run-checks.sh ----------------------------------------------------------
 echo "  -- post-run-checks.sh"
-PRC_OUT=$(cd "$F" && bash scripts/post-run-checks.sh 2>&1)
+PRC_OUT=$(cd "$F" && "$BASH" scripts/post-run-checks.sh 2>&1)
 prc_has() { check "$1" grep -qF -e "$2" <<<"$PRC_OUT"; }
 prc_has "bug title from '## Summary' on a CRLF file (CR and trailing dot stripped)" \
   "bugs/2026-01-02-checkout-total.md: Cart total ignores the coupon. If a scenario is parked"
@@ -984,7 +1014,7 @@ prc_has "a -blind- record is a test-contract gap, titled from its Summary text a
 check_eq "the resolved bug is not surfaced" "0" "$(grep -c 'login-loop' <<<"$PRC_OUT")"
 prc_has "the trailer counts 4 open bugs and 1 gap, with nothing stray" \
   "post-run: sentinels=0 stray=0 open-bugs=4 test-gaps=1"
-only=$(cd "$F" && bash scripts/post-run-checks.sh --only stray 2>&1)
+only=$(cd "$F" && "$BASH" scripts/post-run-checks.sh --only stray 2>&1)
 check_eq "--only stray scans no bugs (what doctor passes)" "post-run: sentinels=0 stray=0 open-bugs=0 test-gaps=0" "$only"
 
 echo "---"

@@ -289,14 +289,15 @@ projects.
 
 - **Section 6 covers what a fresh stamp never reaches.** A fresh stamp has no sites, area files,
   review markers or bug files, so of doctor's five awk programs only the `spec-links.sh` arm
-  extractor ran in CI (macOS BSD awk, ubuntu-24.04 mawk), and nothing ran `scripts/bug-status.sh`
+  extractor ran in CI (macOS BSD awk, the ubuntu-24.04 runner's gawk), and nothing ran `scripts/bug-status.sh`
   or the bug scan of `scripts/post-run-checks.sh`. The new section builds that project in the test
   (quoted site ids, one area file per volatility tier, current and stale review markers, CRLF and
   `## Status History` bug files) and asserts doctor's Check 5b, 9, 10, 11 and 15 lines, `--class`
   and `--list-open` (sorted), and the `post-run-checks.sh` titles and trailer. An `awk` stand-in
   logs each program doctor runs, so a guard that stops reaching one fails a case instead of
-  passing on nothing. `bin/qa-scaffoldtest` goes from 182 to 233 cases. Tests and a CI log line
-  only; no plugin behaviour changes.
+  passing on nothing. `bin/qa-scaffoldtest` goes from 182 to 236 cases. CI gains a Linux-only step
+  that runs `qa-scaffoldtest` and `qa-hooktest` again with mawk first on PATH, because the runner's
+  default awk is gawk and nothing else exercised mawk. Tests and CI only; no plugin behaviour changes.
 
 ---
 

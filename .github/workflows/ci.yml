@@ -39,12 +39,28 @@ jobs:
         run: /bin/bash qa-warden/bin/qa-hooktest
       - name: awk version (Linux only)
         # qa-scaffoldtest runs doctor's awk programs on real input, so a red run should say which
-        # awk it was (mawk on ubuntu-24.04). BSD awk on macOS has no -W version, hence the guard.
+        # awk it was. The ubuntu-24.04 runner's default awk is gawk (the Docker image's is mawk).
+        # BSD awk on macOS has no -W version, hence the guard.
         if: runner.os == 'Linux'
         run: awk -W version 2>&1 | head -1 || true
       - name: qa-scaffoldtest
         # Same reason: qa-scaffold and prod-guard.sh run under the stock macOS bash here.
         run: /bin/bash qa-warden/bin/qa-scaffoldtest
+      - name: qa-scaffoldtest and qa-hooktest with mawk (Linux only)
+        # The steps above cover BSD awk (macOS) and gawk (the Linux runner's default). mawk is the
+        # third dialect: Debian and Ubuntu images default to it, and it differs on `$0`/`$NF` in
+        # END and on `for (k in arr)` order. Put it first on PATH as `awk`. Fails loudly if the
+        # runner has no mawk; QA_EXPECT_AWK makes the suite itself check which awk it wrapped.
+        if: runner.os == 'Linux'
+        run: |
+          mawk_bin=$(command -v mawk) || { echo "mawk is not on the runner"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/mawk"
+          ln -sf "$mawk_bin" "$RUNNER_TEMP/mawk/awk"
+          "$RUNNER_TEMP/mawk/awk" -W version 2>&1 | head -1
+          export PATH="$RUNNER_TEMP/mawk:$PATH"
+          export QA_EXPECT_AWK=mawk
+          /bin/bash qa-warden/bin/qa-scaffoldtest
+          /bin/bash qa-warden/bin/qa-hooktest
       - name: Shell scripts parse
         run: |
           rc=0
