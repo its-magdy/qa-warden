@@ -43,6 +43,16 @@ if [ ! -f scripts/spec-links.sh ]; then
   echo "ERROR: scripts/spec-links.sh missing — BLIND SPOTS cannot be computed and would print EMPTY (a false 'complete'). Substrate predates it; run /qa-warden:init --resync, then re-run."
   exit 2
 fi
+# SPEC_LINKS is the copy the calls below run. A stamp older than the shared test inventory (no
+# `tests` mode) still has `unmanifested`, but its walk ignores playwright.config.ts's testIgnore
+# and lists `_`-prefixed scratch tests Playwright never runs. Run the PLUGIN's copy instead (it
+# only reads the project tree) and say so — same fallback as doctor and /qa-warden:coverage.
+SPEC_LINKS=scripts/spec-links.sh
+SPEC_LINKS_PLUGIN="$(dirname "${BASH_SOURCE[0]}")/../../../templates/scripts/spec-links.sh"
+if ! bash "$SPEC_LINKS" tests >/dev/null 2>&1 && [ -f "$SPEC_LINKS_PLUGIN" ]; then
+  echo "WARN: scripts/spec-links.sh predates the shared test inventory — BLIND SPOTS below used the plugin's copy. Run /qa-warden:init --resync to update the stamp."
+  SPEC_LINKS=$SPEC_LINKS_PLUGIN
+fi
 
 # ---------------------------------------------------------------------------
 # source= is the ODD ONE OUT: it queries the intake-authored [grounded: …] stamps in
@@ -66,7 +76,7 @@ case "$1" in
       # Canonical indent-tolerant `feature:` extractor (F-31: a col-0-only anchor silently
       # drops indented YAML and no-ops the row). /qa-warden:coverage and doctor Check 13 call the
       # same script, so the accepted YAML shapes stay one edit.
-      feat=$(bash scripts/spec-links.sh feature "$basis")
+      feat=$(bash "$SPEC_LINKS" feature "$basis")
       [ -z "$feat" ] && continue
       n=$(grep -cF "[grounded: $VAL" "$basis")
       area="${feat%%/*}"; spec="specs/${feat}.md"; t="tests/${feat}.spec.ts"
@@ -147,6 +157,6 @@ echo "### MATCHES"
 # one place, each caller formatting its own prose; the metamorphic-twin exclusion in particular
 # is silent when a copy forgets it. Doctor Check 9k enforces that ownership.
 echo "### BLIND SPOTS"
-bash scripts/spec-links.sh unmanifested | while IFS=$'\t' read -r t base; do
+bash "$SPEC_LINKS" unmanifested | while IFS=$'\t' read -r t base; do
   echo "  • $t  (no manifest — NOT in the impact graph; regenerate with /qa-warden:gen specs/${base}.md)"
 done

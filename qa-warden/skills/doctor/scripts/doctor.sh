@@ -136,10 +136,20 @@ fi
 # reports it dropped). A scratch spec carries no verified-stamp / review-attestation contract either.
 #   TEST_INV rows: <test> <base> <kind: spec|twin> <spec|-> <manifest|->     (Checks 3, 9l, 13, 15b)
 #   SPEC_INV rows: <spec> <base> <test|-> <smoke|-> <basis|->                (Checks 15, 16, 17)
-# A stamp that predates these modes prints nothing here, so both come back EMPTY; Check 9k
-# reports that as a ❌ with the resync remedy rather than letting it read as an empty suite.
-TEST_INV=$(bash scripts/spec-links.sh tests 2>/dev/null)
-SPEC_INV=$(bash scripts/spec-links.sh specs 2>/dev/null)
+# SPEC_LINKS is the copy every call below runs. A project's stamp only changes on
+# `/qa-warden:init --resync`, so a newer plugin meets an older stamp — one with no `tests`/`specs`
+# mode, which exits 2 on them. Reading nothing would show an EMPTY suite (Check 3 then cannot see
+# a vacuous smoke gate, and Check 13 reports compiled tests as missing), so doctor runs the PLUGIN's
+# copy of the script instead. It only reads the project tree, so the answers are the ones the
+# resynced stamp will give; Check 9's substrate-drift ⚠️ already names the file and the resync.
+SPEC_LINKS=scripts/spec-links.sh
+SPEC_LINKS_PLUGIN=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../templates/scripts" 2>/dev/null && pwd)
+SPEC_LINKS_PLUGIN="${SPEC_LINKS_PLUGIN:+$SPEC_LINKS_PLUGIN/spec-links.sh}"
+if ! TEST_INV=$(bash "$SPEC_LINKS" tests 2>/dev/null) && [ -f "$SPEC_LINKS_PLUGIN" ]; then
+  SPEC_LINKS=$SPEC_LINKS_PLUGIN
+  TEST_INV=$(bash "$SPEC_LINKS" tests 2>/dev/null)
+fi
+SPEC_INV=$(bash "$SPEC_LINKS" specs 2>/dev/null)
 TEST_FILES=$(printf '%s\n' "$TEST_INV" | cut -f1 | grep -v '^$')
 # specs/_context/ is the tree with the MOST consumers — Checks 5, 5b, 13, 18 and 19 each used to
 # walk it separately (five traversals for one small tree). Walk it once; the checks below filter
@@ -151,7 +161,7 @@ CTX_FILES=$(find specs/_context -type f -name '*.md' 2>/dev/null)
 # trailing-comment-tolerant match anchor now live in scripts/spec-links.sh (`index` / `match`),
 # which /qa-warden:coverage and /qa-warden:impact call too — that anchor had already needed one lockstep fix
 # applied by hand in three places.
-BASIS_LINKS=$(bash scripts/spec-links.sh index 2>/dev/null)
+BASIS_LINKS=$(bash "$SPEC_LINKS" index 2>/dev/null)
 
 # 3. Vacuous smoke gate — `--grep @smoke` must select ≥1 test, so count @smoke ON ITS OWN.
 #    A combined '@smoke\|@regression' count is blind to the exact failure this check exists
@@ -858,8 +868,10 @@ fi
 #     testIgnore exclusions, and the shape of a manifest path built from a variable. Three arms:
 #       Arm 1 — scripts/spec-links.sh still carries the `unmanifested)` arm (the owner exists).
 #       Arm 2 — the shared walk exists, and its two silent properties hold. A stamp with no
-#               `collected_tests()` predates the inventory: every `tests`/`specs` call above
-#               printed nothing, so this is where that gets said (once), with the resync remedy.
+#               `collected_tests()` predates the inventory: doctor already fell back to the
+#               plugin's copy (SPEC_LINKS, at the top), so that is an uncounted ℹ️ line, never a
+#               ❌ — an upgrade alone must not fail doctor. The ❌ branches below fire only on a
+#               stamp that HAS the walk and was edited away from it.
 #               (a) twins: the walk's `(*.metamorphic)` case marks a twin and the arm skips `= twin`.
 #               A twin never carries a manifest BY DESIGN (verifier V4 emits one per spec), so
 #               without the skip every twin is reported as a blind spot and both consumers cry
@@ -896,8 +908,10 @@ if [ -f scripts/spec-links.sh ]; then
     echo "❌ scripts/spec-links.sh has no \`unmanifested)\` arm — /qa-warden:impact's ### BLIND SPOTS and /qa-warden:coverage dim 0 both call it; without it impact reports a zero-match as if it were exhaustive and coverage re-labels every unmanifested test's routes as 'planned, untested'"
     fail=$((fail+1))
   elif [ -z "$sl_walk" ]; then
-    echo "❌ scripts/spec-links.sh has no collected_tests() walk — the stamp predates the shared test inventory (\`tests\` / \`specs\` / \`smoke\`), so doctor Checks 3/9l/13/15/15b/16/17 saw an EMPTY suite and /qa-warden:coverage refuses. Run /qa-warden:init --resync, then re-run /qa-warden:doctor"
-    fail=$((fail+1))
+    # An OLDER STAMP, not a defect: doctor and /qa-warden:coverage already read the plugin's copy
+    # (SPEC_LINKS, above), and Check 9's drift ⚠️ carries the resync. Say which copy answered;
+    # do not count it, so an upgrade alone never turns doctor red.
+    echo "ℹ️  scripts/spec-links.sh predates the shared test inventory (no collected_tests()) — doctor used the plugin's copy for its test/spec checks; /qa-warden:init --resync updates the stamp"
   elif ! printf '%s\n' "$sl_walk" | grep -qF -e '(*.metamorphic)' || ! printf '%s\n' "$sl_arm" | grep -q '= twin'; then
     echo "❌ scripts/spec-links.sh \`unmanifested\` no longer excludes *.metamorphic.spec.ts — a twin never carries a manifest by design (verifier V4 emits one per SPEC), so every twin now reports as a blind spot in /qa-warden:impact and as an UNMANIFESTED warning in /qa-warden:coverage dim 0"
     fail=$((fail+1))
@@ -1162,7 +1176,7 @@ fi
 #     resolves to ZERO test files is itself a WARN — never a silent skip.
 while read -r basis; do
   grep -qE '^[[:space:]]*mutates_server_state:[[:space:]]*true' "$basis" || continue
-  feat=$(bash scripts/spec-links.sh feature "$basis")   # canonical indent-tolerant extractor (F-31)
+  feat=$(bash "$SPEC_LINKS" feature "$basis")   # canonical indent-tolerant extractor (F-31)
   [ -z "$feat" ] && continue
   bases="$feat"
   while read -r sp; do
@@ -1173,7 +1187,7 @@ while read -r basis; do
     # feature, and let scripts/spec-links.sh own the anchor — Check 18 and /qa-warden:coverage dims 1/5/6
     # need the identical trailing-comment tolerance, which has already needed one hand-applied
     # lockstep fix across those three sites.
-  done < <(printf '%s\n' "$BASIS_LINKS" | bash scripts/spec-links.sh match "$feat")
+  done < <(printf '%s\n' "$BASIS_LINKS" | bash "$SPEC_LINKS" match "$feat")
   found=0
   for b in $bases; do
     # The collected tests whose base is $b — the spec and its twin, paired by the inventory
@@ -1258,7 +1272,12 @@ while IFS=$'\t' read -r spec base t smoke basis; do
   [ "$t" = - ] || continue                                          # compiled → on the gate, fine
   # fanned: a sibling spec may own the compiled test via a `basis: <area>/<feature>` back-link
   # (the inventory's basis column, cut at the same boundary `spec-links.sh match` anchors on)
-  if [ "$basis" != - ] && [ -n "$(printf '%s\n' "$TEST_INV" | awk -F'\t' -v b="$basis" '$2 == b && $3 == "spec"')" ]; then continue; fi
+  if [ "$basis" != - ]; then
+    fanned_test=$(printf '%s\n' "$TEST_INV" | awk -F'\t' -v b="$basis" '$2 == b && $3 == "spec" { print $1 }')
+    if [ -n "$fanned_test" ]; then
+      continue
+    fi
+  fi
   echo "⚠️  smoke-tagged spec with no compiled test: $spec declares 'tags: [… smoke …]' but tests/${base}.spec.ts does not exist — /qa-warden:run mode=smoke's --grep @smoke is BLIND to this P1 flow; compile it with /qa-warden:gen or drop the smoke tag"; warn=$((warn+1))
 done < <(printf '%s\n' "$SPEC_INV")
 
@@ -1286,7 +1305,7 @@ done < <(printf '%s\n' "$SPEC_INV")
 while read -r cases; do
   feat=$(printf '%s' "$cases" | sed -E 's#^specs/_context/[^/]+/##; s#\.cases\.md$##')
   [ -f "specs/${feat}.md" ] && continue                                          # spec exists → chain completed
-  [ -n "$(printf '%s\n' "$BASIS_LINKS" | bash scripts/spec-links.sh match "$feat")" ] && continue   # a fanned spec back-links it (hoisted index, canonical anchor — same call as Check 13)
+  [ -n "$(printf '%s\n' "$BASIS_LINKS" | bash "$SPEC_LINKS" match "$feat")" ] && continue   # a fanned spec back-links it (hoisted index, canonical anchor — same call as Check 13)
   echo "⚠️  abandoned authoring chain: ${cases} has no downstream spec (specs/${feat}.md absent, no spec back-links 'basis: ${feat}') — the approved checklist never became a spec; run /qa-warden:new-spec ${feat} or /qa-warden:retire the chain"; warn=$((warn+1))
 done < <(printf %s\\n "$CTX_FILES" | grep -e "\\.cases\\.md$")
 

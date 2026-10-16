@@ -116,7 +116,8 @@ does not fix anything — each finding names its repair:
   twin never carries a manifest BY DESIGN (verifier V4 emits one per spec), so a copy that drops
   the skip makes both consumers cry wolf on every twin; a walk that drops a `_` exclusion
   reports scratch specs Playwright's `testIgnore` never runs. A stamp with no `collected_tests()`
-  predates the inventory (doctor's test/spec checks saw an empty suite): `/qa-warden:init --resync`.
+  predates the inventory: that is an uncounted ℹ️, not a ❌, because doctor, coverage and impact
+  then run the plugin's copy of the script; the drift ⚠️ carries the `/qa-warden:init --resync`.
   **Arm 3 keys on the CONSTRUCT** — an existence
   test on a manifest path built from a variable — and scans **code, not comments**, because an
   ownership check has to name the construct it bans and so matches its own documentation
