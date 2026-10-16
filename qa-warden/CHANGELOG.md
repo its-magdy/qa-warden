@@ -20,6 +20,32 @@ never carry the same number**, or the second one has no way to announce itself.
 
 ## [Unreleased]
 
+### `/qa-warden:batch-fix` no longer reads a crashed precheck as "nothing to fix"
+
+- Step 1's precheck ignored Playwright's exit code (`|| true`), so a timeout or worker crash that
+  recorded 0 failures landed in "nothing to fix" — a vacuous green on a batch that never finished.
+  The precheck is now a mode of `/qa-warden:run`'s script, called as one command
+  (`bash "${CLAUDE_SKILL_DIR}/../run/scripts/run.sh" precheck $ARGUMENTS`) under a new
+  `allowed-tools` rule, instead of ~40 lines of inline shell that matched no allow rule. It exits
+  `0` when there is something to fix (with the heal-log signature hint, as before), `1` when the
+  filter matched nothing or nothing is failing, and `2` when the run did not complete or never
+  started — and says which. Playwright's stderr now goes to `artifacts/batch-fix-precheck.log`
+  instead of `/dev/null`.
+- Step 5's re-run is `run.sh recheck $ARGUMENTS` under the same rule, replacing the last inline
+  block. It still runs `--retries=0 --reporter=line`, so `artifacts/last-run.json` is never rewritten,
+  and it refuses an empty filter. It exits `0` when green and `1` for anything else. Still red, a crash
+  and "no tests found" all exit 1 from Playwright's line reporter, so it does not pretend to tell them apart.
+- Every `/qa-warden:run` mode reads its run through one verdict (`skills/run/scripts/run-verdict.sh`):
+  the exit code and the JSON become one word — green, red, incomplete, missing, corrupt, zero-test,
+  stale or unchecked. This replaces four hand-kept tables and two copies of the "non-zero exit, 0
+  failures" guard. The visible changes: `mode=repeat` now refuses a crashed probe (non-zero exit, 0
+  failures) rather than reporting the repeats that ran as stable, and the `mode=single` /
+  `mode=changed` status line ends in `(verdict=<word>)` instead of `(rc=<n>)`.
+- No stamped file changed: `scripts/check-last-run.sh` keeps its CLI, so no `--resync` is needed.
+- `bin/qa-scaffoldtest` gains 71 cases (293 → 364). It runs every verdict on fixture JSONs and drives
+  `run.sh`'s single, smoke, repeat, changed, precheck and recheck modes end to end against a stub
+  `npx`.
+
 ### `/qa-warden:coverage` reads the oracle keys from the manifest
 
 - `coverage.sh` builds its `KEYS_RE` at runtime from `scripts/oracle-keys.txt` instead of carrying a
