@@ -748,6 +748,10 @@ check_eq "  and prints nothing on stdout" "" "$RMK_OUT"
 rmk PATH="$NOSHA:$PATH" -- "${WPAIR[@]}" FAIL
 check "  and the writer refuses too, leaving the PASS marker as it was" \
   grep -qx 'result: PASS' "$SHAP/reports/review/demo/widget.reviewed"
+mv "$SHAP/reports/review/demo/widget.reviewed" "$SHAP/marker.keep"
+rmk PATH="$NOSHA:$PATH" -- check "${WPAIR[@]}"
+check_eq "  but a pair with no marker is still missing (no hashing needed)" "missing" "$RMK_OUT"
+mv "$SHAP/marker.keep" "$SHAP/reports/review/demo/widget.reviewed"
 # Vacuity guard: with the broken sha256sum still first, a real change must still be reported.
 cp "$SHAP/tests/demo/widget.spec.ts" "$SHAP/widget.keep"
 printf '// edited\n' >> "$SHAP/tests/demo/widget.spec.ts"
@@ -764,6 +768,15 @@ FAILED_RV="demo/widget: reviewed, FAILED — fix and re-run /qa-warden:review"
 rmk -- "${WPAIR[@]}" PASS
 run_doctor "$SHAP" PATH="$FAKESHA:$PATH"
 check "a current marker gets no Check 15 line (sha256sum exits 126)" \
+  test "$(grep -c 'demo/widget: ' <<<"$DR_OUT")" = "0"
+# Doctor reads the answer from stdout only. A shell that writes to stderr on start-up (a setlocale
+# warning under an LC_ALL naming a missing locale; here a BASH_ENV file) must not turn it into
+# "could not be checked".
+new_dir; NOISE=$DIR
+printf 'echo "bash: warning: setlocale: LC_ALL: cannot change locale" >&2\n' > "$NOISE/noise.sh"
+run_doctor "$SHAP" BASH_ENV="$NOISE/noise.sh"
+check "precondition: the BASH_ENV noise reached doctor's output" grep -qF 'setlocale: LC_ALL' <<<"$DR_OUT"
+check "  and a current marker still gets no Check 15 line" \
   test "$(grep -c 'demo/widget: ' <<<"$DR_OUT")" = "0"
 rmk -- "${WPAIR[@]}" FAIL
 run_doctor "$SHAP"

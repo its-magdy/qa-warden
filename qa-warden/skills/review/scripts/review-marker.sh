@@ -77,6 +77,15 @@ digest() {
 # field <marker> <name> — the value of the first `<name>: <value>` line, or nothing.
 field() { grep -m1 "^$2:" "$1" | awk '{print $2}'; }
 
+rel="${SPEC#specs/}"; rel="${rel%.md}"
+out="reports/review/$rel.reviewed"
+
+# A pair with no marker is `missing` before any hashing, so a never-reviewed pair reads as that even
+# on a machine where no sha256 tool works.
+if [ "$MODE" = "check" ] && [ ! -f "$out" ]; then
+  echo missing; exit 0
+fi
+
 s_now=$(digest "$SPEC")
 t_now=$(digest "$TEST")
 # With no working tool both digests are empty. The writer would then record "", and the checker
@@ -85,13 +94,8 @@ if [ -z "$s_now" ] || [ -z "$t_now" ]; then
   echo "review-marker: neither sha256sum nor shasum -a 256 produced a digest" >&2; exit 2
 fi
 
-rel="${SPEC#specs/}"; rel="${rel%.md}"
-out="reports/review/$rel.reviewed"
-
 if [ "$MODE" = "check" ]; then
-  if [ ! -f "$out" ]; then
-    echo missing
-  elif [ "$s_now" != "$(field "$out" spec_sha256)" ] || [ "$t_now" != "$(field "$out" test_sha256)" ]; then
+  if [ "$s_now" != "$(field "$out" spec_sha256)" ] || [ "$t_now" != "$(field "$out" test_sha256)" ]; then
     echo stale
   elif [ "$(field "$out" result)" = "FAIL" ]; then
     echo failed

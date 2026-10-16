@@ -58,8 +58,8 @@ never carry the same number**, or the second one has no way to announce itself.
   silenced the "never reviewed" warning as well as a `PASS` would. A marker whose hashes are
   current but records `result: FAIL` now gets its own warning: "reviewed, FAILED — fix and re-run
   /qa-warden:review". A changed pair still gets "changed since last review", whatever its result.
-  A marker with no `result:` line (the script always writes one; a marker improvised before it existed may not have one)
-  is read as before: matching hashes attest it.
+  A marker with no `result:` line (the script always writes one; a marker improvised before it
+  existed may not have one) is read as before: matching hashes attest it.
 - **The marker format lives in one file.** The review skill's `review-marker.sh` gains a read-only
   `check <spec> <test>` mode that prints `current`, `stale`, `failed` or `missing`, and Check 15
   calls it from the same plugin instead of keeping its own digest function, path rule and field
@@ -67,7 +67,14 @@ never carry the same number**, or the second one has no way to announce itself.
 - **The digest falls back on output, not only on exit status.** A `sha256sum` that exits 0 but
   prints nothing now falls through to `shasum -a 256` too. With no working tool at all, the script
   refuses (exit 2) instead of writing an empty hash, and doctor says the attestation could not be
-  checked instead of comparing two empty strings.
+  checked instead of comparing two empty strings. A pair with no marker is still reported as never
+  reviewed: the script looks for the marker before it hashes anything.
+- Doctor reads the script's answer from stdout only, so a shell warning on stderr (a setlocale
+  warning under an `LC_ALL` naming a missing locale) cannot turn a reviewed pair into "could not be
+  checked".
+- `bin/qa-scaffoldtest` gains 21 cases (293 → 314): the script is tested directly (each of the
+  four answers, the `sha256sum` fallbacks, the refusals), and doctor through it (the FAILED
+  warning apart from the changed one, stderr noise ignored, the no-tool reason).
 
 ### `/qa-warden:coverage` reads the oracle keys from the manifest
 
