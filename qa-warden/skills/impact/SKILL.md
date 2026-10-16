@@ -52,7 +52,8 @@ compiled tests that have **no manifest** and are therefore invisible to the quer
 SPOTS is non-empty the result is INCOMPLETE — report those specs as "possibly affected but
 unanalyzed" alongside the matches; do not present the table as exhaustive. If stderr carries
 `[jq parse error …]`, a manifest is corrupt — report it and do not treat the (possibly
-short) match list as complete.
+short) match list as complete. A leading `WARN:` line (an older `scripts/spec-links.sh` stamp)
+does not change the result; relay its `/qa-warden:init --resync` hint.
 
 Your job from here is **formatting only** — do not recompute or estimate anything it emitted.
 
