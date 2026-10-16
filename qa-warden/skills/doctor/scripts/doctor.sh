@@ -1173,46 +1173,48 @@ while read -r basis; do
   [ "$found" -eq 0 ] && { echo "⚠️  $feat: basis declares mutates_server_state:true but NO compiled test resolved (neither tests/${feat}.spec.ts nor any fanned spec via 'basis: ${feat}') — the mutating feature is never isolation-checked; compile it or fix the basis 'feature:' path"; warn=$((warn+1)); }
 done < <(ctx_grep_l '^[[:space:]]*mutates_server_state:[[:space:]]*true')
 
-# --- shared helper for Checks 15/15b ------------------------------------------------------
-# (The tests/ and specs/ tree walks these checks consume — $TEST_FILES / $SPEC_FILES — are
+# (The tests/ and specs/ tree walks Checks 15/15b consume — $TEST_FILES / $SPEC_FILES — are
 #  hoisted to the top of the script, above Check 3.)
-# Portable SHA-256 (T-05): prefer coreutils `sha256sum` (present on minimal Linux/CI/alpine),
-# fall back to Perl-based `shasum -a 256` (macOS/BSD). Both print "<hash>  <file>", so `awk
-# {print $1}` extracts the digest either way — and the digest value is identical regardless of
-# tool. Assuming only `shasum` made every reviewed spec falsely WARN "changed since review" on a
-# `sha256sum`-only image (empty hash ≠ recorded hash).
-# The fallback is decided at RUN time, per file, the same way the review skill's
-# review-marker.sh digest() does it. Choosing by `command -v sha256sum` once was not enough: a
-# sha256sum that is found but cannot run (an x86-only binary on Apple silicon: "Bad CPU type",
-# exit 126) yielded an empty hash, so every reviewed pair WARNed "changed since last review".
-sha256_of() {
-  (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1" 2>/dev/null) | awk '{print $1}'
-}
 
 # 14. Unmanaged tests — see Check 4+14 above; scripts/post-run-checks.sh owns that scan.
 
 # 15. Review attestation — for each spec with a compiled test, a reports/review/<area>/<feature>.reviewed
-#     marker must exist and its recorded hashes must match the CURRENT spec+test. Markers are
-#     agent-writable convenience, not proof — the anti-forgery layer is a human approving the PR
-#     (a required approval in branch protection); this catches FORGOTTEN reviews, not malicious ones.
-while read -r spec; do
-  [ -n "$spec" ] || continue
-  base=$(spec_base "$spec")
-  t="tests/${base}.spec.ts"
-  [ -f "$t" ] || continue
-  marker="reports/review/${base}.reviewed"
-  stale_review=0
-  if [ ! -f "$marker" ]; then
-    stale_review=1
-  else
-    s_now=$(sha256_of "$spec")
-    t_now=$(sha256_of "$t")
-    s_rec=$(grep -m1 '^spec_sha256:' "$marker" | awk '{print $2}')
-    t_rec=$(grep -m1 '^test_sha256:' "$marker" | awk '{print $2}')
-    { [ "$s_now" != "$s_rec" ] || [ "$t_now" != "$t_rec" ]; } && stale_review=1
-  fi
-  [ "$stale_review" -eq 1 ] && { echo "⚠️  ${base}: changed since last review (or never reviewed) — re-run /qa-warden:review"; warn=$((warn+1)); }
-done < <(printf '%s\n' "$SPEC_FILES")
+#     marker must exist, its recorded hashes must match the CURRENT spec+test, and the review it
+#     records must not have FAILED. Markers are agent-writable convenience, not proof — the
+#     anti-forgery layer is a human approving the PR (a required approval in branch protection);
+#     this catches FORGOTTEN reviews, not malicious ones.
+#     The marker's format is owned by the review skill's review-marker.sh, which wrote it: its
+#     `check` mode answers current / stale / failed / missing for one pair. Doctor used to parse
+#     the marker itself, with its own digest function (the two had drifted once) and without ever
+#     reading `result:`, so a FAILED review passed as attested. The script ships in this plugin:
+#     <plugin>/skills/doctor/scripts/doctor.sh -> <plugin>/skills/review/scripts/review-marker.sh.
+REVIEW_MARKER="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)/review/scripts/review-marker.sh"
+if [ ! -f "$REVIEW_MARKER" ]; then
+  echo "⚠️  the plugin's review-marker.sh was not found at $REVIEW_MARKER — review attestation (Check 15) is UNVERIFIED (run doctor from the plugin: /qa-warden:doctor)"; warn=$((warn+1))
+else
+  while read -r spec; do
+    [ -n "$spec" ] || continue
+    base=$(spec_base "$spec")
+    t="tests/${base}.spec.ts"
+    [ -f "$t" ] || continue
+    # stdout ONLY: the answer is one word there. Folding stderr in let any noise from the shell
+    # itself (a setlocale warning under an LC_ALL that names a missing locale) turn every
+    # reviewed pair into "could not be checked".
+    review_state=$(bash "$REVIEW_MARKER" check "$spec" "$t" 2>/dev/null)
+    case "$review_state" in
+      current) : ;;
+      stale|missing)
+        echo "⚠️  ${base}: changed since last review (or never reviewed) — re-run /qa-warden:review"; warn=$((warn+1)) ;;
+      failed)
+        echo "⚠️  ${base}: reviewed, FAILED — fix and re-run /qa-warden:review"; warn=$((warn+1)) ;;
+      *)
+        # Not an answer, so the script refused. It is read-only: run it again for its reason,
+        # the last `review-marker:` line of its stderr.
+        review_why=$(bash "$REVIEW_MARKER" check "$spec" "$t" 2>&1 >/dev/null | grep '^review-marker:' | tail -1)
+        echo "⚠️  ${base}: review attestation could not be checked: ${review_why:-review-marker.sh gave no answer}"; warn=$((warn+1)) ;;
+    esac
+  done < <(printf '%s\n' "$SPEC_FILES")
+fi
 # 15b. Stale verified-comment — a `// verified: must_fail_when "<text>"` stamp in a test whose
 #      captured text no longer appears in the paired spec means the invariant was edited/removed
 #      AFTER verification; the stamp attests a probe of an invariant that no longer exists.

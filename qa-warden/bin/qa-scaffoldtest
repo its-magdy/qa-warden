@@ -27,7 +27,10 @@
 #                      one a counted Check 9c warning); the spec format's move from
 #                      CLAUDE.md into the test-case-contract skill (old section warned, a missing
 #                      pointer nudged, Check 2 compares key sets with the skill exactly,
-#                      fault:/clock: no longer demanded in CLAUDE.md)
+#                      fault:/clock: no longer demanded in CLAUDE.md); the review skill's
+#                      review-marker.sh tested directly (write, then check answers current /
+#                      stale / failed / missing, a broken sha256sum falls back to shasum) and
+#                      Check 15 warning on a FAILED review apart from a changed pair
 #   5. prod-guard.sh   the URL table: staging passes, a word-boundary prod marker refuses,
 #                      QA_ALLOW_PROD=1 lifts the marker refusal ONLY, placeholders never pass
 #   6. doctor awk +    the code a fresh stamp never reaches: on a stamp with real sites, area
@@ -675,29 +678,114 @@ check "with only the plain rule: the INFO line, no warning" \
   test "$(grep -cxF "$LEFTOVER_DR" <<<"$DR_OUT")$(grep -c 'retired permission rule' <<<"$DR_OUT")" = "10"
 check_eq "  and the rollup count is a fresh stamp's (INFO is not counted)" "$fresh_n" "$(rollup_n "$DR_OUT")"
 
-echo "  -- Check 15 hashes with shasum when sha256sum is found but cannot run"
-# An x86-only sha256sum on Apple silicon is on PATH but exits 126 ("Bad CPU type"). Doctor used
-# to pick it by `command -v` alone, hash every file to "" and WARN on every reviewed pair.
-STALE_RV="demo/widget: changed since last review"
+echo "  -- review-marker.sh: one file writes the attestation marker and checks it"
+# The review skill writes with it; doctor Check 15 asks its `check` mode, which prints one word:
+# current / stale / failed / missing. Tested here directly, then once through doctor.
+RMK="$here/skills/review/scripts/review-marker.sh"
 new_dir; SHAP=$DIR
 stamp "$SHAP"
 mkdir -p "$SHAP/specs/demo" "$SHAP/tests/demo"
 printf '# Widget\n' > "$SHAP/specs/demo/widget.md"
 printf "import { test } from '@playwright/test';\n" > "$SHAP/tests/demo/widget.spec.ts"
-(cd "$SHAP" && "$BASH" "$here/skills/review/scripts/review-marker.sh" \
-   specs/demo/widget.md tests/demo/widget.spec.ts PASS) >/dev/null 2>&1
-check "precondition: the review skill's script wrote a marker" test -s "$SHAP/reports/review/demo/widget.reviewed"
+# rmk [VAR=value ...] -- <args...> — the script, run from $SHAP; stdout in $RMK_OUT, exit in $RMK_RC.
+rmk() {
+  local envs=()
+  while [ "$1" != "--" ]; do envs+=("$1"); shift; done
+  shift
+  RMK_OUT=$(cd "$SHAP" && env "${envs[@]}" "$BASH" "$RMK" "$@" 2>/dev/null)
+  RMK_RC=$?
+}
+WPAIR=(specs/demo/widget.md tests/demo/widget.spec.ts)
+rmk -- check "${WPAIR[@]}"
+check_eq "no marker yet: missing" "missing" "$RMK_OUT"
+rmk -- "${WPAIR[@]}" PASS
+check "a PASS review writes the marker" test -s "$SHAP/reports/review/demo/widget.reviewed"
+rmk -- check "${WPAIR[@]}"
+check_eq "after a PASS review: current" "current" "$RMK_OUT"
+rmk -- "${WPAIR[@]}" FAIL
+rmk -- check "${WPAIR[@]}"
+check_eq "after a FAIL review of the same pair: failed" "failed" "$RMK_OUT"
+# An old marker with no result line keeps its old meaning: matching hashes are an attestation.
+grep -v '^result:' "$SHAP/reports/review/demo/widget.reviewed" > "$SHAP/marker.new"
+mv "$SHAP/marker.new" "$SHAP/reports/review/demo/widget.reviewed"
+rmk -- check "${WPAIR[@]}"
+check_eq "a marker with no result line and current hashes: current" "current" "$RMK_OUT"
+rmk -- check specs/demo/widget.md
+check_eq "check with one path refuses (exit 2)" "2" "$RMK_RC"
+rmk -- check specs/demo/../widget.md tests/demo/widget.spec.ts
+check_eq "check refuses a '..' path (exit 2)" "2" "$RMK_RC"
+
+# An x86-only sha256sum on Apple silicon is on PATH but exits 126 ("Bad CPU type"). A digest picked
+# by `command -v` alone hashed every file to "" and every reviewed pair read as changed. One that
+# exits 0 and prints nothing must fall through to shasum the same way.
 new_dir; FAKESHA=$DIR
 printf '#!/bin/sh\necho "fake sha256sum: Bad CPU type in executable" >&2\nexit 126\n' > "$FAKESHA/sha256sum"
 chmod +x "$FAKESHA/sha256sum"
-run_doctor "$SHAP"
-check "a fresh marker is accepted (normal PATH)" test "$(grep -cF "$STALE_RV" <<<"$DR_OUT")" = "0"
-run_doctor "$SHAP" PATH="$FAKESHA:$PATH"
-check "a fresh marker is accepted when sha256sum exits 126" test "$(grep -cF "$STALE_RV" <<<"$DR_OUT")" = "0"
+new_dir; EMPTYSHA=$DIR
+printf '#!/bin/sh\nexit 0\n' > "$EMPTYSHA/sha256sum"
+chmod +x "$EMPTYSHA/sha256sum"
+new_dir; NOSHA=$DIR
+printf '#!/bin/sh\nexit 126\n' > "$NOSHA/sha256sum"
+printf '#!/bin/sh\nexit 126\n' > "$NOSHA/shasum"
+chmod +x "$NOSHA/sha256sum" "$NOSHA/shasum"
+rmk -- "${WPAIR[@]}" PASS
+rec=$(grep '^test_sha256:' "$SHAP/reports/review/demo/widget.reviewed")
+rmk PATH="$FAKESHA:$PATH" -- check "${WPAIR[@]}"
+check_eq "a sha256sum that exits 126 falls back to shasum: current" "current" "$RMK_OUT"
+rmk PATH="$EMPTYSHA:$PATH" -- check "${WPAIR[@]}"
+check_eq "a sha256sum that prints nothing falls back to shasum: current" "current" "$RMK_OUT"
+rmk PATH="$FAKESHA:$PATH" -- "${WPAIR[@]}" PASS
+check_eq "  and a marker written through the fallback has the same digest" "$rec" \
+  "$(grep '^test_sha256:' "$SHAP/reports/review/demo/widget.reviewed")"
+rmk PATH="$NOSHA:$PATH" -- check "${WPAIR[@]}"
+check_eq "with no working sha256 tool, check refuses (exit 2) rather than guess" "2" "$RMK_RC"
+check_eq "  and prints nothing on stdout" "" "$RMK_OUT"
+rmk PATH="$NOSHA:$PATH" -- "${WPAIR[@]}" FAIL
+check "  and the writer refuses too, leaving the PASS marker as it was" \
+  grep -qx 'result: PASS' "$SHAP/reports/review/demo/widget.reviewed"
+mv "$SHAP/reports/review/demo/widget.reviewed" "$SHAP/marker.keep"
+rmk PATH="$NOSHA:$PATH" -- check "${WPAIR[@]}"
+check_eq "  but a pair with no marker is still missing (no hashing needed)" "missing" "$RMK_OUT"
+mv "$SHAP/marker.keep" "$SHAP/reports/review/demo/widget.reviewed"
 # Vacuity guard: with the broken sha256sum still first, a real change must still be reported.
+cp "$SHAP/tests/demo/widget.spec.ts" "$SHAP/widget.keep"
 printf '// edited\n' >> "$SHAP/tests/demo/widget.spec.ts"
+rmk PATH="$FAKESHA:$PATH" -- check "${WPAIR[@]}"
+check_eq "an edited test after a PASS review: stale (sha256sum exits 126)" "stale" "$RMK_OUT"
+rmk -- "${WPAIR[@]}" FAIL
+printf '\nA criterion added after the review.\n' >> "$SHAP/specs/demo/widget.md"
+rmk -- check "${WPAIR[@]}"
+check_eq "an edited spec after a FAIL review: stale, not failed" "stale" "$RMK_OUT"
+
+echo "  -- Check 15 reports what review-marker.sh check answers"
+STALE_RV="demo/widget: changed since last review (or never reviewed) — re-run /qa-warden:review"
+FAILED_RV="demo/widget: reviewed, FAILED — fix and re-run /qa-warden:review"
+rmk -- "${WPAIR[@]}" PASS
 run_doctor "$SHAP" PATH="$FAKESHA:$PATH"
-check "  and an edited test is still reported as changed" grep -qF "$STALE_RV" <<<"$DR_OUT"
+check "a current marker gets no Check 15 line (sha256sum exits 126)" \
+  test "$(grep -c 'demo/widget: ' <<<"$DR_OUT")" = "0"
+# Doctor reads the answer from stdout only. A shell that writes to stderr on start-up (a setlocale
+# warning under an LC_ALL naming a missing locale; here a BASH_ENV file) must not turn it into
+# "could not be checked".
+new_dir; NOISE=$DIR
+printf 'echo "bash: warning: setlocale: LC_ALL: cannot change locale" >&2\n' > "$NOISE/noise.sh"
+run_doctor "$SHAP" BASH_ENV="$NOISE/noise.sh"
+check "precondition: the BASH_ENV noise reached doctor's output" grep -qF 'setlocale: LC_ALL' <<<"$DR_OUT"
+check "  and a current marker still gets no Check 15 line" \
+  test "$(grep -c 'demo/widget: ' <<<"$DR_OUT")" = "0"
+rmk -- "${WPAIR[@]}" FAIL
+run_doctor "$SHAP"
+check "a FAILED review is a warning of its own" grep -qF "⚠️  $FAILED_RV" <<<"$DR_OUT"
+check "  and not the changed-since-review one" test "$(grep -cF "$STALE_RV" <<<"$DR_OUT")" = "0"
+check "  and it is a warning, never a ❌" test "$(grep -c '^❌.*demo/widget' <<<"$DR_OUT")" = "0"
+cp "$SHAP/widget.keep" "$SHAP/tests/demo/widget.spec.ts"
+printf '// edited again\n' >> "$SHAP/tests/demo/widget.spec.ts"
+run_doctor "$SHAP"
+check "a pair changed since its review is warned as changed" grep -qF "⚠️  $STALE_RV" <<<"$DR_OUT"
+check "  and not as FAILED" test "$(grep -cF "$FAILED_RV" <<<"$DR_OUT")" = "0"
+run_doctor "$SHAP" PATH="$NOSHA:$PATH"
+check "with no working sha256 tool doctor says the attestation could not be checked" \
+  grep -qF "demo/widget: review attestation could not be checked: review-marker: neither sha256sum" <<<"$DR_OUT"
 
 # ------------------------------------------------------------------------------------------
 echo "prod-guard.sh — URL classification"
@@ -849,12 +937,13 @@ echo "doctor awk programs and the bug scripts — on a stamp with sites, areas, 
 # PATH), so everything those programs parse is built here on
 # purpose, and every assertion is on a line the awk output decides.
 #
-# The five programs (skills/doctor/scripts/doctor.sh), and the case that reads each:
+# The five programs (skills/doctor/scripts/doctor.sh, and the review-marker.sh its Check 15 runs),
+# and the case that reads each:
 #   Check 5b  volatility   awk '{print $2}' on the `volatility:` line   → the tier-budget cases
 #   Check 9   unmanifested awk arm extractor over scripts/spec-links.sh → the two arm cases
 #   Check 10  site rows    awk -v q=… (quoted ids, trailing comments)   → the site-routing cases
-#   Check 15  sha256_of    awk '{print $1}' on the digest line          → the review cases
-#   Check 15  marker       awk '{print $2}' on spec_sha256:/test_sha256: → the review cases
+#   Check 15  digest       awk '{print $1}' on the digest line          → the review cases
+#   Check 15  field        awk '{print $2}' on spec_sha256:/test_sha256:/result: → the review cases
 # plus bug-status.sh's status parser and post-run-checks.sh's bug_title.
 #
 # Ordering: nothing here depends on `for (k in arr)` order or on $0/$NF surviving into END, which
@@ -996,10 +1085,11 @@ check "section 6: doctor prints its rollup on the fixture" grep -q '^doctor: ' <
 echo "  -- every doctor awk program ran on real input"
 check_nonzero "the spec-links.sh arm extractor ran" "$(grep -cF 'unmanifested' "$AWKLOG")"
 check_nonzero "the site-row parser ran" "$(grep -cF 'function bare' "$AWKLOG")"
-check_nonzero "sha256_of ran" "$(grep -cF '{print $1}' "$AWKLOG")"
-# `{print $2}` is three programs: the volatility word (once per area file, plus once for the
-# stamped _templates/area.md) and the two marker hashes (once each per reviewed pair). At least
-# three areas + three pairs x two = nine; the template's run makes it ten today.
+check_nonzero "review-marker.sh's digest ran" "$(grep -cF '{print $1}' "$AWKLOG")"
+# `{print $2}` is two programs: the volatility word (once per area file, plus once for the
+# stamped _templates/area.md) and review-marker.sh's field reader. That reads the spec hash for
+# every pair, the test hash when the spec hash matched, and the result when both did: 1 + 2 + 3
+# for coupon, checkout and cart. At least three areas + six = nine; the template's run makes it ten today.
 check "the volatility and marker field extractors ran at least 3 + 3 x 2 times" \
   test "$(grep -cF '{print $2}' "$AWKLOG")" -ge 9
 
