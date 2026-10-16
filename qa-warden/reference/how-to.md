@@ -50,7 +50,8 @@ a relative link.) **Plugin-only reader (no repo checkout)?** Ask `/qa-warden:hel
 Once the reviewer returns a verdict (PASS or FAIL), it writes
 `reports/review/<area>/<feature>.reviewed`, pinned to the hashes of that spec and test. `/qa-warden:doctor`
 (Check 15) then flags any test with no marker, or whose spec or code changed since — so a
-forgotten review shows up the next time anyone runs doctor.
+forgotten review shows up the next time anyone runs doctor. A marker whose review FAILED is
+flagged too, with its own warning, until the test is fixed and reviewed again.
 
 ## Run the suite nightly in CI (~$0, no AI)
 

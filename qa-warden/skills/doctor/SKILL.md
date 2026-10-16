@@ -204,7 +204,8 @@ does not fix anything — each finding names its repair:
   `specs/<area>/<feature>.md` sits outside the assertion contract — write the spec
   (`/qa-warden:new-spec`) or consciously exempt it (move to `tests-legacy/`).
 - **Check 15/15b (review attestation, WARN):** the spec/test pair changed since its
-  `reports/review/<area>/<feature>.reviewed` marker (or was never reviewed), or a
+  `reports/review/<area>/<feature>.reviewed` marker (or was never reviewed), the marker is
+  current but records `result: FAIL` ("reviewed, FAILED" — fix the test, then review again), or a
   `// verified: must_fail_when "…"` stamp no longer matches the spec's invariant text —
   re-run `/qa-warden:review` (and `--verify-invariants` for a stale stamp). Markers are
   agent-writable convenience — this catches *forgotten* reviews, not malicious ones.
