@@ -108,11 +108,16 @@ does not fix anything — each finding names its repair:
   invisible) and `/qa-warden:coverage` dim 0 needs it to avoid the label it used to print, where an
   unmanifested test's routes landed under "touched by NO compiled test (planned, untested)" —
   false for a spec that was authored and compiled, and it sent the reader to write a second
-  spec instead of clearing the blocker the verifier withheld the manifest for. **Arms 1 and 2
-  key on SYMBOLS** — the `unmanifested)` mode name and the `*.metamorphic.spec.ts` exclusion
-  glob. Arm 2 is the one that matters: a twin never carries a manifest BY DESIGN (verifier V4
-  emits one per spec), so a copy that drops the exclusion makes both consumers cry wolf on
-  every twin until someone deletes the section. **Arm 3 keys on the CONSTRUCT** — an existence
+  spec instead of clearing the blocker the verifier withheld the manifest for. The walk under
+  it is `spec-links.sh`'s collected-test inventory (`collected_tests()`), which doctor,
+  coverage and `post-run-checks.sh` read too. **Arms 1 and 2 key on SYMBOLS** — the
+  `unmanifested)` mode name, the `collected_tests()` walk, its `(*.metamorphic)` twin case and
+  the arm's `= twin` skip, and the walk's two `_` exclusions. Arm 2 is the one that matters: a
+  twin never carries a manifest BY DESIGN (verifier V4 emits one per spec), so a copy that drops
+  the skip makes both consumers cry wolf on every twin; a walk that drops a `_` exclusion
+  reports scratch specs Playwright's `testIgnore` never runs. A stamp with no `collected_tests()`
+  predates the inventory (doctor's test/spec checks saw an empty suite): `/qa-warden:init --resync`.
+  **Arm 3 keys on the CONSTRUCT** — an existence
   test on a manifest path built from a variable — and scans **code, not comments**, because an
   ownership check has to name the construct it bans and so matches its own documentation
   otherwise. Fix by calling `scripts/spec-links.sh unmanifested`; never re-derive the walk.
@@ -210,7 +215,8 @@ does not fix anything — each finding names its repair:
   re-run `/qa-warden:review` (and `--verify-invariants` for a stale stamp). Markers are
   agent-writable convenience — this catches *forgotten* reviews, not malicious ones.
 - **Check 16 (smoke-tagged spec with no test, WARN):** a spec declares a `tags: [… smoke …]`
-  scenario but was never compiled — `/qa-warden:run mode=smoke`'s `--grep @smoke` is blind to that P1 flow, so a
+  scenario (spec-level, per-scenario inside `scenarios:`, or a block list; read by
+  `scripts/spec-links.sh`'s one tag parser, so prose never counts) but was never compiled — `/qa-warden:run mode=smoke`'s `--grep @smoke` is blind to that P1 flow, so a
   fully-broken governed path (admin RBAC, checkout charge==total) passes the smoke gate because no
   test exists to fail. Complements Check 3 (which only proves *some* test carries the tag). Compile
   it (`/qa-warden:gen`) or drop the smoke tag from the spec.
