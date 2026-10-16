@@ -1197,7 +1197,10 @@ else
     base=$(spec_base "$spec")
     t="tests/${base}.spec.ts"
     [ -f "$t" ] || continue
-    review_state=$(bash "$REVIEW_MARKER" check "$spec" "$t" 2>&1)
+    # stdout ONLY: the answer is one word there. Folding stderr in let any noise from the shell
+    # itself (a setlocale warning under an LC_ALL that names a missing locale) turn every
+    # reviewed pair into "could not be checked".
+    review_state=$(bash "$REVIEW_MARKER" check "$spec" "$t" 2>/dev/null)
     case "$review_state" in
       current) : ;;
       stale|missing)
@@ -1205,7 +1208,10 @@ else
       failed)
         echo "⚠️  ${base}: reviewed, FAILED — fix and re-run /qa-warden:review"; warn=$((warn+1)) ;;
       *)
-        echo "⚠️  ${base}: review attestation could not be checked: ${review_state}"; warn=$((warn+1)) ;;
+        # Not an answer, so the script refused. It is read-only: run it again for its reason,
+        # the last `review-marker:` line of its stderr.
+        review_why=$(bash "$REVIEW_MARKER" check "$spec" "$t" 2>&1 >/dev/null | grep '^review-marker:' | tail -1)
+        echo "⚠️  ${base}: review attestation could not be checked: ${review_why:-review-marker.sh gave no answer}"; warn=$((warn+1)) ;;
     esac
   done < <(printf '%s\n' "$SPEC_FILES")
 fi
