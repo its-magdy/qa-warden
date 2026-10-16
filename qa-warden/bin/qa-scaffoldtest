@@ -37,6 +37,11 @@
 #                      `## Status History` section, a quoted site id). CI runs this on macOS
 #                      (BSD awk), ubuntu-24.04 (gawk) and, in a second Linux step, with mawk first on
 #                      PATH, so a dialect gap in any of them fails here
+#   7. run verdict     skills/run/scripts/run-verdict.sh turns Playwright's exit code AND its JSON
+#                      into one word (green/red/incomplete/missing/corrupt/zero-test/stale/
+#                      unchecked), checked on fixture JSONs; then run.sh's single, smoke, repeat,
+#                      changed and batch-fix precheck modes run end to end against a stub `npx` on
+#                      PATH that emits a chosen fixture with a chosen exit code (no Playwright)
 #
 # The prod-guard.ts twin is not tested here: qa-hooktest only copies it as a project marker, and
 # running it needs node + Playwright's dependencies, which this test deliberately does not install.
@@ -1104,6 +1109,150 @@ prc_has "the trailer counts 4 open bugs and 1 gap, with nothing stray" \
   "post-run: sentinels=0 stray=0 open-bugs=4 test-gaps=1"
 only=$(cd "$F" && "$BASH" scripts/post-run-checks.sh --only stray 2>&1)
 check_eq "--only stray scans no bugs (what doctor passes)" "post-run: sentinels=0 stray=0 open-bugs=0 test-gaps=0" "$only"
+
+# ------------------------------------------------------------------------------------------
+echo "run.sh — one verdict from Playwright's exit code and its JSON"
+# A stamped project gives run.sh its stamped helpers (check-last-run.sh, resolve-spec-path.sh,
+# post-run-checks.sh). The real Playwright is replaced by a stub `npx` first on PATH: it prints
+# $STUB_JSON (or copies it to $STUB_SINK, the way the config json sink writes last-run.json; an
+# empty $STUB_JSON writes nothing) and exits $STUB_EXIT.
+RUNSH="$here/skills/run/scripts/run.sh"
+VERDICT_SH="$here/skills/run/scripts/run-verdict.sh"
+new_dir; RP="$DIR"
+stamp "$RP"
+mkdir -p "$RP/tests/auth" && : > "$RP/tests/auth/login.spec.ts"
+new_dir; STUB="$DIR"
+cat > "$STUB/npx" <<'EOF'
+#!/bin/sh
+if [ -n "${STUB_JSON:-}" ]; then
+  if [ -n "${STUB_SINK:-}" ]; then cp "$STUB_JSON" "$STUB_SINK"; else cat "$STUB_JSON"; fi
+fi
+exit "${STUB_EXIT:-0}"
+EOF
+chmod +x "$STUB/npx"
+
+# Fixtures. `incomplete` needs no file of its own: it is the green JSON with a non-zero exit.
+new_dir; FX="$DIR"
+printf '%s\n' '{"stats":{"expected":3,"unexpected":0,"skipped":0,"flaky":0,"startTime":"2026-01-01T00:00:00Z"},"suites":[]}' > "$FX/green.json"
+printf '%s\n' '{"stats":{"expected":1,"unexpected":2,"skipped":0,"flaky":0,"startTime":"2026-01-01T00:00:00Z"},"suites":[]}' > "$FX/red.json"
+printf '%s\n' '{"stats":{"expected":0,"unexpected":0,"skipped":0,"flaky":0,"startTime":"2026-01-01T00:00:00Z"},"suites":[]}' > "$FX/zero.json"
+printf '%s\n' '{"suites":[]}' > "$FX/statsless.json"
+printf '%s\n' 'Error: not a report {' > "$FX/corrupt.json"
+cp "$FX/green.json" "$FX/old.json"; touch -t 202001010000 "$FX/old.json"
+
+echo "  -- run_verdict: <word> <total> <failed>"
+# verdict <exit> <json> [max_age] — sources the module in a subshell in the stamped project.
+verdict() {
+  (cd "$RP" && . "$VERDICT_SH" && run_verdict "$1" "$2" "${3:-900}" && echo "$VERDICT $TOTAL $FAILED")
+}
+check_eq "exit 0 + all passed → green"                        "green 3 0"      "$(verdict 0 "$FX/green.json")"
+check_eq "exit 1 + 2 failed → red"                             "red 3 2"        "$(verdict 1 "$FX/red.json")"
+check_eq "exit 1 + 0 failed → incomplete (timeout / crash)"    "incomplete 3 0" "$(verdict 1 "$FX/green.json")"
+check_eq "an empty exit code is not a clean exit"              "incomplete 3 0" "$(verdict '' "$FX/green.json")"
+check_eq "no file → missing"                                   "missing -1 0"   "$(verdict 0 "$FX/absent.json")"
+check_eq "unparseable file → corrupt"                          "corrupt -1 0"   "$(verdict 0 "$FX/corrupt.json")"
+check_eq "a JSON with no .stats → corrupt, never zero-test"    "corrupt -1 0"   "$(verdict 0 "$FX/statsless.json")"
+check_eq "0 resolved tests → zero-test, whatever the exit"     "zero-test 0 0"  "$(verdict 1 "$FX/zero.json")"
+check_eq "older than max_age → stale"                          "stale 3 0"      "$(verdict 0 "$FX/old.json" 900)"
+check_eq "no stamped check-last-run.sh → unchecked" "unchecked -1 0" \
+  "$(cd "$STUB" && . "$VERDICT_SH" && run_verdict 0 "$FX/green.json" 900 && echo "$VERDICT $TOTAL $FAILED")"
+
+# runsh <exit> <fixture|""> <sink|""> <run.sh args...> — output in $ROUT, exit status in $RRC.
+runsh() {
+  local ex=$1 fx=$2 sk=$3; shift 3
+  ROUT=$(cd "$RP" && PATH="$STUB:$PATH" STUB_EXIT=$ex STUB_JSON=$fx STUB_SINK=$sk "$BASH" "$RUNSH" "$@" 2>&1)
+  RRC=$?
+}
+out_has() { check "$1" grep -qF -e "$2" <<<"$ROUT"; }
+
+echo "  -- mode=single"
+runsh 0 "$FX/green.json" "" mode=single auth/login
+check_eq "green: exit 0" "0" "$RRC"
+out_has  "green: names the verdict" "(verdict=green)"
+check    "green: the report lands at reports/headless-auth-login.json" test -s "$RP/reports/headless-auth-login.json"
+runsh 1 "$FX/red.json" "" mode=single auth/login
+check_eq "red: exit 0 (a completed run, the caller summarizes the failures)" "0" "$RRC"
+out_has  "red: names the verdict" "(verdict=red)"
+runsh 1 "$FX/green.json" "" mode=single auth/login
+check_eq "unexpected=0 + exit 1: exit 2" "2" "$RRC"
+out_has  "unexpected=0 + exit 1: incomplete, not green" "the run did NOT complete cleanly"
+runsh 1 "" "" mode=single auth/login
+check_eq "nothing written (empty report): exit 2" "2" "$RRC"
+out_has  "nothing written: corrupt" "(verdict=corrupt)"
+runsh 0 "$FX/zero.json" "" mode=single auth/login
+check_eq "zero tests: exit 2" "2" "$RRC"
+out_has  "zero tests: a resolution error" "resolved no tests"
+runsh 0 "$FX/statsless.json" "" mode=single auth/login
+check_eq "stats-less JSON: exit 2" "2" "$RRC"
+out_has  "stats-less JSON: corrupt" "unparseable JSON"
+
+echo "  -- mode=smoke (the config sink writes artifacts/last-run.json)"
+runsh 0 "$FX/green.json" "artifacts/last-run.json" mode=smoke
+check_eq "green: exit 0" "0" "$RRC"
+out_has  "green: echoes the check-last-run line" "last-run: fresh total=3"
+runsh 1 "$FX/green.json" "artifacts/last-run.json" mode=smoke
+check_eq "unexpected=0 + exit 1: exit 2" "2" "$RRC"
+out_has  "unexpected=0 + exit 1: incomplete, names --max-failures" "timeout / --max-failures / worker crash"
+rm -f "$RP/artifacts/last-run.json"
+runsh 1 "" "" mode=smoke
+check_eq "no last-run.json: exit 2" "2" "$RRC"
+out_has  "no last-run.json: no report" "produced NO report"
+cp "$FX/old.json" "$RP/artifacts/last-run.json"; touch -t 202001010000 "$RP/artifacts/last-run.json"
+runsh 1 "" "" mode=smoke
+check_eq "a previous run's last-run.json (aborted run): exit 2" "2" "$RRC"
+out_has  "a previous run's last-run.json: stale, not summarized" "Do NOT summarize the stale file"
+runsh 0 "$FX/zero.json" "artifacts/last-run.json" mode=smoke
+check_eq "zero tests: exit 2" "2" "$RRC"
+out_has  "zero tests: --grep @smoke matched nothing" "resolved NO tests"
+
+echo "  -- mode=repeat"
+runsh 1 "$FX/red.json" "" mode=repeat auth/login 3
+check_eq "red: exit 0 (a flaky result is a result)" "0" "$RRC"
+out_has  "red: prints the aggregate" '"failed": 2'
+runsh 1 "$FX/green.json" "" mode=repeat auth/login 3
+check_eq "unexpected=0 + exit 1: exit 2 (never 100% stable)" "2" "$RRC"
+out_has  "unexpected=0 + exit 1: incomplete" "the run did NOT complete cleanly"
+runsh 0 "$FX/corrupt.json" "" mode=repeat auth/login 3
+check_eq "corrupt: exit 2" "2" "$RRC"
+out_has  "corrupt: no stability measured" "(verdict=corrupt)"
+
+echo "  -- mode=changed"
+git -C "$RP" -c user.name=qa -c user.email=qa@example.invalid commit -q --allow-empty -m base >/dev/null 2>&1
+runsh 0 "$FX/zero.json" "" mode=changed
+check_eq "nothing selected: exit 0" "0" "$RRC"
+out_has  "nothing selected: says it is not a pass" "NOTHING SELECTED"
+runsh 1 "$FX/green.json" "" mode=changed
+check_eq "unexpected=0 + exit 1: exit 2" "2" "$RRC"
+out_has  "unexpected=0 + exit 1: incomplete" "the run did NOT complete cleanly"
+
+echo "  -- precheck (/qa-warden:batch-fix step 1)"
+runsh 1 "$FX/red.json" "" precheck tests/auth
+check_eq "red: exit 0, batch-fix proceeds" "0" "$RRC"
+out_has  "red: matched and failing counts" "filter matched 3 test(s); 2 failing — proceed to step 2."
+check_eq "red without a heal log: no signature block" "0" "$(grep -c 'heal-log signatures' <<<"$ROUT")"
+printf '%s\n' '{"classification":"broken-locator","root_cause":"button renamed","spec":"auth/login"}' \
+  '{"classification":"broken-locator","root_cause":"button renamed","spec":"auth/logout"}' > "$RP/artifacts/heal-log.jsonl"
+runsh 1 "$FX/red.json" "" precheck tests/auth
+out_has  "red with a heal log: the top signature, grouped" '"signature": "broken-locator | button renamed"'
+out_has  "red with a heal log: its count" '"count": 2'
+runsh 0 "$FX/green.json" "" precheck tests/auth
+check_eq "green: exit 1, batch-fix stops" "1" "$RRC"
+out_has  "green: nothing to fix" "0 failing — nothing to fix"
+runsh 1 "$FX/green.json" "" precheck tests/auth
+check_eq "unexpected=0 + exit 1: exit 2, not 'nothing to fix'" "2" "$RRC"
+out_has  "unexpected=0 + exit 1: incomplete" "the run did NOT complete cleanly"
+check_eq "unexpected=0 + exit 1: never says nothing to fix" "0" "$(grep -c 'nothing to fix' <<<"$ROUT")"
+runsh 1 "$FX/zero.json" "" precheck tests/nowhere
+check_eq "zero tests: exit 1" "1" "$RRC"
+out_has  "zero tests: the pattern resolved to nothing" "filter matched 0 tests"
+runsh 1 "" "" precheck tests/auth
+check_eq "nothing written: exit 2" "2" "$RRC"
+out_has  "nothing written: Playwright failed to start, not nothing matched" "Playwright failed to start"
+runsh 0 "$FX/statsless.json" "" precheck tests/auth
+check_eq "stats-less JSON: exit 2, never 'matched nothing'" "2" "$RRC"
+runsh 0 "$FX/green.json" "" precheck
+check_eq "no filter: exit 2 (would run the whole suite)" "2" "$RRC"
+check    "stderr goes to its own .log, never into the .json" test -f "$RP/artifacts/batch-fix-precheck.log"
 
 echo "---"
 if [ "$bad" -ne 0 ]; then echo "qa-scaffoldtest: ❌ $bad of $((pass+bad)) cases FAILED"; exit 1; fi

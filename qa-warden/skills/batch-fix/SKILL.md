@@ -2,6 +2,7 @@
 description: Apply a single healer pattern fix across every failing test matching a path-or-substring filter.
 argument-hint: <path-or-filter (a dir or substring Playwright filters on, e.g. tests/checkout)>
 disable-model-invocation: true
+allowed-tools: Bash(bash "${CLAUDE_SKILL_DIR}/../run/scripts/run.sh" *)
 ---
 
 Apply a single healer pattern fix across every test matching `$ARGUMENTS`
@@ -32,55 +33,30 @@ Workflow:
    and may not include these specs at all, so aborting on "zero matches in last-run" can
    skip a genuinely-red batch. Run the filter fresh and in the foreground — a backgrounded
    run is lost when a headless turn ends, and the healer then starts from nothing (run-01,
-   O-64) — then work from THAT result:
+   O-64) — then work from THAT result. Run exactly this one command, as its own Bash call (the
+   `allowed-tools` rule above pre-approves exactly this form; an inline shell block would not
+   match it and is denied headless):
    ```bash
-   # zsh (this host's default Bash-tool shell) doesn't word-split unquoted vars and
-   # doesn't glob-expand `**` in a variable — Playwright's filter is a path
-   # substring/regex, NOT a shell glob, so prefer a directory or substring
-   # (`/qa-warden:batch-fix tests/checkout`). Force word-splitting; no-op in bash.
-   [ -n "${ZSH_VERSION:-}" ] && setopt shwordsplit 2>/dev/null
-   set -- $ARGUMENTS
-   ARG="${1:?usage: /qa-warden:batch-fix <path-or-substring>}"  # required; fail loudly — an empty
-   # invocation would run the WHOLE suite and step 2 would "diagnose a pattern" across
-   # every unrelated failure in the project (maximum blast radius for a batch tool).
-   mkdir -p artifacts  # guard: the redirect target dir MUST exist first (F-S05) — sibling /qa-warden:run mode=repeat
-   # does the same. Without it, on a fresh project the `> artifacts/…json` write fails, `2>/dev/null` eats
-   # the error, jq reads an absent file → MATCHED=0 → a FALSE "nothing matched" abort on a genuinely-red batch.
-   npx playwright test "$ARG" --retries=0 --reporter=json > artifacts/batch-fix-precheck.json 2>/dev/null || true
-   # Existence / corrupt / zero-test discrimination — single-sourced in
-   # scripts/check-last-run.sh (F-37/F-39 class: `.stats.expected` counts only PASSED
-   # tests; the script's total is expected+unexpected+skipped+flaky, and corrupt/statless
-   # JSON reads as rc 4 / total=-1, NEVER as 0 — the old inline `${EXPECTED:-0}` arithmetic
-   # turned corrupt JSON into a FALSE "nothing matched" abort on a genuinely-red batch).
-   # 900s max_age only needs to accept the just-written file.
-   LR=$(bash scripts/check-last-run.sh artifacts/batch-fix-precheck.json 900); lr_rc=$?
-   MATCHED=${LR##*total=}; MATCHED=${MATCHED%% *}   # parse total=N off the canonical `last-run:` line
-   case "$lr_rc" in
-     3|4)
-       # PW never started (bad globalSetup / prod-guard throw / no valid JSON).
-       echo "precheck produced no valid JSON — Playwright failed to start (globalSetup/prod-guard/config?). Fix that first; do NOT read this as 'nothing matched' and do NOT proceed to step 2." >&2
-       # STOP here — error state, not a zero-match. The stats arm below is skipped entirely.
-       ;;
-     5)
-       echo "filter matched 0 tests — the pattern resolved to nothing; stop." ;;
-     0|6)   # 6 (stale) is unreachable for a just-written file; keep it in the proceed arm
-       # Only FAILED still needs a direct jq read — the script has no per-bucket output;
-       # `${FAILED:-0}` is safe HERE because the corrupt case was already excluded by rc.
-       FAILED=$(jq '.stats.unexpected // 0' artifacts/batch-fix-precheck.json 2>/dev/null); FAILED=${FAILED:-0}
-       echo "filter matched ${MATCHED} test(s); ${FAILED} failing"
-       # Cluster hint from heal telemetry (healer.md §"Heal telemetry"). Tolerant of an absent
-       # log; top-5 signatures = the pattern this batch likely shares.
-       [ -f artifacts/heal-log.jsonl ] && jq -s 'group_by(.classification + "|" + .root_cause) | map({signature: (.[0].classification + " | " + .[0].root_cause), count: length, specs: (map(.spec) | unique)}) | sort_by(-.count) | .[:5]' artifacts/heal-log.jsonl 2>/dev/null || true
-       ;;
-   esac
+   bash "${CLAUDE_SKILL_DIR}/../run/scripts/run.sh" precheck $ARGUMENTS
    ```
-   If the filter matched **zero tests** (`MATCHED == 0`, i.e. expected+unexpected+skipped+flaky == 0),
-   say the pattern resolved to nothing and stop. **Do NOT gate this on `stats.expected == 0`** — an
-   all-failing batch (every matched test red) has `expected == 0` but `unexpected > 0`, and gating on
-   `expected` would abort on the exact all-red batch this command exists to fix (F-39), which bites
-   hardest at the recommended narrow scope (`/qa-warden:batch-fix tests/<area>`). If it matched tests but
-   **none are failing** (`FAILED == 0 && MATCHED > 0`), report "nothing to fix" — do not invent a
-   patch. Only proceed to step 2 when `FAILED > 0` (≥1 real current failure).
+   The `precheck` mode of `/qa-warden:run`'s script runs the filter (`--retries=0`, JSON to
+   `artifacts/batch-fix-precheck.json`, stderr to `.log`, never touching `last-run.json`), reads
+   Playwright's exit code AND the JSON as one verdict, and prints a `run(precheck): … (verdict=<word>)`
+   line plus what to do. Act on its exit code:
+   - **`0` — verdict `red`:** `filter matched N test(s); M failing — proceed to step 2`, followed by
+     the top heal-log signatures (`artifacts/heal-log.jsonl`) when that log exists — the pattern
+     this batch likely shares. Only this proceeds.
+   - **`1` — verdict `green` or `zero-test`:** matched tests but none failing → report "nothing to
+     fix" and do not invent a patch; or the filter resolved to nothing → say so and stop. The match
+     count is every resolved test (expected+unexpected+skipped+flaky), so an all-red batch never
+     reads as "matched nothing" (F-39).
+   - **`2` — anything else** (`incomplete`: Playwright exited non-zero with 0 failures recorded — a
+     timeout or worker crash; `missing`/`corrupt`: it never started — globalSetup/prod-guard/config;
+     a missing filter): relay the printed reason and stop. This is NOT "nothing to fix" and NOT
+     "nothing matched" — do NOT proceed to step 2.
+
+   The filter is a path prefix or substring Playwright matches, NOT a shell glob — prefer a
+   directory (`/qa-warden:batch-fix tests/checkout`).
 2. **Delegate to the `healer` subagent** to triage ONE representative failure
    end-to-end (trace, MCP replay, root cause) and extract the minimal
    selector/wait patch — do NOT triage inline; the bounded healer sandbox/turn-budget is the point. **If the healer returns a
