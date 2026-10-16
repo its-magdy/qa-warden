@@ -57,7 +57,7 @@ re-derive, re-implement, or "improve" any dimension inline here.** It is pre-app
 skill's `allowed-tools`, so it runs without a permission prompt; run it exactly as written
 above (a rewritten invocation loses the grant and prompts).
 
-**Exit codes:** `2` = the script refused (a bogus `area=`, a missing `scripts/spec-links.sh`, or a missing/empty `scripts/oracle-keys.txt`) —
+**Exit codes:** `2` = the script refused (a bogus `area=`, a missing `scripts/spec-links.sh` or one that predates its `specs` inventory, or a missing/empty `scripts/oracle-keys.txt`) —
 relay its ERROR line and STOP; it is *not* a gap-free result. Any other non-zero, or absent
 optional inputs, degrade gracefully: format whatever dimensions produced output.
 

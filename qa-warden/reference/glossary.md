@@ -138,7 +138,9 @@ browser's time, and `test lock:` serialises specs that share one piece of server
 a spec say "when the payment API is down…" without hand-written code.
 
 **smoke** — the fast nightly gate. Tests tagged `@smoke` are what `/qa-warden:run mode=smoke` runs; the
-primary happy-path of a critical feature must be `@smoke`.
+primary happy-path of a critical feature must be `@smoke`. Which **specs** put a scenario on the
+gate is answered in one place, `scripts/spec-links.sh smoke`: a `tags:` key listing `smoke`,
+spec-level or per-scenario, never a prose mention.
 
 **spec** — the human-readable Markdown contract in `specs/<area>/<feature>.md` (prose +
 a fenced YAML oracle block). AI writes it; a human can read it. Not the compiled test — see

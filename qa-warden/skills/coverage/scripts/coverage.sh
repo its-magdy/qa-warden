@@ -7,7 +7,7 @@
 # root (cwd), not from the plugin dir — every path below is project-relative.
 #
 # Usage: bash coverage.sh "[area=<name>] [site=<id>]"
-# Exit 2 = the script refused (a bogus area=, a missing scripts/spec-links.sh, or a missing/empty
+# Exit 2 = the script refused (a bogus area=, a missing or pre-inventory scripts/spec-links.sh, or a missing/empty
 # scripts/oracle-keys.txt), NOT a gap-free result.
 # NOTE: deliberately NO `set -euo pipefail`. Every dimension must DEGRADE GRACEFULLY on
 # absent optional inputs (basis/cases/manifests are all optional); -e or -u would abort the
@@ -39,9 +39,25 @@ COV_FILTER="."
 # are OPTIONAL, and dims 1b/2 already ignore `site=`) would false-RED abort a fully computable report.
 # So gate on area only; a site= degrades gracefully (feature dims still compute) with a soft WARN below.
 AREA_FILTER="."; [ -n "$AREA" ] && AREA_FILTER="/${AREA}/"
+# scripts/spec-links.sh owns the basis<->spec link index that dims 1, 5 and 6 (and the
+# `unmanifested` walk) are computed FROM, and the authored-spec inventory dims 1b and 2 read.
+# Without it those dimensions print ZERO rows — which reads exactly like "no gaps". Refuse
+# instead of emitting a partial report: an empty section is this command's one unforgivable output.
+if [ ! -f scripts/spec-links.sh ]; then
+  echo "ERROR: scripts/spec-links.sh missing — dims 1, 5 and 6 cannot be computed and would print EMPTY (a false clean). Substrate predates it; run /qa-warden:init --resync, then re-run. This is NOT a gap-free result."
+  exit 2
+fi
 # Two shared tree walks, hoisted here because the presence gate is their first consumer and each
-# was previously re-run per dimension: AUTHORED_SPECS (dims 1b, 2) and BASIS_FILES (dims 1, 6).
-AUTHORED_SPECS=$(find specs -name '*.md' ! -path 'specs/_context/*' 2>/dev/null)
+# was previously re-run per dimension: the authored specs (dims 1b, 2) and BASIS_FILES (dims 1, 6).
+# SPEC_INV is scripts/spec-links.sh's `specs` inventory — one row per authored spec,
+# `<spec> <base> <test|-> <smoke|-> <basis|->` — so the spec->test pairing, the `_` scratch
+# exclusion and the smoke-tag parse are the same ones doctor Checks 15-17 read. A stamp that
+# predates the mode exits 2 on it; refuse then too, for the same reason as above.
+if ! SPEC_INV=$(bash scripts/spec-links.sh specs 2>/dev/null); then
+  echo "ERROR: scripts/spec-links.sh has no \`specs\` inventory — the stamp predates it, so dims 1b and 2 would print EMPTY (a false clean). Run /qa-warden:init --resync, then re-run. This is NOT a gap-free result."
+  exit 2
+fi
+AUTHORED_SPECS=$(printf '%s\n' "$SPEC_INV" | cut -f1 | grep -v '^$')
 BASIS_FILES=$(find specs/_context -name '*.basis.md' 2>/dev/null)
 if [ -n "$AREA" ]; then
   if ! printf '%s\n%s\n' "$AUTHORED_SPECS" "$BASIS_FILES" | grep -qE "$AREA_FILTER"; then
@@ -53,14 +69,6 @@ fi
 # feature dimensions stay fully computable, so WARN and degrade (never hard-abort on absent optional context).
 if [ -n "$SITE" ] && [ ! -d "specs/_context/$SITE" ]; then
   echo "WARN: site=$SITE has no specs/_context/$SITE/ directory — check the site name (the basis-derived dim-1 rows will be empty for it); feature dimensions are still computed."
-fi
-# scripts/spec-links.sh owns the basis<->spec link index that dims 1, 5 and 6 (and the
-# `unmanifested` walk) are computed FROM. Without it those dimensions print ZERO rows — which
-# reads exactly like "no gaps". Refuse instead of emitting a partial report: an empty section
-# is this command's one unforgivable output.
-if [ ! -f scripts/spec-links.sh ]; then
-  echo "ERROR: scripts/spec-links.sh missing — dims 1, 5 and 6 cannot be computed and would print EMPTY (a false clean). Substrate predates it; run /qa-warden:init --resync, then re-run. This is NOT a gap-free result."
-  exit 2
 fi
 # The closed oracle vocabulary is READ from scripts/oracle-keys.txt (the stamped manifest: one
 # key per line, `#` comments and blank lines ignored; the same parse doctor Check 2 uses), not
@@ -199,11 +207,14 @@ echo "== 1b. Spec-without-test — an authored spec that never compiled to a .sp
 # filter on the area-only AREA_FILTER here. COV_FILTER's /${SITE}/${AREA}/ form matches NO authored
 # spec path, so a site=-only run would silently filter this dimension to empty and print a false
 # "no spec-without-test gaps" — the exact critical blind spot this dimension exists to catch.
-printf '%s\n' "$AUTHORED_SPECS" | grep -E "$AREA_FILTER" | while read -r spec; do
-  feat="${spec#specs/}"; feat="${feat%.md}"
-  [ -f "tests/${feat}.spec.ts" ] && continue
-  smoke=""; grep -qE '@?smoke\b' "$spec" 2>/dev/null && smoke="  ← @smoke: the smoke GATE is blind to this un-compiled spec — a fully-broken feature hides behind 'no test to fail'"
-  echo "  ⚠ GAP spec-without-test: $spec → no tests/${feat}.spec.ts${smoke}"
+# Read off SPEC_INV: the test column is the paired tests/<base>.spec.ts (or `-`), and the smoke
+# column is the ONE tag parser's answer (spec-links.sh rule 5: the YAML `tags:` key, inline,
+# per-scenario or block list). The `@?smoke` grep this replaced matched the word ANYWHERE, so a
+# spec saying "this is not a smoke test" was flagged as blinding the smoke gate.
+printf '%s\n' "$SPEC_INV" | awk -F'\t' -v re="$AREA_FILTER" '$1 ~ re' | while IFS=$'\t' read -r spec base t smoke basis; do
+  [ "$t" = - ] || continue
+  sm=""; [ "$smoke" = smoke ] && sm="  ← @smoke: the smoke GATE is blind to this un-compiled spec — a fully-broken feature hides behind 'no test to fail'"
+  echo "  ⚠ GAP spec-without-test: $spec → no tests/${base}.spec.ts${sm}"
 done
 echo "  (none above = every authored spec has a compiled test; run /qa-warden:gen on any listed spec)"
 

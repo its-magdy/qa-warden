@@ -50,20 +50,18 @@ done < <(find artifacts -maxdepth 1 -name '.healer-needs-*' -type f 2>/dev/null)
 # unmanaged spec (no paired specs/<base>.md — e.g. a `tests/_demo/failure-demo.spec.ts` left after
 # a trace-capture demo) is invisible to this run's stats yet WILL run, and can fail, in a full
 # suite: the green being reported is not the full-suite truth.
-# EXCLUDE `_`-prefixed scratch specs in BOTH forms — basename AND directory segment — in lockstep
-# with playwright.config.ts's `testIgnore: ['**/_*.spec.ts','**/_*/**']`. `-path '*/_*/*'` alone
-# catches only a `_`-prefixed DIRECTORY; a `_`-prefixed BASENAME at the tests/ root (the sanctioned
-# /qa-warden:review url=<url> throwaway `tests/_audit-visual.spec.ts`) has just ONE slash and never matches it. Without
-# both, the warning below is FACTUALLY WRONG for that file — it claims a full run "WILL run it" when
-# testIgnore provably drops it from collection, and a false alarm trains readers to ignore a warning
+# The tests read here are scripts/spec-links.sh's collected-test inventory (`tests`, its header
+# rule 4), which applies playwright.config.ts's testIgnore — `_`-prefixed scratch specs, basename
+# AND directory form, are already gone — and pairs a twin with its parent's spec. Without the `_`
+# exclusion the warning below is FACTUALLY WRONG for a scratch file: it claims a full run "WILL
+# run it" when testIgnore provably drops it, and a false alarm trains readers to ignore a warning
 # whose whole job is catching a genuinely stray spec.
-enabled stray && while IFS= read -r t; do
+enabled stray && while IFS=$'\t' read -r t base kind spec mf; do
   [ -n "$t" ] || continue
-  rel="${t#tests/}"; base="${rel%.spec.ts}"; base="${base%.metamorphic}"   # twins pair by stripping .metamorphic
-  [ -f "specs/${base}.md" ] && continue
+  [ "$spec" = - ] || continue
   echo "$PREFIX unmanaged spec $t — no specs/${base}.md, so it sits outside the assertion contract. It is not in this run's lane, but a full 'npx playwright test' WILL collect it: qualify the go/no-go. Delete the stray spec (or pair it with a spec) and run /qa-warden:doctor."
   n_stray=$((n_stray+1))
-done < <(find tests -name '*.spec.ts' -type f ! -name '_*' ! -path '*/_*/*' 2>/dev/null)
+done < <(bash scripts/spec-links.sh tests 2>/dev/null)
 
 # (3) Parked open-bug surfacing (F-17/F-19) — Playwright folds conditional `test.fail` xfails into
 # the `expected` count, and a `test.fixme` in a lane this run didn't grep leaves NO trace in the

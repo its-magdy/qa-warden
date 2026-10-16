@@ -40,6 +40,11 @@
 #                      `## Status History` section, a quoted site id). CI runs this on macOS
 #                      (BSD awk), ubuntu-24.04 (gawk) and, in a second Linux step, with mawk first on
 #                      PATH, so a dialect gap in any of them fails here
+#   7. test inventory  scripts/spec-links.sh `tests` / `specs` / `smoke` / `unmanifested` on a
+#      + smoke tags    fixture with `_`-prefixed scratch specs (file and directory), a metamorphic
+#                      twin, a fanned spec and all three YAML smoke-tag forms plus a prose
+#                      mention; and that doctor, /qa-warden:coverage, /qa-warden:impact and
+#                      post-run-checks.sh read that one inventory (no `_` file reported anywhere)
 #
 # The prod-guard.ts twin is not tested here: qa-hooktest only copies it as a project marker, and
 # running it needs node + Playwright's dependencies, which this test deliberately does not install.
@@ -937,14 +942,17 @@ echo "doctor awk programs and the bug scripts — on a stamp with sites, areas, 
 # PATH), so everything those programs parse is built here on
 # purpose, and every assertion is on a line the awk output decides.
 #
-# The five programs (skills/doctor/scripts/doctor.sh, and the review-marker.sh its Check 15 runs),
-# and the case that reads each:
+# The six programs (skills/doctor/scripts/doctor.sh, and the review-marker.sh its Check 15 runs),
+# and the case that reads each (the Check 13 and 16 lookups into the test inventory run on the
+# section-7 fixture instead):
 #   Check 5b  volatility   awk '{print $2}' on the `volatility:` line   → the tier-budget cases
-#   Check 9   unmanifested awk arm extractor over scripts/spec-links.sh → the two arm cases
+#   Check 9   unmanifested awk arm + collected_tests() walk extractors over scripts/spec-links.sh
+#                                                                          → the arm and walk cases
 #   Check 10  site rows    awk -v q=… (quoted ids, trailing comments)   → the site-routing cases
 #   Check 15  digest       awk '{print $1}' on the digest line          → the review cases
 #   Check 15  field        awk '{print $2}' on spec_sha256:/test_sha256:/result: → the review cases
-# plus bug-status.sh's status parser and post-run-checks.sh's bug_title.
+# plus bug-status.sh's status parser, post-run-checks.sh's bug_title, and spec-links.sh's
+# spec_scan (the smoke-tag + basis reader every doctor run goes through; section 7 asserts it).
 #
 # Ordering: nothing here depends on `for (k in arr)` order or on $0/$NF surviving into END, which
 # BSD awk, gawk and mawk treat differently. Where the order of a listing is not the contract it is sorted.
@@ -1084,6 +1092,8 @@ check "section 6: doctor prints its rollup on the fixture" grep -q '^doctor: ' <
 
 echo "  -- every doctor awk program ran on real input"
 check_nonzero "the spec-links.sh arm extractor ran" "$(grep -cF 'unmanifested' "$AWKLOG")"
+check_nonzero "the spec-links.sh walk extractor ran" "$(grep -cF 'collected_tests' "$AWKLOG")"
+check_nonzero "the spec-links.sh spec scanner (smoke + basis) ran" "$(grep -cF 'function smoketok' "$AWKLOG")"
 check_nonzero "the site-row parser ran" "$(grep -cF 'function bare' "$AWKLOG")"
 check_nonzero "review-marker.sh's digest ran" "$(grep -cF '{print $1}' "$AWKLOG")"
 # `{print $2}` is two programs: the volatility word (once per area file, plus once for the
@@ -1124,17 +1134,29 @@ echo "  -- Check 9: the spec-links.sh arm extractor"
 DR_OUT=$unset_out
 dr_lacks "an intact spec-links.sh has an unmanifested arm" 'has no `unmanifested)` arm'
 dr_lacks "  and its arm excludes the metamorphic twins" 'no longer excludes'
+dr_lacks "  and its walk excludes the scratch specs" 'no longer excludes `_`-prefixed'
+dr_lacks "  and the stamp carries the shared walk" 'has no collected_tests() walk'
 SL="$F/scripts/spec-links.sh"
 cp "$SL" "$SL.keep"
-sed 's/\*\.metamorphic\.spec\.ts/*.twin.spec.ts/' "$SL.keep" > "$SL"
-# The word must still occur in the file, but after the arm ends: an extractor that runs past the
-# arm's closing `;;` would find it there and call the arm fine.
-printf '# metamorphic twins are handled elsewhere\n' >> "$SL"
-check "precondition: the edit renamed the one exclusion inside the arm" \
-  test "$(grep -c -e '\*\.twin\.spec\.ts' "$SL")" = "1"
+sed 's/(\*\.metamorphic)/(*.twinless)/' "$SL.keep" > "$SL"
+# The symbol must still occur in the file, but after the walk ends: an extractor that runs past
+# the function's closing `}` would find it there and call the walk fine.
+printf '# (*.metamorphic) twins are handled elsewhere\n' >> "$SL"
+check "precondition: the edit renamed the one twin case inside the walk" \
+  test "$(grep -c -e '(\*\.twinless)' "$SL")" = "1"
 run_doctor "$F"
-dr_has "an arm that stopped excluding the twins is reported" 'no longer excludes *.metamorphic.spec.ts'
+dr_has "a walk that stopped marking the twins is reported" 'no longer excludes *.metamorphic.spec.ts'
 dr_lacks "  and is not mistaken for a missing arm" 'has no `unmanifested)` arm'
+sed "/^  find tests /s/ ! -name '_\*' ! -path / ! -path /" "$SL.keep" > "$SL"
+check "precondition: the edit dropped the basename exclusion from the one walk" \
+  test "$(grep -c -e "! -name '_\*'" "$SL")" = "$(( $(grep -c -e "! -name '_\*'" "$SL.keep") - 1 ))"
+run_doctor "$F"
+dr_has "a walk that stopped excluding _-prefixed scratch specs is reported" 'no longer excludes `_`-prefixed scratch specs'
+sed 's/^collected_tests()/collected_tests_gone()/' "$SL.keep" > "$SL"
+run_doctor "$F"
+dr_has "a stamp that predates the shared walk is reported, with the resync remedy" \
+  'has no collected_tests() walk — the stamp predates the shared test inventory'
+check_eq "  once, not once per arm" "1" "$(grep -c 'scripts/spec-links.sh' <<<"$(grep '^❌' <<<"$DR_OUT")")"
 sed 's/^  unmanifested)/  unmanifested-gone)/' "$SL.keep" > "$SL"
 run_doctor "$F"
 dr_has "a spec-links.sh with no unmanifested arm is reported" 'scripts/spec-links.sh has no `unmanifested)` arm'
@@ -1194,6 +1216,131 @@ prc_has "the trailer counts 4 open bugs and 1 gap, with nothing stray" \
   "post-run: sentinels=0 stray=0 open-bugs=4 test-gaps=1"
 only=$(cd "$F" && "$BASH" scripts/post-run-checks.sh --only stray 2>&1)
 check_eq "--only stray scans no bugs (what doctor passes)" "post-run: sentinels=0 stray=0 open-bugs=0 test-gaps=0" "$only"
+
+# ------------------------------------------------------------------------------------------
+echo "the test inventory and the smoke-tag parser (scripts/spec-links.sh) — and every reader of them"
+# Three `find tests` walks used to disagree (only two applied playwright.config.ts's `_` testIgnore,
+# so /qa-warden:impact and /qa-warden:coverage listed tests/_demo/… files Playwright never runs), and
+# two smoke parsers did too (coverage counted a prose "not a smoke test"; doctor missed the
+# per-scenario and block-list forms). The fixture carries every case that told them apart.
+COVERAGE="$here/skills/coverage/scripts/coverage.sh"
+IMPACT="$here/skills/impact/scripts/impact.sh"
+new_dir; G=$DIR
+stamp "$G"
+check_eq "section 7: the stamp this fixture is built on exits 0" "0" "$RC"
+mkdir -p "$G/specs/shop" "$G/specs/_drafts" "$G/tests/shop/_probe" "$G/tests/_demo" \
+         "$G/artifacts/route-manifests/shop" "$G/specs/_context/shop/shop"
+# Inline tags, a compiled test, its metamorphic twin and a manifest.
+printf 'name: cart\ntags: [smoke, regression]\n' > "$G/specs/shop/cart.md"
+printf "test('cart @smoke', async () => {});\n" > "$G/tests/shop/cart.spec.ts"
+printf "test('cart twin @regression', async () => {});\n" > "$G/tests/shop/cart.metamorphic.spec.ts"
+printf '{"routes":["/cart"],"area":"shop","spec":"specs/shop/cart.md"}\n' > "$G/artifacts/route-manifests/shop/cart.json"
+# A compiled test with no manifest, and a fanned spec back-linking it (smoke, no test of its own).
+printf 'name: login\ntags: [regression]\n' > "$G/specs/shop/login.md"
+printf "test('login @regression', async () => {});\n" > "$G/tests/shop/login.spec.ts"
+printf 'basis: shop/login   # fanned from the login checklist\nname: login-locked\ntags: ["@smoke"]\n' \
+  > "$G/specs/shop/login-locked.md"
+# The per-scenario flow form the test-case contract requires for a multi-scenario spec; no test.
+printf 'name: pay\nscenarios: [{ name: "ok", data: { n: 1 }, tags: [smoke] }, { name: "bad", tags: [regression] }]\n' \
+  > "$G/specs/shop/pay.md"
+# The block-list form, under a scenario; no test.
+printf 'name: refund\nscenarios:\n  - name: ok\n    tags:\n      - smoke\n  - name: late\n    tags:\n      - regression\n' \
+  > "$G/specs/shop/refund.md"
+# Prose and a comment that mention smoke, and a regression tag; no test. Must NOT count as smoke.
+printf 'name: search\n# Not a smoke test: @smoke was dropped.\nThis is not a smoke test; see tags: [smoke] in cart.\ntags: [regression]  # smoke later\n' \
+  > "$G/specs/shop/search.md"
+# A genuinely stray test (no spec), so the stray scan is shown to still fire.
+printf "test('orphan @regression', async () => {});\n" > "$G/tests/shop/orphan.spec.ts"
+# Scratch files Playwright's testIgnore drops: a `_` basename, a `_` dir under an area, a `_` dir
+# at the tests/ root, and a `_` spec dir. None has a spec or a manifest; all carry @smoke.
+for t in tests/shop/_scratch.spec.ts tests/shop/_probe/x.spec.ts tests/_demo/failure-demo.spec.ts; do
+  printf "test('scratch @smoke', async () => {});\n" > "$G/$t"
+done
+printf 'name: draft\ntags: [smoke]\n' > "$G/specs/_drafts/draft.md"
+# The four scratch names, for the "reported nowhere" cases below. Matched by name rather than by
+# `/_`, which the stamp's own specs/_context/ paths would hit.
+SCRATCH_RE='_scratch|_probe|_demo|_drafts'
+# A mutating basis for shop/cart, so Check 13 resolves the spec AND its twin through the inventory.
+printf 'feature: shop/cart\ntest_data:\n  mutates_server_state: true\n' > "$G/specs/_context/shop/shop/cart.basis.md"
+
+sl() { (cd "$G" && "$1" scripts/spec-links.sh "$2" 2>&1); }
+TAB=$'\t'
+echo "  -- spec-links.sh tests / specs / smoke / unmanifested"
+check_eq "tests: the collected tests only, twin marked and paired, - for a missing spec/manifest" \
+  "tests/shop/cart.metamorphic.spec.ts${TAB}shop/cart${TAB}twin${TAB}specs/shop/cart.md${TAB}artifacts/route-manifests/shop/cart.json
+tests/shop/cart.spec.ts${TAB}shop/cart${TAB}spec${TAB}specs/shop/cart.md${TAB}artifacts/route-manifests/shop/cart.json
+tests/shop/login.spec.ts${TAB}shop/login${TAB}spec${TAB}specs/shop/login.md${TAB}-
+tests/shop/orphan.spec.ts${TAB}shop/orphan${TAB}spec${TAB}-${TAB}-" \
+  "$(sl "$BASH" tests | sort)"
+check_eq "specs: the authored specs only, with test, smoke and basis columns" \
+  "specs/shop/cart.md${TAB}shop/cart${TAB}tests/shop/cart.spec.ts${TAB}smoke${TAB}-
+specs/shop/login-locked.md${TAB}shop/login-locked${TAB}-${TAB}smoke${TAB}shop/login
+specs/shop/login.md${TAB}shop/login${TAB}tests/shop/login.spec.ts${TAB}-${TAB}-
+specs/shop/pay.md${TAB}shop/pay${TAB}-${TAB}smoke${TAB}-
+specs/shop/refund.md${TAB}shop/refund${TAB}-${TAB}smoke${TAB}-
+specs/shop/search.md${TAB}shop/search${TAB}-${TAB}-${TAB}-" \
+  "$(sl "$BASH" specs | sort)"
+check_eq "smoke: inline, quoted-@, per-scenario and block-list forms count; prose and comments do not" \
+  "specs/shop/cart.md
+specs/shop/login-locked.md
+specs/shop/pay.md
+specs/shop/refund.md" \
+  "$(sl "$BASH" smoke | sort)"
+check_eq "unmanifested: no twin, no scratch spec" \
+  "tests/shop/login.spec.ts${TAB}shop/login
+tests/shop/orphan.spec.ts${TAB}shop/orphan" \
+  "$(sl "$BASH" unmanifested | sort)"
+# The stamped file is `#!/bin/sh`; on Linux that is dash, which is where a bash-ism would show.
+for m in tests specs smoke unmanifested; do
+  check_eq "  /bin/sh gives the same $m answer" "$(sl "$BASH" $m | sort)" "$(sl /bin/sh $m | sort)"
+done
+check_eq "an unknown mode exits 2 (what coverage keys its old-stamp refusal on)" "2" \
+  "$(cd "$G" && "$BASH" scripts/spec-links.sh no-such-mode >/dev/null 2>&1; echo $?)"
+
+echo "  -- doctor reads the inventory"
+run_doctor "$G"
+check "doctor names no _-prefixed test or spec" test "$(grep -cE -e "$SCRATCH_RE" <<<"$DR_OUT")" = "0"
+dr_has "Check 16: the per-scenario smoke spec with no test is gate-blind" \
+  "smoke-tagged spec with no compiled test: specs/shop/pay.md"
+dr_has "Check 16: the block-list smoke spec with no test is gate-blind" \
+  "smoke-tagged spec with no compiled test: specs/shop/refund.md"
+dr_lacks "Check 16: a fanned smoke spec whose basis feature is compiled is not" "specs/shop/login-locked.md"
+dr_has "Check 17: the prose-only spec is an uncompiled spec, not a smoke one" \
+  "spec with no compiled test: specs/shop/search.md has no tests/shop/search.spec.ts (any tag)"
+check_eq "  and Checks 16/17 report each uncompiled spec once" "3" \
+  "$(grep -cE 'spec with no compiled test: specs/shop/(pay|refund|search)\.md' <<<"$DR_OUT")"
+dr_has "Check 13: the mutating feature's test is resolved through the inventory" \
+  "shop/cart: basis declares mutates_server_state:true but tests/shop/cart.spec.ts shows no isolation marker"
+dr_has "  and so is its twin" \
+  "shop/cart: basis declares mutates_server_state:true but tests/shop/cart.metamorphic.spec.ts shows no isolation marker"
+dr_has "Check 14: the stray test is still reported" "unmanaged spec tests/shop/orphan.spec.ts"
+check_eq "  and it is the only stray one (the scratch specs are not)" "1" "$(grep -c 'unmanaged spec' <<<"$DR_OUT")"
+
+echo "  -- /qa-warden:coverage and /qa-warden:impact read the inventory"
+CV_OUT=$(cd "$G" && "$BASH" "$COVERAGE" "" 2>&1)
+check "coverage names no _-prefixed test or spec" test "$(grep -cE -e "$SCRATCH_RE" <<<"$CV_OUT")" = "0"
+check "coverage dim 0 lists the unmanifested test" grep -qF -e "⚠ tests/shop/login.spec.ts  (no artifacts/route-manifests/shop/login.json" <<<"$CV_OUT"
+check "coverage dim 1b flags the per-scenario smoke spec as gate-blind" \
+  grep -qF -e "GAP spec-without-test: specs/shop/pay.md → no tests/shop/pay.spec.ts  ← @smoke" <<<"$CV_OUT"
+check "coverage dim 1b lists the prose-only spec WITHOUT the @smoke flag" \
+  grep -qxF -e "  ⚠ GAP spec-without-test: specs/shop/search.md → no tests/shop/search.spec.ts" <<<"$CV_OUT"
+IM_OUT=$(cd "$G" && "$BASH" "$IMPACT" route=/cart 2>&1)
+check "impact still matches the manifested spec" grep -qF -e "specs/shop/cart.md" <<<"$IM_OUT"
+check_eq "impact BLIND SPOTS: exactly the two unmanifested collected tests" \
+  "  • tests/shop/login.spec.ts  (no manifest — NOT in the impact graph; regenerate with /qa-warden:gen specs/shop/login.md)
+  • tests/shop/orphan.spec.ts  (no manifest — NOT in the impact graph; regenerate with /qa-warden:gen specs/shop/orphan.md)" \
+  "$(sed -n '/^### BLIND SPOTS/,$p' <<<"$IM_OUT" | grep '•' | sort)"
+check_eq "post-run-checks: one stray test, no scratch spec" "post-run: sentinels=0 stray=1 open-bugs=0 test-gaps=0" \
+  "$(cd "$G" && "$BASH" scripts/post-run-checks.sh --only stray 2>&1 | grep '^post-run:')"
+
+echo "  -- a stamp that predates the inventory"
+SLG="$G/scripts/spec-links.sh"
+cp "$SLG" "$SLG.keep"
+sed 's/^  specs)/  specs-gone)/' "$SLG.keep" > "$SLG"
+CV_OUT=$(cd "$G" && "$BASH" "$COVERAGE" "" 2>&1); CV_RC=$?
+check_eq "coverage refuses (exit 2) instead of printing empty dims 1b and 2" "2" "$CV_RC"
+check "  and says to resync" grep -qF -e 'has no `specs` inventory' <<<"$CV_OUT"
+mv "$SLG.keep" "$SLG"
 
 echo "---"
 if [ "$bad" -ne 0 ]; then echo "qa-scaffoldtest: ❌ $bad of $((pass+bad)) cases FAILED"; exit 1; fi
