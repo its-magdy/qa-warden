@@ -1,8 +1,10 @@
 # QA-Toolkit — merge notes (design lineage)
 
 > **Historical record.** This file preserves the original merge decisions as made; some
-> details below have been superseded by later passes. Consult `qa/reference/DESIGN.md`
-> and the agent files for current behavior.
+> details below have been superseded by later passes. The plugin directory was `qa/` at the time
+> and is now `qa-warden/`; paths below are left as written. Consult
+> [`qa-warden/reference/DESIGN.md`](../qa-warden/reference/DESIGN.md) and the agent files for
+> current behavior.
 
 This toolkit combines two earlier efforts:
 
