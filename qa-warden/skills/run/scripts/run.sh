@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # run.sh — deterministic run+guard for /qa-warden:run, all four modes, plus /qa-warden:batch-fix's
-# step-1 precheck.
+# step-1 precheck and step-5 recheck.
 #
 # Consolidates the three former single-purpose runners (headless, run-smoke,
 # flake-check) behind one entry point. Each mode keeps its ORIGINAL on-disk
@@ -22,6 +22,7 @@
 #   run.sh repeat <spec-path-or-test-path> [N]
 #   run.sh changed [<git-ref>]
 #   run.sh precheck <path-or-substring>      (/qa-warden:batch-fix step 1 only)
+#   run.sh recheck <path-or-substring>       (/qa-warden:batch-fix step 5 only)
 #
 # Exit codes (the four /qa-warden:run modes): 0 = completed cleanly, caller reads the named JSON
 # and summarizes. 2 = do NOT report a pass — the printed reason names why
@@ -29,6 +30,8 @@
 # 0-failure JSON — F-04 — or a resolver/validation failure).
 # precheck: 0 = ≥1 test failing, batch-fix proceeds · 1 = nothing to fix, or the filter matched
 # nothing — batch-fix stops · 2 = no usable result, batch-fix stops and relays the reason.
+# recheck: 0 = green · 1 = not green (still red, crashed or matched nothing — indistinguishable
+# from the line reporter) · 2 = no filter given.
 #
 # Every mode reads its run through ONE verdict (run-verdict.sh, beside this file): the exit code
 # AND the JSON become one word — green / red / incomplete / missing / corrupt / zero-test / stale /
@@ -91,7 +94,7 @@ case "$MODE" in
     case "$VERDICT" in
       green|red) : ;;
       missing)    echo "run(single): no JSON — startup error (prod-guard/config), not a green run. See reports/headless-$name.log."; exit 2 ;;
-      corrupt)    echo "run(single): unparseable JSON — do NOT report a pass."; exit 2 ;;
+      corrupt)    echo "run(single): unparseable JSON — do NOT report a pass. See reports/headless-$name.log."; exit 2 ;;
       zero-test)  echo "run(single): resolved no tests — a resolution error, not a pass."; exit 2 ;;
       incomplete) incomplete_exit single "reports/headless-$name.log" ;;
       *)          echo "run(single): $VERDICT report — NOT a pass."; exit 2 ;;
@@ -309,8 +312,32 @@ case "$MODE" in
     esac
     ;;
 
+  recheck)
+    # ---- recheck: /qa-warden:batch-fix step 5 — re-run the batch after the patch ----
+    # Was another inline block in batch-fix's SKILL.md (re-binding $ARGUMENTS by hand). Required
+    # filter, refused when empty — not `${1:?}`, whose exit 1 here would read as "still red".
+    ARG="${1:-}"
+    [ -n "$ARG" ] || { echo "run(recheck): usage: /qa-warden:batch-fix <path-or-substring> — a filter is required (an empty one would run the WHOLE suite)."; exit 2; }
+    # The `--reporter=line` override is LOAD-BEARING: in a run-of-record context (CI, or
+    # QA_RUN_OF_RECORD=1 in the environment) a bare re-run fires the config's gated `json`
+    # reporter and rewrites artifacts/last-run.json with ONLY this batch's subset — a later
+    # /qa-warden:report then reads the subset as the whole suite and hides real failures elsewhere.
+    # An inline --reporter replaces the config array, so last-run.json is left intact.
+    npx playwright test "$ARG" --retries=0 --reporter=line
+    PW_EXIT=$?   # F-04: CAPTURE the exit code NOW — see header note.
+    # No JSON here, so no verdict: only the exit code. Playwright exits 1 for failures, a
+    # crash and "No tests found" alike, so a non-zero exit is reported as one outcome.
+    if [ "$PW_EXIT" -eq 0 ]; then
+      echo "run(recheck): green — every test matching '$ARG' passed."
+      exit 0
+    fi
+    echo "run(recheck): NOT green (playwright exit $PW_EXIT) — still red, OR the run crashed / matched"
+    echo "nothing; the line reporter cannot tell these apart. Read the output above for the counts."
+    exit 1
+    ;;
+
   *)
-    echo "run.sh: unknown or missing mode '$MODE' — usage: run.sh <single|smoke|repeat|changed|precheck> [args...]"
+    echo "run.sh: unknown or missing mode '$MODE' — usage: run.sh <single|smoke|repeat|changed|precheck|recheck> [args...]"
     exit 2
     ;;
 esac

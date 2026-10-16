@@ -40,7 +40,7 @@
 #   7. run verdict     skills/run/scripts/run-verdict.sh turns Playwright's exit code AND its JSON
 #                      into one word (green/red/incomplete/missing/corrupt/zero-test/stale/
 #                      unchecked), checked on fixture JSONs; then run.sh's single, smoke, repeat,
-#                      changed and batch-fix precheck modes run end to end against a stub `npx` on
+#                      changed and batch-fix precheck/recheck modes run end to end against a stub `npx` on
 #                      PATH that emits a chosen fixture with a chosen exit code (no Playwright)
 #
 # The prod-guard.ts twin is not tested here: qa-hooktest only copies it as a project marker, and
@@ -1113,9 +1113,11 @@ check_eq "--only stray scans no bugs (what doctor passes)" "post-run: sentinels=
 # ------------------------------------------------------------------------------------------
 echo "run.sh — one verdict from Playwright's exit code and its JSON"
 # A stamped project gives run.sh its stamped helpers (check-last-run.sh, resolve-spec-path.sh,
-# post-run-checks.sh). The real Playwright is replaced by a stub `npx` first on PATH: it prints
-# $STUB_JSON (or copies it to $STUB_SINK, the way the config json sink writes last-run.json; an
-# empty $STUB_JSON writes nothing) and exits $STUB_EXIT.
+# post-run-checks.sh). The real Playwright is replaced by a stub `npx` first on PATH: it writes a
+# marker line to stderr, prints $STUB_JSON (or copies it to $STUB_SINK, the way the config json
+# sink writes last-run.json — and like Playwright, only when no inline --reporter replaces the
+# config reporters; an empty $STUB_JSON writes nothing), records its arguments in $STUB/args and
+# exits $STUB_EXIT.
 RUNSH="$here/skills/run/scripts/run.sh"
 VERDICT_SH="$here/skills/run/scripts/run-verdict.sh"
 new_dir; RP="$DIR"
@@ -1124,8 +1126,18 @@ mkdir -p "$RP/tests/auth" && : > "$RP/tests/auth/login.spec.ts"
 new_dir; STUB="$DIR"
 cat > "$STUB/npx" <<'EOF'
 #!/bin/sh
+printf '%s\n' "$*" > "$(dirname "$0")/args"
+echo "stub-npx-stderr-marker" >&2
+inline_reporter=0
+for a in "$@"; do
+  case "$a" in --reporter*) inline_reporter=1 ;; esac
+done
 if [ -n "${STUB_JSON:-}" ]; then
-  if [ -n "${STUB_SINK:-}" ]; then cp "$STUB_JSON" "$STUB_SINK"; else cat "$STUB_JSON"; fi
+  if [ -n "${STUB_SINK:-}" ]; then
+    [ "$inline_reporter" -eq 1 ] || cp "$STUB_JSON" "$STUB_SINK"
+  else
+    cat "$STUB_JSON"
+  fi
 fi
 exit "${STUB_EXIT:-0}"
 EOF
@@ -1252,7 +1264,30 @@ runsh 0 "$FX/statsless.json" "" precheck tests/auth
 check_eq "stats-less JSON: exit 2, never 'matched nothing'" "2" "$RRC"
 runsh 0 "$FX/green.json" "" precheck
 check_eq "no filter: exit 2 (would run the whole suite)" "2" "$RRC"
-check    "stderr goes to its own .log, never into the .json" test -f "$RP/artifacts/batch-fix-precheck.log"
+runsh 1 "$FX/red.json" "" precheck tests/auth
+check    "Playwright's stderr lands in the .log" grep -qF stub-npx-stderr-marker "$RP/artifacts/batch-fix-precheck.log"
+check_eq "  and never in the .json" "0" "$(grep -c stub-npx-stderr-marker "$RP/artifacts/batch-fix-precheck.json")"
+check    "  so the .json still parses" jq -e .stats "$RP/artifacts/batch-fix-precheck.json"
+
+echo "  -- recheck (/qa-warden:batch-fix step 5)"
+# A run-of-record environment: if the inline --reporter were dropped, the stub (like the config's
+# gated json sink) would overwrite last-run.json with this batch's subset.
+cp "$FX/green.json" "$RP/artifacts/last-run.json"
+lr_before=$(cksum < "$RP/artifacts/last-run.json")
+RECHECK_SINK=artifacts/last-run.json
+runsh 0 "$FX/red.json" "$RECHECK_SINK" recheck tests/auth
+check_eq "green: exit 0" "0" "$RRC"
+out_has  "green: says so" "run(recheck): green"
+check    "runs the filter with --retries=0 --reporter=line" grep -qx -- 'playwright test tests/auth --retries=0 --reporter=line' "$STUB/args"
+check_eq "last-run.json (the run-of-record) is untouched" "$lr_before" "$(cksum < "$RP/artifacts/last-run.json")"
+runsh 1 "$FX/red.json" "$RECHECK_SINK" recheck tests/auth
+check_eq "still red: exit 1" "1" "$RRC"
+out_has  "still red: NOT green, and says a crash looks the same" "the line reporter cannot tell these apart"
+check_eq "  last-run.json still untouched" "$lr_before" "$(cksum < "$RP/artifacts/last-run.json")"
+rm -f "$STUB/args"
+runsh 0 "$FX/green.json" "" recheck
+check_eq "no filter: exit 2" "2" "$RRC"
+check    "no filter: Playwright never ran (no whole-suite run)" test ! -e "$STUB/args"
 
 echo "---"
 if [ "$bad" -ne 0 ]; then echo "qa-scaffoldtest: ❌ $bad of $((pass+bad)) cases FAILED"; exit 1; fi

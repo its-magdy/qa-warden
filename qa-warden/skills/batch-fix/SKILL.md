@@ -83,19 +83,16 @@ Workflow:
    lookalike — skip the split.
 4. Once confirmed, apply the patch across every **batch-eligible** spec (never touch
    assertions or the oracle contract — CLAUDE.md §Assertion style).
-5. Re-run the full batch. **Re-derive the filter from `$ARGUMENTS` in THIS block — do NOT reuse `$ARG` from step 1 (F-S03):** the Bash tool starts a fresh shell per call (see §Environment in CLAUDE.md), so `$ARG` set in the step-1 block is EMPTY here, and `npx playwright test ""` silently runs the WHOLE suite — the exact max-blast-radius this command warns against. Re-bind first, then run:
+5. Re-run the full batch with exactly this one command, as its own Bash call (same `allowed-tools`
+   rule as step 1):
    ```bash
-   [ -n "${ZSH_VERSION:-}" ] && setopt shwordsplit 2>/dev/null
-   set -- $ARGUMENTS
-   ARG="${1:?usage: /qa-warden:batch-fix <path-or-substring>}"   # re-derive; fail loudly rather than run everything
-   npx playwright test "$ARG" --retries=0 --reporter=line
+   bash "${CLAUDE_SKILL_DIR}/../run/scripts/run.sh" recheck $ARGUMENTS
    ```
-   **The `--reporter=line` override is load-bearing:** in a run-of-record context (CI, or
-   `QA_RUN_OF_RECORD=1` in the environment) a bare re-run fires the config's gated
-   `json` reporter, rewriting `artifacts/last-run.json` with ONLY this batch's
-   subset — a later `/qa-warden:report` then reads the subset as the whole suite and hides real
-   failures elsewhere. An inline `--reporter` replaces the config array, so `last-run.json`
-   (the run-of-record) is left intact. You care only about exit code / red-green here.
+   It refuses an empty filter (exit 2, so it never runs the whole suite) and runs the filter with
+   `--retries=0 --reporter=line`, which leaves `artifacts/last-run.json` (the run-of-record) untouched.
+   **Exit `0`** = the batch is green. **Exit `1`** = not green: still red, OR the run crashed or
+   matched nothing. The line reporter cannot tell these apart, so read its printed output to
+   count how many went green and how many are still red.
 6. Report: how many went green, how many still red, bugs filed for any that
    don't respond to the pattern (those are likely independent product bugs), **and the
    specs step 3 excluded**, each with its ready-to-paste `/qa-warden:heal <test-id>` — an excluded
