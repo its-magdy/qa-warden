@@ -1154,9 +1154,10 @@ run_doctor "$F"
 dr_has "a walk that stopped excluding _-prefixed scratch specs is reported" 'no longer excludes `_`-prefixed scratch specs'
 sed 's/^collected_tests()/collected_tests_gone()/' "$SL.keep" > "$SL"
 run_doctor "$F"
-dr_has "a stamp that predates the shared walk is reported, with the resync remedy" \
-  'has no collected_tests() walk — the stamp predates the shared test inventory'
-check_eq "  once, not once per arm" "1" "$(grep -c 'scripts/spec-links.sh' <<<"$(grep '^❌' <<<"$DR_OUT")")"
+dr_has "a stamp that predates the shared walk is named as INFO (doctor used the plugin's copy)" \
+  'ℹ️  scripts/spec-links.sh predates the shared test inventory'
+check_eq "  and no ❌ names spec-links.sh (an upgrade alone never fails doctor)" "0" \
+  "$(grep '^❌' <<<"$DR_OUT" | grep -c 'spec-links')"
 sed 's/^  unmanifested)/  unmanifested-gone)/' "$SL.keep" > "$SL"
 run_doctor "$F"
 dr_has "a spec-links.sh with no unmanifested arm is reported" 'scripts/spec-links.sh has no `unmanifested)` arm'
@@ -1257,9 +1258,34 @@ for t in tests/shop/_scratch.spec.ts tests/shop/_probe/x.spec.ts tests/_demo/fai
   printf "test('scratch @smoke', async () => {});\n" > "$G/$t"
 done
 printf 'name: draft\ntags: [smoke]\n' > "$G/specs/_drafts/draft.md"
+# A scratch spec back-linking a checklist: it must not satisfy Check 18 (`index` skips `_` too).
+printf 'basis: shop/ghost\ntags: [regression]\n' > "$G/specs/shop/_ghost.md"
+printf '# cases: shop/ghost\n' > "$G/specs/_context/shop/shop/ghost.cases.md"
+# Parser edge cases. CRLF line ends on a block list and a fanned `basis:` (deleting the CR strip
+# turns it non-smoke and leaves a CR on the basis); tokens that merely CONTAIN smoke (an
+# anywhere-in-token match would count them); a `#` inside a quoted scenario name.
+printf 'basis: shop/login   # fanned\r\nname: crlf\r\nscenarios:\r\n  - name: ok\r\n    tags:\r\n      - smoke\r\n' \
+  > "$G/specs/shop/crlf.md"
+printf 'name: nonsmoke\ntags: [no-smoke, nonsmoke, regression]\n' > "$G/specs/shop/nonsmoke.md"
+printf 'scenarios: [{ name: "issue #3", tags: [smoke] }]\n' > "$G/specs/shop/hash.md"
+# Where a tag is NOT a test tag. A fenced spec: only its ```yaml blocks are read, so the prose
+# lines (one even reads as a top-level `tags:` key), the Markdown bullet and the ```ts fence do
+# not count, and inside the YAML neither does a `tags:` under `meta:` or in a scenario's `data:`.
+printf '%s\n' '# Fenced' '' 'We ran it fast, tags: smoke-ish' '- tags: smoke was dropped' 'tags: [smoke] was dropped in review.' '' \
+  '```yaml' 'name: fenced' 'tags: [regression]' 'meta:' '  tags: [smoke]' \
+  'scenarios: [{ name: "ok", data: { tags: [smoke] } }]' '```' '' '```ts' 'tags: [smoke]' '```' \
+  > "$G/specs/shop/fenced.md"
+# ...and the same fenced shape with a real per-scenario smoke tag (block form), which does count.
+printf '%s\n' '# Fenced smoke' '' 'Prose first.' '' '```yaml' 'name: fenced-smoke' 'scenarios:' \
+  '  - name: ok' '    tags: [smoke]' '```' > "$G/specs/shop/fenced-smoke.md"
+# A bare-YAML spec (no fence, read whole): a prose line ends the key above it, and a `tags:` nested
+# under a block scenario's `data:` or a top-level `data:` is not a test tag.
+printf '%s\n' 'name: bare' 'We ran it fast, tags: smoke-ish' '- tags: smoke was dropped' \
+  'data: { tags: [smoke] }' 'scenarios:' '  - name: ok' '    data:' '      tags: [smoke]' \
+  > "$G/specs/shop/bare.md"
 # The four scratch names, for the "reported nowhere" cases below. Matched by name rather than by
 # `/_`, which the stamp's own specs/_context/ paths would hit.
-SCRATCH_RE='_scratch|_probe|_demo|_drafts'
+SCRATCH_RE='_scratch|_probe|_demo|_drafts|_ghost'
 # A mutating basis for shop/cart, so Check 13 resolves the spec AND its twin through the inventory.
 printf 'feature: shop/cart\ntest_data:\n  mutates_server_state: true\n' > "$G/specs/_context/shop/shop/cart.basis.md"
 
@@ -1271,30 +1297,43 @@ check_eq "tests: the collected tests only, twin marked and paired, - for a missi
 tests/shop/cart.spec.ts${TAB}shop/cart${TAB}spec${TAB}specs/shop/cart.md${TAB}artifacts/route-manifests/shop/cart.json
 tests/shop/login.spec.ts${TAB}shop/login${TAB}spec${TAB}specs/shop/login.md${TAB}-
 tests/shop/orphan.spec.ts${TAB}shop/orphan${TAB}spec${TAB}-${TAB}-" \
-  "$(sl "$BASH" tests | sort)"
+  "$(sl "$BASH" tests | LC_ALL=C sort)"
 check_eq "specs: the authored specs only, with test, smoke and basis columns" \
-  "specs/shop/cart.md${TAB}shop/cart${TAB}tests/shop/cart.spec.ts${TAB}smoke${TAB}-
+  "specs/shop/bare.md${TAB}shop/bare${TAB}-${TAB}-${TAB}-
+specs/shop/cart.md${TAB}shop/cart${TAB}tests/shop/cart.spec.ts${TAB}smoke${TAB}-
+specs/shop/crlf.md${TAB}shop/crlf${TAB}-${TAB}smoke${TAB}shop/login
+specs/shop/fenced-smoke.md${TAB}shop/fenced-smoke${TAB}-${TAB}smoke${TAB}-
+specs/shop/fenced.md${TAB}shop/fenced${TAB}-${TAB}-${TAB}-
+specs/shop/hash.md${TAB}shop/hash${TAB}-${TAB}smoke${TAB}-
 specs/shop/login-locked.md${TAB}shop/login-locked${TAB}-${TAB}smoke${TAB}shop/login
 specs/shop/login.md${TAB}shop/login${TAB}tests/shop/login.spec.ts${TAB}-${TAB}-
+specs/shop/nonsmoke.md${TAB}shop/nonsmoke${TAB}-${TAB}-${TAB}-
 specs/shop/pay.md${TAB}shop/pay${TAB}-${TAB}smoke${TAB}-
 specs/shop/refund.md${TAB}shop/refund${TAB}-${TAB}smoke${TAB}-
 specs/shop/search.md${TAB}shop/search${TAB}-${TAB}-${TAB}-" \
-  "$(sl "$BASH" specs | sort)"
-check_eq "smoke: inline, quoted-@, per-scenario and block-list forms count; prose and comments do not" \
+  "$(sl "$BASH" specs | LC_ALL=C sort)"
+check_eq "smoke: inline, quoted-@, per-scenario (flow, block, CRLF, quoted #) count; prose, bullets, nested and non-yaml-fence tags and smoke-containing tokens do not" \
   "specs/shop/cart.md
+specs/shop/crlf.md
+specs/shop/fenced-smoke.md
+specs/shop/hash.md
 specs/shop/login-locked.md
 specs/shop/pay.md
 specs/shop/refund.md" \
-  "$(sl "$BASH" smoke | sort)"
+  "$(sl "$BASH" smoke | LC_ALL=C sort)"
+check_eq "index: back-links from authored specs only (the _-prefixed one is skipped, as in specs)" \
+  "specs/shop/crlf.md
+specs/shop/login-locked.md" \
+  "$(sl "$BASH" index | cut -d: -f1 | LC_ALL=C sort)"
 check_eq "unmanifested: no twin, no scratch spec" \
   "tests/shop/login.spec.ts${TAB}shop/login
 tests/shop/orphan.spec.ts${TAB}shop/orphan" \
-  "$(sl "$BASH" unmanifested | sort)"
+  "$(sl "$BASH" unmanifested | LC_ALL=C sort)"
 # The stamped file is `#!/bin/sh`; on Linux that is dash, which is where a bash-ism would show.
 for m in tests specs smoke unmanifested; do
-  check_eq "  /bin/sh gives the same $m answer" "$(sl "$BASH" $m | sort)" "$(sl /bin/sh $m | sort)"
+  check_eq "  /bin/sh gives the same $m answer" "$(sl "$BASH" $m | LC_ALL=C sort)" "$(sl /bin/sh $m | LC_ALL=C sort)"
 done
-check_eq "an unknown mode exits 2 (what coverage keys its old-stamp refusal on)" "2" \
+check_eq "an unknown mode exits 2 (what the callers key their old-stamp fallback on)" "2" \
   "$(cd "$G" && "$BASH" scripts/spec-links.sh no-such-mode >/dev/null 2>&1; echo $?)"
 
 echo "  -- doctor reads the inventory"
@@ -1315,6 +1354,11 @@ dr_has "  and so is its twin" \
   "shop/cart: basis declares mutates_server_state:true but tests/shop/cart.metamorphic.spec.ts shows no isolation marker"
 dr_has "Check 14: the stray test is still reported" "unmanaged spec tests/shop/orphan.spec.ts"
 check_eq "  and it is the only stray one (the scratch specs are not)" "1" "$(grep -c 'unmanaged spec' <<<"$DR_OUT")"
+dr_has "Check 18: a checklist back-linked only by a _-prefixed spec is an abandoned chain" \
+  "abandoned authoring chain: specs/_context/shop/shop/ghost.cases.md"
+check_eq "Check 3: 1 of the 4 collected test files carries @smoke" \
+  "smoke-tagged spec files: 1 / 4 (smoke-or-regression: 4)" "$(grep '^smoke-tagged spec files:' <<<"$DR_OUT")"
+NEW_STAMP_OUT=$DR_OUT
 
 echo "  -- /qa-warden:coverage and /qa-warden:impact read the inventory"
 CV_OUT=$(cd "$G" && "$BASH" "$COVERAGE" "" 2>&1)
@@ -1334,12 +1378,36 @@ check_eq "post-run-checks: one stray test, no scratch spec" "post-run: sentinels
   "$(cd "$G" && "$BASH" scripts/post-run-checks.sh --only stray 2>&1 | grep '^post-run:')"
 
 echo "  -- a stamp that predates the inventory"
+# A stand-in for the stamp before the inventory: no `tests`/`specs`/`smoke` modes, no
+# collected_tests(), and an `unmanifested` walk that ignores testIgnore (so it lists the `_` files,
+# as the old one did). Doctor, coverage and impact must run the plugin's copy instead and give the
+# new answers, with only the drift ⚠️ / a resync hint to show for it.
 SLG="$G/scripts/spec-links.sh"
 cp "$SLG" "$SLG.keep"
-sed 's/^  specs)/  specs-gone)/' "$SLG.keep" > "$SLG"
+sed -e 's/^  tests)/  tests-gone)/' -e 's/^  specs)/  specs-gone)/' -e 's/^  smoke)/  smoke-gone)/' \
+    -e 's/^collected_tests()/old_walk()/' -e 's/^    collected_tests | /    old_walk | /' \
+    -e "/^  find tests /s/ ! -name '_\\*' ! -path '\\*\\/_\\*\\/\\*'//" "$SLG.keep" > "$SLG"
+check "precondition: the stand-in has no tests mode" \
+  test "$(cd "$G" && "$BASH" scripts/spec-links.sh tests >/dev/null 2>&1; echo $?)" = "2"
+check "precondition: its unmanifested walk lists the scratch tests, as the old one did" \
+  grep -qF -e "tests/_demo/failure-demo.spec.ts" <<<"$(sl "$BASH" unmanifested)"
+run_doctor "$G"
+check_eq "doctor: no ❌ about spec-links.sh on an old stamp" "0" "$(grep '^❌' <<<"$DR_OUT" | grep -c 'spec-links')"
+dr_has "  only the drift warning and an INFO line" "substrate drift: scripts/spec-links.sh differs"
+dr_has "  (the INFO line names the plugin's copy)" "ℹ️  scripts/spec-links.sh predates the shared test inventory"
+dr_lacks "  no false Check 13 'NO compiled test resolved'" "NO compiled test resolved"
+check_eq "  Check 3 counts the same suite as on the new stamp" \
+  "$(grep '^smoke-tagged spec files:' <<<"$NEW_STAMP_OUT")" "$(grep '^smoke-tagged spec files:' <<<"$DR_OUT")"
+check_eq "  Checks 15-18 say the same as on the new stamp" \
+  "$(grep -E 'compiled test|abandoned|changed since last review|isolation marker' <<<"$NEW_STAMP_OUT")" \
+  "$(grep -E 'compiled test|abandoned|changed since last review|isolation marker' <<<"$DR_OUT")"
 CV_OUT=$(cd "$G" && "$BASH" "$COVERAGE" "" 2>&1); CV_RC=$?
-check_eq "coverage refuses (exit 2) instead of printing empty dims 1b and 2" "2" "$CV_RC"
-check "  and says to resync" grep -qF -e 'has no `specs` inventory' <<<"$CV_OUT"
+check_eq "coverage runs on an old stamp (exit 0)" "0" "$CV_RC"
+check "  and prints the resync hint" grep -qF -e "predates the shared test inventory — this report used the plugin's copy. Run /qa-warden:init --resync" <<<"$CV_OUT"
+check "  and names no _-prefixed test or spec" test "$(grep -cE -e "$SCRATCH_RE" <<<"$CV_OUT")" = "0"
+IM_OUT=$(cd "$G" && "$BASH" "$IMPACT" route=/cart 2>&1)
+check "impact on an old stamp prints the resync hint" grep -qF -e "BLIND SPOTS below used the plugin's copy" <<<"$IM_OUT"
+check "  and its BLIND SPOTS name no _-prefixed test" test "$(grep -cE -e "$SCRATCH_RE" <<<"$IM_OUT")" = "0"
 mv "$SLG.keep" "$SLG"
 
 echo "---"
