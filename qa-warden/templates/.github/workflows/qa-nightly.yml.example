@@ -35,8 +35,20 @@ jobs:
         with:
           # The job never pushes; don't leave the token configured for npm ci and the test run.
           persist-credentials: false
-      # Runs FIRST: plain sh, needs no Node, so a misconfigured nightly fails in seconds and before
-      # any dependency install script runs.
+      # setup-node runs BEFORE the guard: prod-guard.sh takes its verdict from
+      # scripts/prod-guard-core.mjs (plain node, no dependencies) and refuses without node.
+      - uses: actions/setup-node@v7
+        with:
+          # PINNED to 24, deliberately NOT `lts/*`. package.json pins @types/node to the 24 line on
+          # the stated rule "types = the LTS you actually run in CI" (typing ahead of the runtime
+          # types APIs that don't exist yet). `lts/*` FLOATS: Node 26 enters LTS on 2026-10-28, at
+          # which point `lts/*` silently becomes 26 while the types stay on 24 — breaking that
+          # invariant with no signal. Bump this in LOCKSTEP with package.json's @types/node and
+          # engines.node, never on its own.
+          node-version: 24
+          cache: npm
+      # The guard runs before `npm ci`: it needs node but no node_modules, so a misconfigured
+      # nightly fails in seconds and before any dependency install script runs.
       # Secrets are set on the two steps that read them, not on the job, so `npm ci` (every
       # dependency's install scripts) and the browser download never see them. The `&qa-env`
       # anchor below is reused by the suite step as `*qa-env`: edit the list in ONE place.
@@ -48,16 +60,6 @@ jobs:
           QA_USER_PASSWORD: ${{ secrets.QA_USER_PASSWORD }}
           # BASE_URL_ADMIN / QA_ADMIN_* / seed-API vars: add here if your suite uses them.
         run: bash scripts/prod-guard.sh
-      - uses: actions/setup-node@v7
-        with:
-          # PINNED to 24, deliberately NOT `lts/*`. package.json pins @types/node to the 24 line on
-          # the stated rule "types = the LTS you actually run in CI" (typing ahead of the runtime
-          # types APIs that don't exist yet). `lts/*` FLOATS: Node 26 enters LTS on 2026-10-28, at
-          # which point `lts/*` silently becomes 26 while the types stay on 24 — breaking that
-          # invariant with no signal. Bump this in LOCKSTEP with package.json's @types/node and
-          # engines.node, never on its own.
-          node-version: 24
-          cache: npm
       - run: npm ci
       # chromium only — matches the scaffold; the active config projects are all Desktop Chrome.
       # --only-shell: CI runs headless, so fetch only the headless shell, not full Chromium

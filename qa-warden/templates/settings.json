@@ -89,6 +89,7 @@
       "Edit(package-lock.json)",
       "Edit(scripts/prod-guard.ts)",
       "Edit(scripts/prod-guard.sh)",
+      "Edit(scripts/prod-guard-core.mjs)",
       "Edit(scripts/doctor.sh)",
       "Edit(scripts/check-last-run.sh)",
       "Edit(scripts/bug-status.sh)",

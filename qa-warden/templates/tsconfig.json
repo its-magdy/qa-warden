@@ -1,5 +1,5 @@
 {
-  "//": "Tests and specs are TypeScript, strict mode on.",
+  "//": "Tests and specs are TypeScript, strict mode on. allowJs lets scripts/prod-guard.ts import scripts/prod-guard-core.mjs (plain JS, shared with prod-guard.sh) with its JSDoc types; JS files are not type-checked (no checkJs).",
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
@@ -17,6 +17,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "allowJs": true,
     "types": ["node"]
   },
   "include": ["tests/**/*.ts", "page-objects/**/*.ts", "fixtures/**/*.ts", "scripts/**/*.ts", "playwright.config.ts"],
