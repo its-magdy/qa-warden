@@ -35,7 +35,9 @@ never carry the same number**, or the second one has no way to announce itself.
   placeholder like `example.com`.
 - Scheme-relative and scheme-less values are parsed WHOLE by WHATWG too (against an http base, or
   under `http://`); userinfo is never hand-stripped ahead of the parser, so `//prod.acme.com\@staging.acme.dev`,
-  `/\prod.acme.com` and `prod.acme.com\@staging.acme.dev` refuse through both guards.
+  `/\prod.acme.com` and `prod.acme.com\@staging.acme.dev` refuse through both guards. A
+  path-only reference (`/production/users`, `./x`, `?q`, `#f`) names no host and is screened as
+  one, so `API_URL=/production/users` is not read as a host called "production".
 - `prod-guard.sh` now needs `node` on PATH. With none it refuses ("Node ≥22 required"); with the
   core missing beside it (a partial stamp) it refuses and names `/qa-warden:init --resync`.
 - `prod-guard.sh` accepts the core's output only whole: node must exit 0, every line must be a
@@ -51,11 +53,11 @@ never carry the same number**, or the second one has no way to announce itself.
   of the stamped core against the plugin's copy (a difference is a ⚠️). A project stamped before the
   core keeps working and gets a resync ⚠️; a guard that needs the core when it is missing is a ❌.
   Check 9 leaves the core to Check 8. The doctor still has 32 numbered checks.
-- `qa-scaffoldtest` gains section 9: a 38-row URL-to-verdict table that both guards must reproduce
+- `qa-scaffoldtest` gains section 9: a 45-row URL-to-verdict table that both guards must reproduce
   (`prod-guard.sh` through node, `prod-guard.ts` imported under node type stripping), the shell
   guard's fail-closed paths (no node, no core, a crash after a verdict-shaped line, a malformed
   record, a suffix-only verdict, a NODE_OPTIONS preload), `--list-targets`, and doctor on current,
-  drifted, mixed, pre-core and resynced stamps. It now needs `node` on PATH. 626 cases (627 under mawk).
+  drifted, mixed, pre-core and resynced stamps. It now needs `node` on PATH. 642 cases (643 under mawk).
 
 **Upgrade:** run `/qa-warden:init --resync`. Until then the old guards keep working and doctor
 warns.

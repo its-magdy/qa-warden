@@ -55,42 +55,53 @@ export function hostOf(value) {
   // The WHATWG parser decides every host it can. Nothing is hand-stripped before it runs: a strip
   // that cuts userinfo at `@` first reads `//prod.acme.com\@staging.acme.dev` as staging, while the
   // parser (and a browser) treats `\` as `/` and resolves prod.acme.com.
+  // Pre-normalised the way the parser normalises its input — surrounding C0 controls and spaces
+  // trimmed, every tab/CR/LF removed — so the shape tests below see what the parser sees
+  // (`/<TAB>/prod.acme.com` IS `//prod.acme.com` to a browser, not a path).
+  const v = value.replace(/^[\u0000- ]+|[\u0000- ]+$/g, '').replace(/[\t\n\r]/g, '');
   // 1. An absolute URL. An EMPTY hostname is not a verdict: `prod.acme.com:8080` parses as
   //    scheme `prod.acme.com:` + path, and an empty host never matches the marker.
   try {
-    const host = new URL(value).hostname;
+    const host = new URL(v).hostname;
     if (host) return host;
   } catch {
     // not absolute
   }
-  // 2. Scheme-relative (`//host`, `/\host`, `\\host`): resolved against a special-scheme base,
-  //    exactly as a browser resolves it on an http(s) page. A value with no authority of its own
-  //    (`prod.acme.com`, a path) resolves to the base host — then it is not scheme-relative.
+  // 2. Scheme-relative (`//host`, `/\host`, `\\host`, `\/host`, `///host`): resolved against a
+  //    special-scheme base, exactly as a browser resolves it on an http(s) page. A value with no
+  //    authority of its own resolves to the base host — then it is not scheme-relative, and:
+  //    • a PATH-ONLY reference — `/x` (one `/`, then neither `/` nor `\`), `.`/`..` segments, a
+  //      bare `?query` or `#fragment` — names no host at all. It gets the empty host (no marker,
+  //      no placeholder host), the verdict such values always had: `API_URL=/production/users` is
+  //      a path on the primary's host, not a host called "production". It never reaches step 3
+  //      or 4, where `http://` + `/production/users` would read `production` as the host.
+  //    • anything else (`prod.acme.com`, `localhost:3000`) is a bare host — step 3.
   const BASE_HOST = 'prod-guard-base.invalid';
   try {
-    const host = new URL(value, `http://${BASE_HOST}/`).hostname;
+    const host = new URL(v, `http://${BASE_HOST}/`).hostname;
     if (host && host !== BASE_HOST) return host;
   } catch {
     // not resolvable
   }
+  if (/^(?:\/(?![/\\])|\.\.?(?:[/\\?#]|$)|[?#])/.test(v)) return '';
   // 3. A bare `host[:port]` with no scheme: the WHOLE value under `http://`, so the parser still
   //    owns userinfo, `\`, percent-encoding and IDNA (`PROD%2Eacme.com:8080`,
   //    `prod.acme.com\@staging.acme.dev` both resolve to prod.acme.com). Skipped for a value that
   //    already names a `scheme://` — prefixing one would make the scheme the host.
-  const hasScheme = /^\s*[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(value);
+  const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(v);
   if (!hasScheme) {
     try {
-      const host = new URL(`http://${value.trim()}`).hostname;
+      const host = new URL(`http://${v}`).hostname;
       if (host) return host;
     } catch {
       // not parseable
     }
   }
   // 4. The parser rejected the value outright (e.g. an invalid punycode label). Judge the host as
-  //    written: strip a `scheme://` or leading slashes, treat `\` as `/` (as the parser would for
-  //    http(s)), drop userinfo GREEDILY to the last `@` before any `/ ? #`, cut port/path/query.
-  return value
-    .trim()
+  //    written: strip a `scheme://` or leading separators, treat `\` as `/` (as the parser would
+  //    for http(s)), drop userinfo GREEDILY to the last `@` before any `/ ? #`, cut port/path/query.
+  //    A path-only value returned '' above, so a leading `/` here always opens an authority.
+  return v
     .replace(/\\/g, '/')
     .replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '')
     .replace(/^\/+/, '')

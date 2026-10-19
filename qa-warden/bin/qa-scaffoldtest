@@ -1775,6 +1775,13 @@ REFUSED   | prod        | scheme-relative plain                              | B
 REFUSED   | prod        | scheme-relative slash-backslash                    | BASE_URL_APP=/\prod.acme.com
 REFUSED   | prod        | scheme-relative double backslash                   | BASE_URL_APP=\\prod.acme.com
 REFUSED   | prod        | scheme-less, backslash then @                      | BASE_URL_APP=prod.acme.com\@staging.acme.dev
+REFUSED   | prod        | scheme-relative backslash-slash                    | BASE_URL_APP=\/prod.acme.com
+REFUSED   | prod        | scheme-relative, three slashes                     | BASE_URL_APP=///prod.acme.com
+PASS      | -           | root-relative path names no host                   | BASE_URL_APP=https://staging.acme.dev API_URL=/app
+PASS      | -           | root-relative path that says production            | BASE_URL_APP=https://staging.acme.dev API_URL=/production/users
+PASS      | -           | root-relative path that says example               | BASE_URL_APP=https://staging.acme.dev API_URL=/example/users
+PASS      | -           | dot-relative path that says production             | BASE_URL_APP=https://staging.acme.dev API_URL=./production
+PASS      | -           | query-only reference that says prod                | BASE_URL_APP=https://staging.acme.dev API_URL=?prod=1
 PASS      | -           | staging host                                       | BASE_URL_APP=https://staging.acme.dev
 PASS      | -           | product is not the marker                          | BASE_URL_APP=https://product.acme.dev
 REFUSED   | prod        | scheme-less host:port                              | BASE_URL_APP=prod.acme.com:8080
@@ -1893,6 +1900,11 @@ while IFS='|' read -r want reason label assigns; do
 done < "$TABLE"
 check "the table has at least 25 rows" test "$rows" -ge 25
 check_eq "the .ts driver printed one verdict per row" "$rows" "$(grep -c . <<<"$TS_OUT")"
+# Not expressible in the whitespace-split table: a TAB the parser removes. `/<TAB>/prod.acme.com`
+# is `//prod.acme.com` to a browser, so it must not be read as a root-relative path.
+pg 1 "a TAB inside a scheme-relative value is removed, as a browser removes it" \
+  BASE_URL_APP=https://staging.acme.dev "API_URL=$(printf '/\t/prod.acme.com')"
+has_out "  and the host is prod.acme.com" "'prod.acme.com' (API_URL) looks like production"
 
 echo "  -- the shell guard fails closed when the core cannot run"
 new_dir; NB=$DIR   # a PATH with dirname (the guard needs it to find the core) and no node
