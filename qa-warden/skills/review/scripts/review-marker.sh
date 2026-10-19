@@ -41,7 +41,7 @@
 # sha256 tool. It records a verdict the CALLER confirmed — it does not judge; never call it on a
 # guessed or truncated review.
 set -u
-MODE=write
+MODE="write"
 if [ "${1:-}" = "check" ]; then
   MODE=check
   shift
