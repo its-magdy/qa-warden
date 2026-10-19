@@ -9,16 +9,19 @@
 # to live in templates/scripts/doctor.sh and ran inside every consumer's project — but they read
 # only plugin source, so a consumer could never act on one. They moved here in two batches:
 # 9b, 9bc, 9be, 9d, 9e, 9h, 9j first; then 9bb, 9bd, 9f arm 1, 9g, 9i and 20, which passed the
-# same test once each was read check by check. 9k was written here (2026-09-26). The logic and
+# same test once each was read check by check. 9m (the stock-shell parse check, numbered 9k until
+# 2026-10-19) was written here (2026-09-26). On 2026-10-19 two more plugin-only arms followed:
+# doctor 9k arm 3's scan of the plugin's own files (now this file's 9k) and the stale-row arm of
+# doctor's CLAUDE.md vocabulary containment (now 9b arm 4). The logic and
 # the ids are unchanged (except Check 20, which was given a new job under the same id because the
 # copies it compared no longer exist; see its header), so every existing citation ("Check 9bc enforces the maxTurns ordering",
 # "Check 9bb's extractor") still resolves — to this file. The only edits on the way in were to
 # remediation text: "run /qa-warden:init --resync" is a consumer's command and fixes nothing
 # here, where every finding is a plugin-source bug.
 #
-# 14 numbered checks (recount: grep -cE '^# [0-9]+[a-z]*\. ' bin/qa-selfcheck). 9f appears in
-# both files on purpose: arm 1 (two plugin files) is here, arms 2-3 (the project's settings) are
-# in doctor.sh.
+# 15 numbered checks (recount: grep -cE '^# [0-9]+[a-z]*\. ' bin/qa-selfcheck). 9f and 9k appear
+# in both files on purpose: 9f arm 1 (two plugin files) is here, arms 2-3 (the project's settings)
+# are in doctor.sh; 9k's plugin-file scan is here, its project checks are in doctor.sh.
 #
 # What stays in doctor.sh is every check that COMPARES a project with the plugin, because that
 # comparison can only be made from inside the project.
@@ -77,6 +80,12 @@ missing_keys() {
 #     arrows. A whole-file size cap would be simpler, but the file is ~20 KB and the tail that
 #     goes past the cap (the honest limits) is explanation, so a cap would mean cutting real
 #     content to satisfy a check.
+#     Arm 4 (CLAUDE.md VOCABULARY MANIFEST). doctor Check 9's CLAUDE.md vocabulary containment
+#     requires every symbol in manifests/claude-md-vocab.txt to appear in a project's CLAUDE.md,
+#     and only for symbols the shipped templates/CLAUDE.md still carries. A row the template
+#     lacks is a STALE manifest: doctor skips it silently, so the symbol is checked nowhere. This
+#     arm reports it. It compares two plugin files, so it lived in doctor by mistake until
+#     2026-10-19, where it warned every consumer about a manifest only a maintainer can edit.
 if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   # coverage.sh is NOT in this list: it builds KEYS_RE at runtime from scripts/oracle-keys.txt, so it
   # holds no key copy to drift (it refuses, exit 2, if the manifest is missing).
@@ -135,6 +144,21 @@ Closed **oracle vocabulary**
 **HAR replay is BANNED.**
 ## Authoring notes and honest limits
 ANCHORS
+  fi
+  # Arm 4: every row of manifests/claude-md-vocab.txt is a symbol the shipped CLAUDE.md carries.
+  vocab4="$MANIFESTS/claude-md-vocab.txt"
+  if [ ! -f "$vocab4" ] || [ ! -f "$TMPL/CLAUDE.md" ]; then
+    echo "❌ manifests/claude-md-vocab.txt or templates/CLAUDE.md is missing — doctor's CLAUDE.md vocabulary containment has nothing to compare; Check 9b arm 4 is VACUOUS"; fail=$((fail+1))
+  else
+    n4=0
+    while IFS='|' read -r sym _; do
+      [ -n "$sym" ] || continue
+      n4=$((n4+1))
+      # Anchored exactly as doctor anchors it, so `lock:` cannot match `unlock:`.
+      grep -qE "(^|[^a-zA-Z_])$sym" "$TMPL/CLAUDE.md" && continue
+      echo "❌ manifests/claude-md-vocab.txt requires \`$sym\` but templates/CLAUDE.md no longer mentions it — the manifest is stale (drop the row) or the symbol was dropped from the template by mistake. Doctor skips such a row silently, so no consumer is told the symbol is missing"; fail=$((fail+1))
+    done < <(grep -v '^[[:space:]]*#' "$vocab4" | sed 's/[[:space:]]*$//' | grep -v '^$')
+    [ "$n4" -gt 0 ] || { echo "❌ manifests/claude-md-vocab.txt has no rows — doctor's CLAUDE.md vocabulary containment checks nothing; Check 9b arm 4 is VACUOUS"; fail=$((fail+1)); }
   fi
 fi
 
@@ -882,8 +906,43 @@ EOF
   fi
 fi
 
-# 9k. Stock-shell parse check. Every shell script in the plugin is parsed with /bin/bash when
-#     that binary is bash 3.x — macOS ships 3.2.57 and never updates it, and it is the shell
+# 9k. UNMANIFESTED-walk OWNERSHIP, plugin half (doctor Check 9k arm 3). "Which compiled tests
+#     have no route manifest" is owned by `scripts/spec-links.sh unmanifested` (templates/scripts/,
+#     header rule 3), and /qa-warden:impact and /qa-warden:coverage must both call it, or one of
+#     them reports a different invisible-spec set. Doctor 9k arm 3 fails any OTHER file that
+#     re-derives the walk. It used to scan the plugin's own files from inside every consumer's
+#     project; those files are plugin source, so that half moved here under the same id (as 9f
+#     arm 1 did), and doctor keeps the scan of the project's stamped scripts/*.sh. Doctor's 9k
+#     header has the full history of the anchor. In short: the anchor is the CONSTRUCT, an
+#     existence test on a manifest path built from a variable, and full-line comments are dropped
+#     first, because an ownership check names the construct it bans and would otherwise fire on
+#     its own documentation. Every *.sh in the plugin, plus bin/ (qa-scaffold and these test
+#     scripts are extensionless). The owner, spec-links.sh, is skipped.
+if [ -n "$TMPL" ] && [ -d "$TMPL/.." ]; then
+  plug9k=$(cd "$TMPL/.." 2>/dev/null && pwd)
+  # `-e` is mandatory: the pattern begins with `-f`, which grep would otherwise take as `-f FILE`.
+  umw_re='-f[[:space:]]*"artifacts/route-manifests/\$\{'
+  files9k=$({ find "$plug9k" -name '*.sh' -type f -not -path '*/node_modules/*' 2>/dev/null
+              [ -d "$plug9k/bin" ] && find "$plug9k/bin" -type f 2>/dev/null
+            } | sort -u)
+  n9k=$(printf '%s\n' "$files9k" | grep -c . || true)
+  if [ "${n9k:-0}" -eq 0 ]; then
+    echo "❌ no *.sh or bin/ files found in the plugin — the unmanifested-walk ownership scan (Check 9k) is VACUOUS"; fail=$((fail+1))
+  fi
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in */spec-links.sh) continue ;; esac
+    sed '/^[[:space:]]*#/d' "$f" 2>/dev/null | grep -qE -e "$umw_re" || continue
+    echo "❌ ${f#"$plug9k"/} builds a route-manifest path from a variable — the unmanifested walk is owned by \`scripts/spec-links.sh unmanifested\` (templates/scripts/spec-links.sh, header rule 3). Call it instead: a second copy drifts silently (the twin exclusion is the half that is invisible when it is wrong), and /qa-warden:impact and /qa-warden:coverage must report the SAME invisible-spec set"
+    fail=$((fail+1))
+  done <<EOF9K
+$files9k
+EOF9K
+fi
+
+# 9m. Stock-shell parse check (9k until 2026-10-19; doctor's older Check 9k kept that id, and
+#     its plugin half above now uses it here too). Every shell script in the plugin is parsed with
+#     /bin/bash when that binary is bash 3.x — macOS ships 3.2.57 and never updates it, and it is the shell
 #     every consumer's doctor (skills/doctor/scripts/doctor.sh, run by /qa-warden:doctor or the
 #     stamped scripts/doctor.sh launcher) and `bash scripts/init.sh` run under. Homebrew
 #     bash 5 on PATH hid a 3.2-only syntax error in the doctor, then stamped as templates/scripts/doctor.sh (a
@@ -900,11 +959,11 @@ if [ -x /bin/bash ]; then
         echo "❌ ${s#$ROOT/}: does not parse under /bin/bash $(/bin/bash -c 'echo "$BASH_VERSION"') — the stock macOS shell every consumer runs doctor/init under. Usual cause: a \`case … in *.x)\` arm inside \`\$( … )\`; write \`(*.x)\`"
         fail=$((fail+1))
       fi
-    done <<EOF9K
+    done <<EOF9M
 $(grep -rlE '^#!.*(bash|/sh)' "$ROOT" 2>/dev/null | grep -v node_modules)
-EOF9K
+EOF9M
   else
-    echo "ℹ️  9k: /bin/bash here is ${bv}.x, so the bash-3.2 parse check adds nothing on this host (it bites on stock macOS)"
+    echo "ℹ️  9m: /bin/bash here is ${bv}.x, so the bash-3.2 parse check adds nothing on this host (it bites on stock macOS)"
   fi
 fi
 
@@ -966,5 +1025,5 @@ if [ "$fail" -ne 0 ]; then
 elif [ "$warn" -ne 0 ]; then
   echo "qa-selfcheck: ⚠️  OK with warnings ($warn)"; exit 0
 else
-  echo "qa-selfcheck: ✅ plugin is self-consistent — all 14 checks passed"; exit 0
+  echo "qa-selfcheck: ✅ plugin is self-consistent — all 15 checks passed"; exit 0
 fi

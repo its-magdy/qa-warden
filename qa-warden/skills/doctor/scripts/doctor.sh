@@ -388,9 +388,31 @@ fi
 #                   and prod-guard.ts fails to import, so this is a ❌ (the guard itself
 #                   names the same repair).
 #    Check 9 skips the core: this check owns its presence and its compare.
-for f in scripts/prod-guard.sh scripts/resolve-spec-path.sh scripts/spec-links.sh scripts/post-run-checks.sh scripts/oracle-keys.txt; do
-  [ -f "$f" ] || { echo "⚠️  $f missing — project scaffolded before it shipped; re-run /qa-warden:init"; warn=$((warn+1)); }
-done
+#    The missing-file loop is Check 9's FALLBACK, not a second report. Every file it names is in
+#    manifests/resync-set.txt, so whenever Check 9's substrate compare runs it already reports a
+#    missing one ("substrate missing", a ❌ with the same repair), and running this loop as well
+#    printed one deleted file twice (three times for oracle-keys.txt, which Check 2 also names).
+#    So the loop runs only when Check 9 is skipped: no $TMPL, i.e. this file was copied out of
+#    its plugin and the compare has no baseline. Then it is the only thing that names a missing
+#    canonical script, and it stays a ⚠️ beside Check 9's counted SKIPPED warning.
+# The baseline is the plugin this script ships in: <plugin>/skills/doctor/scripts/doctor.sh, so the
+# plugin root is three directories up. No lookup, no guess. Until this script moved into the plugin
+# it lived in the project and had to FIND a plugin: $CLAUDE_PLUGIN_ROOT, else the install recorded in
+# installed_plugins.json, else the newest cached version by mtime, which could be a stale orphaned
+# version. Running from the plugin removed that whole question. $CLAUDE_PLUGIN_ROOT is not read: the
+# script's own location is the plugin it belongs to, and the stamped launcher (scripts/doctor.sh)
+# does any looking-up a hand run needs. Resolved here rather than in Check 9 because the loop
+# below has to know whether Check 9 will run.
+TMPL=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd)
+TMPL="${TMPL:+$TMPL/templates}"
+if [ -n "$TMPL" ] && [ ! -d "$TMPL" ]; then
+  TMPL=""
+fi
+if [ -z "$TMPL" ]; then
+  for f in scripts/prod-guard.sh scripts/resolve-spec-path.sh scripts/spec-links.sh scripts/post-run-checks.sh scripts/oracle-keys.txt; do
+    [ -f "$f" ] || { echo "⚠️  $f missing — project scaffolded before it shipped, or the file was deleted; run /qa-warden:init --resync"; warn=$((warn+1)); }
+  done
+fi
 PG_CORE=scripts/prod-guard-core.mjs
 PG_CORE_PLUGIN=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../templates/scripts" 2>/dev/null && pwd)
 PG_CORE_PLUGIN="${PG_CORE_PLUGIN:+$PG_CORE_PLUGIN/prod-guard-core.mjs}"
@@ -532,18 +554,8 @@ fi
 #    .env.example is SHARED-ownership — users must extend it for seed vars (Check 6 /
 #    test-data-seed) — excluded like CLAUDE.md; the stock-var containment sub-check below
 #    still catches a stock variable being DELETED from it.
-# The baseline is the plugin this script ships in: <plugin>/skills/doctor/scripts/doctor.sh, so the
-# plugin root is three directories up. No lookup, no guess. Until this script moved into the plugin
-# it lived in the project and had to FIND a plugin: $CLAUDE_PLUGIN_ROOT, else the install recorded in
-# installed_plugins.json, else the newest cached version by mtime, which could be a stale orphaned
-# version. Running from the plugin removed that whole question. $CLAUDE_PLUGIN_ROOT is not read: the
-# script's own location is the plugin it belongs to, and the stamped launcher (scripts/doctor.sh)
-# does any looking-up a hand run needs.
-TMPL=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd)
-TMPL="${TMPL:+$TMPL/templates}"
-if [ -n "$TMPL" ] && [ ! -d "$TMPL" ]; then
-  TMPL=""
-fi
+# $TMPL (the plugin's templates/, the baseline) is resolved above Check 8's missing-file loop,
+# which runs only when this check cannot.
 if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   # The toolkit-owned set is SINGLE-SOURCED in the plugin's manifests/resync-set.txt,
   # which qa-scaffold's --resync reads too — detection and repair MUST cover the SAME files,
@@ -656,8 +668,8 @@ fi
 # drift and 9f arm 2 are both WARNs with a one-command fix). A FAIL would red every upgrading
 # consumer's CI for a condition only a human can clear.
 if [ -n "$TMPL" ] && [ -f "$TMPL/CLAUDE.md" ] && [ -f CLAUDE.md ]; then
-  # The manifest is plugin-only (manifests/, never stamped): this check is its one reader and
-  # it reads the plugin's copy, which ships beside this script.
+  # The manifest is plugin-only (manifests/, never stamped): this check reads the plugin's copy,
+  # which ships beside this script (its other reader is bin/qa-selfcheck Check 9b arm 4).
   VOCAB="$TMPL/../manifests/claude-md-vocab.txt"
   if [ ! -f "$VOCAB" ]; then
     echo "⚠️  manifests/claude-md-vocab.txt not found in the plugin at $TMPL/.. — CLAUDE.md vocabulary DELIVERY is UNVERIFIED (the plugin install is incomplete; reinstall it)"; warn=$((warn+1))
@@ -667,12 +679,13 @@ if [ -n "$TMPL" ] && [ -f "$TMPL/CLAUDE.md" ] && [ -f CLAUDE.md ]; then
     while IFS='|' read -r sym swhy; do
       [ -n "$sym" ] || continue
       # Anchored exactly as Check 9i (bin/qa-selfcheck) anchors the step symbols, so `lock:` cannot match `unlock:`.
-      if ! grep -qE "(^|[^a-zA-Z_])$sym" "$TMPL/CLAUDE.md"; then
-        # The 9c stranded-rule shape, inverted: a manifest demanding a symbol the toolkit no
-        # longer ships would nag every consumer about a retired feature forever. Report the
-        # MANIFEST as stale and check nothing downstream of it.
-        echo "⚠️  claude-md-vocab.txt requires \`$sym\` but the SHIPPED templates/CLAUDE.md no longer mentions it — the manifest is stale (drop the line) or the symbol was dropped from the template by mistake"; warn=$((warn+1)); continue
-      fi
+      # The 9c stranded-rule shape, inverted: a manifest demanding a symbol the toolkit no longer
+      # ships would nag every consumer about a retired feature forever. So a row the shipped
+      # template lacks is skipped, SILENTLY, and nothing downstream checks it. The stale row
+      # itself is a plugin-source bug that only a maintainer can fix, so it is reported by
+      # bin/qa-selfcheck Check 9b (it compares these two plugin files) and not here, where it
+      # used to warn every consumer about the toolkit's own manifest.
+      grep -qE "(^|[^a-zA-Z_])$sym" "$TMPL/CLAUDE.md" || continue
       grep -qE "(^|[^a-zA-Z_])$sym" CLAUDE.md \
         || { echo "⚠️  CLAUDE.md never mentions \`$sym\` — $swhy. /qa-warden:init --resync does NOT refresh CLAUDE.md (shared ownership), so this is a HAND-MERGE, not a command: diff yours against $TMPL/CLAUDE.md and copy the missing prose across."; warn=$((warn+1)); }
     done < <(grep -v '^[[:space:]]*#' "$VOCAB" | sed 's/[[:space:]]*$//' | grep -v '^$')
@@ -703,15 +716,17 @@ if [ -f CLAUDE.md ] && grep -qE '^##[[:space:]]+Test case format contract[[:spac
   warn=$((warn+1))
 fi
 
-# 9b / 9bb / 9bc / 9bd / 9be / 9d / 9e / 9f arm 1 / 9g / 9h / 9i / 9j / 20 — MOVED to the plugin's
+# 9b / 9bb / 9bc / 9bd / 9be / 9d / 9e / 9f arm 1 / 9g / 9h / 9i / 9j / 9k arm 3's plugin half /
+#     20, and the stale-manifest arm of the CLAUDE.md containment above (now 9b arm 4) — MOVED to the plugin's
 #     own `bin/qa-selfcheck`, NOT shipped here. They read ONLY the plugin's source (agents/,
 #     skills/, hooks/, reference/, templates/, manifests/) and nothing in this project, so there
 #     was never anything a consumer could fix when one fired: they are the toolkit's unit tests,
 #     and they belong where the toolkit is built. They also made a project whose substrate is
 #     NEWER than a teammate's installed plugin print a wall of ❌ that all meant "update your
 #     plugin". Seven moved first; 9bb, 9bd, 9f arm 1, 9g, 9i and 20 followed once the same test
-#     was applied to each of them. The checks that COMPARE this project with the plugin (9, 9c,
-#     9f arms 2-3, 9k) stay — that comparison can only be made from here. The ids are kept, so a
+#     was applied to each of them; the 9k plugin half and the stale-manifest arm on 2026-10-19.
+#     The checks that COMPARE this project with the plugin (9, 9c, 9f arms 2-3, 9k on the
+#     project's scripts/) stay — that comparison can only be made from here. The ids are kept, so a
 #     citation of "Check 9bc" or "Check 9bb" resolves — to bin/qa-selfcheck.
 
 # 9c. RETIRED permission rules still present in .claude/settings.json — the settings-side
@@ -875,7 +890,9 @@ fi
 #               '*/_*/*'` (playwright.config.ts's testIgnore). Without them every consumer lists
 #               `tests/_demo/…` files Playwright never runs — the bug this arm was widened for.
 #               Comment lines are dropped before matching, so a mention in prose cannot pass it.
-#       Arm 3 — no OTHER file re-derives the walk. ADJACENCY is the anchor, as in 9j, and the
+#       Arm 3 — no OTHER file re-derives the walk. Here: the project's stamped scripts/*.sh;
+#               the plugin's own files are bin/qa-selfcheck Check 9k (same id, plugin half).
+#               ADJACENCY is the anchor, as in 9j, and the
 #               exact anchor point was found by RUNNING the check, not by designing it. The
 #               obvious symbol — a manifest directory immediately followed by a shell
 #               interpolation, `route-manifests/${...}` — false-FAILED on THREE live sites on
@@ -915,7 +932,10 @@ if [ -f scripts/spec-links.sh ]; then
     fail=$((fail+1))
   fi
 fi
-# Arm 3 — scan the plugin's own tree plus the project's scripts/ for a re-derived walk.
+# Arm 3 — scan the project's stamped scripts/*.sh for a re-derived walk. The PLUGIN half of this
+# arm (the same scan over the plugin's own *.sh and bin/) moved to bin/qa-selfcheck under the same
+# id, Check 9k, as 9f arm 1 did: a plugin file that re-derives the walk is a plugin-source bug no
+# consumer can fix, and it used to fail every consumer's doctor.
 # `-e` is MANDATORY here and is not style: this pattern BEGINS WITH `-f`, so passed positionally
 # it is consumed as grep's own `-f FILE` option. Caught by running the check — the error went to
 # the `2>/dev/null` the scan needs for absent dirs, arm 3 produced no output for ANY input, and it
@@ -923,19 +943,13 @@ fi
 # catch; it was wearing a passing baseline at the time. (Reproduced on ugrep, which names the
 # option in its error; GNU/BSD grep swallow it the same way.)
 umw_re='-f[[:space:]]*"artifacts/route-manifests/\$\{'
-# File list, not `grep -rl`: each candidate is filtered through `sed` first. `bin/` is listed
-# explicitly because qa-scaffold is EXTENSIONLESS (the §6 note) and a `*.sh` glob misses it.
-UMW_PLUG=$([ -n "$TMPL" ] && cd "$TMPL/.." 2>/dev/null && pwd)   # resolve, as Check 9j does, so a
-# reported path reads `qa-warden/skills/...` and not `qa-warden/templates/../skills/...`.
-umw_files=$({ [ -n "$UMW_PLUG" ] && find "$UMW_PLUG" -name '*.sh' -type f 2>/dev/null
-              [ -n "$UMW_PLUG" ] && [ -d "$UMW_PLUG/bin" ] && find "$UMW_PLUG/bin" -type f 2>/dev/null
-              find scripts -name '*.sh' -type f 2>/dev/null
-            } | sort -u)
+# File list, not `grep -rl`: each candidate is filtered through `sed` first.
+umw_files=$(find scripts -name '*.sh' -type f 2>/dev/null | sort -u)
 umw_bad=0
 for f in $umw_files; do
   case "$f" in */spec-links.sh) continue ;; esac
   sed '/^[[:space:]]*#/d' "$f" 2>/dev/null | grep -qE -e "$umw_re" || continue
-  echo "❌ ${f#"${UMW_PLUG%/*}/"} builds a route-manifest path from a variable — the unmanifested walk is owned by \`scripts/spec-links.sh unmanifested\` (see its header rule 3). A second copy drifts silently: the twin exclusion is the half that is invisible when it is wrong, and /qa-warden:impact and /qa-warden:coverage must report the SAME invisible-spec set or one of them is quietly claiming a complete answer"
+  echo "❌ $f builds a route-manifest path from a variable — the unmanifested walk is owned by \`scripts/spec-links.sh unmanifested\` (see its header rule 3). A second copy drifts silently: the twin exclusion is the half that is invisible when it is wrong, and /qa-warden:impact and /qa-warden:coverage must report the SAME invisible-spec set or one of them is quietly claiming a complete answer"
   umw_bad=$((umw_bad+1))
 done
 fail=$((fail+umw_bad))

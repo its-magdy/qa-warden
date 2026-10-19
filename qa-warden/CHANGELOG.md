@@ -20,57 +20,22 @@ never carry the same number**, or the second one has no way to announce itself.
 
 ## [Unreleased]
 
-### A symlinked directory can no longer carry a delete or a review marker out of the project
+### Doctor reports a deleted script once and stops reporting plugin bugs to consumers
 
-- **`scripts/retire-delete.sh` refused a symlinked file but not a symlinked directory.** It checked
-  the path as a string (relative, no `..`, under a retire-able dir) and refused a symlink only at
-  the leaf, so in a project with `tests -> /tmp/outside`, `bash scripts/retire-delete.sh
-  tests/x.spec.ts` deleted `/tmp/outside/x.spec.ts` and exited 0. It now resolves the target's
-  directory with every symlink followed (`cd -P … && pwd -P`) and refuses (exit 2, nothing deleted)
-  unless that directory is inside the project root and still under a retire-able dir. A dir symlink
-  that resolves inside one (`tests/alias -> demo`) still works; one that resolves elsewhere in the
-  project (`tests/src -> ../src`) is refused, because that is product source. This file is stamped:
-  run `/qa-warden:init --resync` to get the fix (doctor reports the old copy as substrate drift).
-- **The review skill's `review-marker.sh` wrote through a symlinked `reports/`.** It created the
-  marker's directory with `mkdir -p` and wrote the marker without checking where either resolved.
-  It now refuses (exit 2, nothing written) a marker that is itself a symlink, or whose directory
-  (before the first write, its nearest existing ancestor) resolves outside the project. The spec
-  and test it hashes get the same rule: a symlink at the leaf, or a symlinked dir under `specs/` or
-  `tests/` that resolves outside the project, is refused. `check` mode applies it too, so doctor
-  Check 15 says such a pair "could not be checked" instead of reading a marker from outside.
-- **Both refuse a path with a newline or another control character.** A `$( )` strips trailing
-  newlines, so beside a real `tests/safe/`, a symlink named `tests/safe<newline>` was checked as
-  the real directory while the delete or write followed the link. Every `pwd -P` is now captured
-  so that it keeps a trailing newline, and a project root or resolved directory containing a
-  control character is refused too.
-- **Not race-proof.** Both refuse a path that resolves outside the project. They are not hardened
-  against another process rewriting the tree during the call. They narrow the window:
-  retire-delete re-checks the target's directory from inside it and runs `rm` there, and
-  review-marker creates the marker's directories one level at a time, re-checks each from inside,
-  writes the marker in a private temp dir made with `mkdir` (which fails on a planted symlink), and
-  renames it onto the marker. Swapping an ancestor directory after that no longer redirects them.
-  A marker path that is a directory or a symlink is refused right before the rename; swapping one
-  in after that check is still possible. A failed or interrupted write leaves no temp files.
-  `check` mode only reads a hash and is not narrowed.
-- The resolving function is the same few lines in both files (one is stamped into projects, the
-  other runs from the plugin, so they cannot share it). `bin/qa-scaffoldtest` gains 122 cases
-  (642 → 764): a new section 10 runs one path table against both scripts, covering a symlinked
-  `tests/`, `specs/` and `reports/`, a symlinked intermediate dir, a leaf symlink, a dangling
-  symlink, new marker dirs under a real and under a symlinked `reports/`, a sibling-prefix dir
-  (`proj` vs `proj2`), dir symlinks back inside the project and `reports -> .`, trailing-newline
-  and tab names, a sibling dir named `proj<newline>`, a project root named so, a marker path that
-  is a directory, and the plain paths. Further cases swap the tree at a fixed point after the
-  checks (a stub `rm` and a stub `sha256sum` on `PATH`), plant a symlink at the temp dir's name,
-  and make the temp write fail with `ulimit -f 0`.
-
-### The two hooks share one comment stripper
-
-- `hooks/spec-lint.sh` and the healer arm of `hooks/assertion-contract.sh` each carried the same
-  awk program that blanks comment lines before scanning. It now lives once in `hooks/hook-lib.sh`
-  as `hook_strip_js_comments`, which both hooks already source. No behaviour change.
-- `bin/qa-hooktest` gains 4 cases (58 → 62) that fail if the stripper stops stripping: a comment
-  naming `networkidle` and a healer comment naming `page.route` are allowed, while code before a
-  trailing comment and a `waitForTimeout` after an `https://` string are still denied.
+- A deleted canonical script (`prod-guard.sh`, `resolve-spec-path.sh`, `spec-links.sh`,
+  `post-run-checks.sh`, `oracle-keys.txt`) was reported twice in a row: by Check 8's
+  missing-file loop and by Check 9's "substrate missing" ❌ (three times for `oracle-keys.txt`,
+  which Check 2 also reads). Check 8's loop now runs only when Check 9 is skipped (a doctor copied
+  out of its plugin, with no `templates/` to compare against), and its repair is now
+  `/qa-warden:init --resync`. A doctor run from the plugin prints one fewer ⚠️ per missing file.
+- Two doctor arms compared plugin files with each other, so a consumer could do nothing when one
+  fired. They moved to `bin/qa-selfcheck`: the warning that `manifests/claude-md-vocab.txt` lists
+  a symbol the shipped `templates/CLAUDE.md` no longer mentions (now selfcheck Check 9b arm 4; doctor
+  skips such a row silently), and Check 9k arm 3's scan of the plugin's own `*.sh` and `bin/`
+  files for a re-derived unmanifested walk (now selfcheck Check 9k, same id, as with 9f arm 1).
+  Doctor still scans the project's stamped `scripts/*.sh`.
+- Maintainers: selfcheck's stock-shell parse check moves from 9k to **9m**, so 9k means one check
+  in both files. qa-selfcheck now has 15 numbered checks (was 14); doctor still has 32.
 
 ### One prod-guard verdict: `scripts/prod-guard-core.mjs`, used by both guards
 

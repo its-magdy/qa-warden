@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         # macOS is required, not a nicety: only its /bin/bash is 3.2, the version stock macOS
-        # users run, and selfcheck 9k plus the parse loop below only bite there.
+        # users run, and selfcheck 9m plus the parse loop below only bite there.
         os: [ubuntu-24.04, macos-26]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10

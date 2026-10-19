@@ -51,8 +51,8 @@ does not fix anything — each finding names its repair:
 - **Check 0b (ripgrep missing, WARN):** `rg` is an undeclared plugin-wide dependency (the healer,
   reviewer and planner greps use it). `/qa-warden:retire` checks for it and falls back to
   `grep -rlE` for its consumer checks; install it anyway (`brew install ripgrep`).
-- **Check ids 9b / 9bb / 9bc / 9bd / 9be / 9d / 9e / 9g / 9h / 9i / 9j / 20, and 9f arm 1, belong to
-  `bin/qa-selfcheck`, not doctor.** They read only the plugin's own source (agents, skills, hooks,
+- **Check ids 9b / 9bb / 9bc / 9bd / 9be / 9d / 9e / 9g / 9h / 9i / 9j / 9m / 20, 9f arm 1, and 9k's
+  scan of the plugin's own files belong to `bin/qa-selfcheck`, not doctor.** They read only the plugin's own source (agents, skills, hooks,
   the shipped templates, the plugin's `manifests/`), so nothing in a project could fix one; they run
   from the toolkit repo as `bin/qa-selfcheck` (same ids). If a user reports one of those ids, the
   fault is in the plugin build, not their project — the remedy is updating the plugin, not editing
@@ -91,7 +91,9 @@ does not fix anything — each finding names its repair:
   is no longer in that set: it moved into the plugin's `test-case-contract` skill, which ships
   with the plugin. The symbols come from the plugin's
   `manifests/claude-md-vocab.txt` (never stamped into a project) and are gated on the shipped template, the same derive-don't-
-  hand-enumerate shape as the `.env.example` stock-var containment beside it. The check is
+  hand-enumerate shape as the `.env.example` stock-var containment beside it. A manifest row the
+  shipped template no longer carries is skipped silently here; that stale row is a plugin bug,
+  reported by `bin/qa-selfcheck` Check 9b arm 4. The check is
   symbol-level, not section-level: new rules land inside pre-existing sections, so a heading
   diff reports green on exactly the release it was built for. **WARNs, never FAILs:** alone among
   Check 9's findings the repair is a hand-merge against the shipped template, not a command, and
@@ -119,7 +121,9 @@ does not fix anything — each finding names its repair:
   predates the inventory: that is an uncounted ℹ️, not a ❌, because doctor, coverage and impact
   then run the plugin's copy of the script; the drift ⚠️ carries the `/qa-warden:init --resync`.
   **Arm 3 keys on the CONSTRUCT** — an existence
-  test on a manifest path built from a variable — and scans **code, not comments**, because an
+  test on a manifest path built from a variable — in the project's stamped `scripts/*.sh` (the
+  same scan over the plugin's own files is `bin/qa-selfcheck` Check 9k, since only a maintainer
+  can fix those), and scans **code, not comments**, because an
   ownership check has to name the construct it bans and so matches its own documentation
   otherwise. Fix by calling `scripts/spec-links.sh unmanifested`; never re-derive the walk.
 - **Check 9l (`test lock:` pairing + shard voidance):** `lock?: string | string[]` on
@@ -172,7 +176,10 @@ does not fix anything — each finding names its repair:
   drifted files to `*.qa-bak`). Check 8 compares `scripts/prod-guard-core.mjs` (the verdict
   both prod-guard layers take) with the plugin's copy: a difference or a guard that predates
   the core is a ⚠️; a guard that needs the core when it is missing is a ❌, because that guard
-  refuses every run until the resync. A missing stock var in `.env.example` → restore it from
+  refuses every run until the resync. A deleted canonical script (`prod-guard.sh`,
+  `resolve-spec-path.sh`, `spec-links.sh`, `post-run-checks.sh`, `oracle-keys.txt`) is reported
+  once, by Check 9's "substrate missing" ❌; Check 8 names it (a ⚠️) only when Check 9 is skipped
+  because this doctor was copied out of its plugin. A missing stock var in `.env.example` → restore it from
   the shipped template, or park it commented (`# VAR=`) — the stock list is derived from
   the template, and the file itself is shared-ownership and never byte-compared. The
   drift baseline is the plugin this doctor ships in, so it never compares against a different

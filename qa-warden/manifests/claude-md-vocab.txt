@@ -1,10 +1,13 @@
 # claude-md-vocab.txt — the ONE manifest of TOOLKIT-OWNED SYMBOLS that must survive in a
 # project's stamped CLAUDE.md.
 #
-# One consumer reads this file:
+# Two consumers read this file:
 #   - skills/doctor/scripts/doctor.sh Check 9 (CLAUDE.md vocabulary containment) : every symbol listed here
-#     must appear in the SHIPPED templates/CLAUDE.md *and* in the project's own CLAUDE.md.
-# Doctor reads it from the plugin (manifests/), never from the project, so it is not stamped.
+#     must appear in the project's own CLAUDE.md. A row the SHIPPED templates/CLAUDE.md lacks is
+#     skipped silently there (a consumer cannot fix this manifest).
+#   - bin/qa-selfcheck Check 9b arm 4 : every symbol listed here must appear in the SHIPPED
+#     templates/CLAUDE.md; a row that does not is a stale manifest, and fails the selfcheck.
+# Both read it from the plugin (manifests/), never from a project, so it is not stamped.
 #
 # WHY THIS EXISTS. CLAUDE.md is shared-ownership: users customise project policy, so it is
 # excluded from `--resync` (bin/qa-scaffold) and from Check 9's byte-compare (see the
