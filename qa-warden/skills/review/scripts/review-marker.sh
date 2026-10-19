@@ -37,10 +37,11 @@
 #     `stale` whatever its result: the review it records was of other code.
 #
 # Refuses (exit 2, writes nothing, prints nothing on stdout): wrong arg count, a verdict other than
-# PASS/FAIL, a spec not under specs/ or a test not under tests/, either file missing, a spec, test or
-# marker that is a symlink or sits under a symlinked dir resolving outside the project, or no working
-# sha256 tool (one whose output is a 64-hex digest). It records a verdict the CALLER confirmed — it
-# does not judge; never call it on a guessed or truncated review.
+# PASS/FAIL, a spec not under specs/ or a test not under tests/, a path with a newline or other
+# control character, either file missing, a spec, test or marker that is a symlink or sits under a
+# symlinked dir resolving outside the project, or no working sha256 tool (one whose output is a
+# 64-hex digest). It records a verdict the CALLER confirmed — it does not judge; never call it on a
+# guessed or truncated review.
 set -u
 MODE="write"
 if [ "${1:-}" = "check" ]; then
@@ -60,6 +61,11 @@ fi
 case "$SPEC" in specs/*.md) : ;; *) echo "review-marker: spec must be a relative specs/**/*.md path, got '$SPEC'" >&2; exit 2 ;; esac
 case "$TEST" in tests/*.spec.ts) : ;; *) echo "review-marker: test must be a relative tests/**/*.spec.ts path, got '$TEST'" >&2; exit 2 ;; esac
 case "$SPEC$TEST" in *..*) echo "review-marker: '..' is not allowed in a path" >&2; exit 2 ;; esac
+# A newline or other control character: a `$( )` strips trailing newlines, so `specs/safe<NL>/x.md`
+# would be checked as the real specs/safe while the marker went through a symlink named `safe<NL>`.
+case "$SPEC$TEST" in
+  *[[:cntrl:]]*) echo "review-marker: a path contains a newline or another control character — refused" >&2; exit 2 ;;
+esac
 [ -f "$SPEC" ] || { echo "review-marker: $SPEC not found" >&2; exit 2; }
 [ -f "$TEST" ] || { echo "review-marker: $TEST not found" >&2; exit 2; }
 
@@ -71,15 +77,24 @@ case "$SPEC$TEST" in *..*) echo "review-marker: '..' is not allowed in a path" >
 # and a dangling symlink on the way up is refused. A dir symlink that resolves inside the project is
 # allowed. in_root is duplicated in templates/scripts/retire-delete.sh, which is stamped into
 # projects and so cannot share it; qa-scaffoldtest section 9 runs one path table against both.
-ROOT=$(pwd -P) || exit 2
+# Each `pwd -P` is captured with a trailing '.' that is then cut off, so a `$( )` cannot drop a
+# trailing newline from the result; a root or resolved dir with a control character is refused.
+# This refuses a path that resolves outside the project. It is NOT hardened against another process
+# rewriting the tree during the call; the write below narrows that window, check mode does not.
+ROOT=$(pwd -P && echo .) || { echo "review-marker: cannot resolve the current directory — refused" >&2; exit 2; }
+ROOT=${ROOT%?.}
+case "$ROOT" in
+  *[[:cntrl:]]*|'') echo "review-marker: the project root contains a control character — refused" >&2; exit 2 ;;
+esac
 in_root() {
   _d=$(dirname "$1")
   while [ ! -d "$_d" ]; do
     if [ -L "$_d" ]; then return 1; fi
     _d=$(dirname "$_d")
   done
-  REAL=$(CDPATH='' cd -P "$_d" 2>/dev/null && pwd -P) || return 1
-  case "$REAL" in "$ROOT"|"$ROOT"/*) return 0 ;; esac
+  REAL=$(CDPATH='' cd -P "$_d" 2>/dev/null && pwd -P && echo .) || return 1
+  REAL=${REAL%?.}
+  case "$REAL" in *[[:cntrl:]]*) return 1 ;; "$ROOT"|"$ROOT"/*) return 0 ;; esac
   return 1
 }
 for _p in "$SPEC" "$TEST"; do
@@ -145,6 +160,8 @@ if [ -z "$s_now" ] || [ -z "$t_now" ]; then
   echo "review-marker: neither sha256sum nor shasum -a 256 produced a digest" >&2; exit 2
 fi
 
+# Check mode reads the marker by its pathname after the checks above, so a concurrent swap could make
+# it read an outside file. It only reads a hash and prints one word, so it is left at that.
 if [ "$MODE" = "check" ]; then
   if [ "$s_now" != "$(field "$out" spec_sha256)" ] || [ "$t_now" != "$(field "$out" test_sha256)" ]; then
     echo stale
@@ -156,12 +173,43 @@ if [ "$MODE" = "check" ]; then
   exit 0
 fi
 
-mkdir -p "$(dirname "$out")"
-{
-  echo "commit: $(git rev-parse --verify -q HEAD 2>/dev/null || echo unknown)"
-  echo "spec_sha256: $s_now"
-  echo "test_sha256: $t_now"
-  echo "date: $(date +%F)"
-  echo "result: $RESULT"
-} > "$out"
+# The write narrows the race window without closing it (see in_root's comment). The marker's dirs
+# are entered one level at a time: create the next one if it is missing, `cd -P` into it, and
+# re-check from the held cwd that it is still inside the project. Swapping an ancestor dir after
+# that no longer redirects the write. The marker goes to a temp file created with noclobber in the
+# held dir and is renamed onto its name; rename replaces a symlink planted at the leaf instead of
+# following it.
+commit=$(git rev-parse --verify -q HEAD 2>/dev/null || echo unknown)
+rest="${out%/*}/"
+while [ -n "$rest" ]; do
+  c=${rest%%/*}; rest=${rest#*/}
+  [ -n "$c" ] || continue
+  if [ ! -d "./$c" ]; then
+    mkdir "./$c" 2>/dev/null || [ -d "./$c" ] || { echo "review-marker: cannot create the directory for $out" >&2; exit 2; }
+  fi
+  cd -P "./$c" 2>/dev/null || { echo "review-marker: cannot enter the directory for $out" >&2; exit 2; }
+  held=$(pwd -P && echo .) || exit 2
+  held=${held%?.}
+  case "$held" in
+    *[[:cntrl:]]*) held='' ;;
+  esac
+  case "$held" in
+    "$ROOT"/*) : ;;
+    *) echo "review-marker: the directory for $out changed while it was being written — refused" >&2; exit 2 ;;
+  esac
+done
+tmp=".review-marker.$$.tmp"
+if ! (
+  set -C
+  {
+    echo "commit: $commit"
+    echo "spec_sha256: $s_now"
+    echo "test_sha256: $t_now"
+    echo "date: $(date +%F)"
+    echo "result: $RESULT"
+  } > "$tmp"
+) 2>/dev/null; then
+  echo "review-marker: could not create a temp file for $out — refused" >&2; exit 2
+fi
+mv -f "$tmp" "./${out##*/}" || { rm -f "$tmp"; echo "review-marker: could not write $out" >&2; exit 2; }
 echo "review-marker: wrote $out ($RESULT)"

@@ -38,12 +38,26 @@ never carry the same number**, or the second one has no way to announce itself.
   and test it hashes get the same rule: a symlink at the leaf, or a symlinked dir under `specs/` or
   `tests/` that resolves outside the project, is refused. `check` mode applies it too, so doctor
   Check 15 says such a pair "could not be checked" instead of reading a marker from outside.
+- **Both refuse a path with a newline or another control character.** A `$( )` strips trailing
+  newlines, so beside a real `tests/safe/`, a symlink named `tests/safe<newline>` was checked as
+  the real directory while the delete or write followed the link. Every `pwd -P` is now captured
+  so that it keeps a trailing newline, and a project root or resolved directory containing a
+  control character is refused too.
+- **Not race-proof.** Both refuse a path that resolves outside the project. They are not hardened
+  against another process rewriting the tree during the call. They narrow the window:
+  retire-delete re-checks the target's directory from inside it and runs `rm` there, and
+  review-marker creates the marker's directories one level at a time, re-checks each from inside,
+  and renames a temp file onto the marker (a rename replaces a symlinked leaf instead of following
+  it). Swapping an ancestor directory after that no longer redirects them. `check` mode only reads
+  a hash and is not narrowed.
 - The resolving function is the same few lines in both files (one is stamped into projects, the
-  other runs from the plugin, so they cannot share it). `bin/qa-scaffoldtest` gains 74 cases
-  (511 → 585): a new section 9 runs one path table against both scripts, covering a symlinked
+  other runs from the plugin, so they cannot share it). `bin/qa-scaffoldtest` gains 104 cases
+  (511 → 615): a new section 9 runs one path table against both scripts, covering a symlinked
   `tests/`, `specs/` and `reports/`, a symlinked intermediate dir, a leaf symlink, a dangling
   symlink, new marker dirs under a real and under a symlinked `reports/`, a sibling-prefix dir
-  (`proj` vs `proj2`), dir symlinks back inside the project, and the plain paths.
+  (`proj` vs `proj2`), dir symlinks back inside the project, trailing-newline and tab names, a
+  sibling dir named `proj<newline>`, a project root named so, and the plain paths. Two more cases
+  swap the tree at a fixed point after the checks (a stub `rm` and a stub `sha256sum` on `PATH`).
 
 ### The two hooks share one comment stripper
 
