@@ -1022,7 +1022,7 @@ echo "doctor awk programs and the bug scripts — on a stamp with sites, areas, 
 #
 # The six programs (skills/doctor/scripts/doctor.sh, and the review-marker.sh its Check 15 runs),
 # and the case that reads each (the Check 13 and 16 lookups into the test inventory run on the
-# section-7 fixture instead):
+# section-8 fixture instead):
 #   Check 5b  volatility   awk '{print $2}' on the `volatility:` line   → the tier-budget cases
 #   Check 9   unmanifested awk arm + collected_tests() walk extractors over scripts/spec-links.sh
 #                                                                          → the arm and walk cases
@@ -1030,7 +1030,7 @@ echo "doctor awk programs and the bug scripts — on a stamp with sites, areas, 
 #   Check 15  digest       awk '{print $1}' on the digest line          → the review cases
 #   Check 15  field        awk '{print $2}' on spec_sha256:/test_sha256:/result: → the review cases
 # plus bug-status.sh's status parser, post-run-checks.sh's bug_title, and spec-links.sh's
-# spec_scan (the smoke-tag + basis reader every doctor run goes through; section 7 asserts it).
+# spec_scan (the smoke-tag + basis reader every doctor run goes through; section 8 asserts it).
 #
 # Ordering: nothing here depends on `for (k in arr)` order or on $0/$NF surviving into END, which
 # BSD awk, gawk and mawk treat differently. Where the order of a listing is not the contract it is sorted.
@@ -1513,7 +1513,7 @@ COVERAGE="$here/skills/coverage/scripts/coverage.sh"
 IMPACT="$here/skills/impact/scripts/impact.sh"
 new_dir; G=$DIR
 stamp "$G"
-check_eq "section 7: the stamp this fixture is built on exits 0" "0" "$RC"
+check_eq "section 8: the stamp this fixture is built on exits 0" "0" "$RC"
 mkdir -p "$G/specs/shop" "$G/specs/_drafts" "$G/tests/shop/_probe" "$G/tests/_demo" \
          "$G/artifacts/route-manifests/shop" "$G/specs/_context/shop/shop"
 # Inline tags, a compiled test, its metamorphic twin and a manifest.
