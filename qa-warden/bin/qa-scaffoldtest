@@ -1657,6 +1657,13 @@ check "  but is named on stderr, the TAB shown" grep -qF -e "spec-links: skipped
 PR_OUT=$(cd "$TT" && "$BASH" scripts/post-run-checks.sh --only stray 2>&1)
 check "  post-run-checks prints it as a warning" grep -qF -e "WARN: skipped tests/a<TAB>b.spec.ts" <<<"$PR_OUT"
 check_eq "  and counts it" "post-run: sentinels=0 stray=1 open-bugs=0 test-gaps=0" "$(grep '^post-run:' <<<"$PR_OUT")"
+# Only `spec-links: skipped` lines on stderr count: any other diagnostic — even one shaped like a
+# stray row (4th TAB field `-`) — is not a test. The inventory's rows come from stdout alone.
+printf '#!/bin/sh\nprintf "diagnostic\\tcontext\\tmetadata\\t-\\n" >&2\nexit 0\n' > "$TT/noisy-links.sh"
+PR_OUT=$(cd "$TT" && QA_SPEC_LINKS=noisy-links.sh "$BASH" scripts/post-run-checks.sh --only stray 2>&1)
+check_eq "a stray-shaped stderr diagnostic is not counted as a stray" \
+  "post-run: sentinels=0 stray=0 open-bugs=0 test-gaps=0" "$(grep '^post-run:' <<<"$PR_OUT")"
+check "  nor printed as one" test "$(grep -c 'diagnostic' <<<"$PR_OUT")" = "0"
 
 echo "  -- doctor reads the inventory"
 run_doctor "$G"

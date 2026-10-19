@@ -121,8 +121,10 @@ never carry the same number**, or the second one has no way to announce itself.
   that the scan could NOT run, naming `/qa-warden:init --resync`, and counts it in `stray`; doctor
   hands it the plugin's copy, so doctor's Check 14 still finds strays on such a stamp. A test file
   with a TAB in its path is left out of the `tests` rows (it would shift the columns and hide the
-  stray) and named on stderr, which `post-run-checks.sh` prints and counts as a warning.
-- `bin/qa-scaffoldtest` covers all of this: +59 cases on top of the review-marker entry above (314 → 373; 293 → 373 across both; 374 under mawk).
+  stray) and named on stderr, which `post-run-checks.sh` prints and counts as a warning. It reads
+  only those `spec-links: skipped` lines from stderr, kept apart from the rows, so no other
+  diagnostic can be counted as a stray test.
+- `bin/qa-scaffoldtest` covers all of this: +61 cases on top of the review-marker entry above (314 → 375; 293 → 375 across both; 376 under mawk).
 - **Upgrading:** run `/qa-warden:init --resync`. `scripts/spec-links.sh`, `scripts/post-run-checks.sh`,
   `scripts/README.md` and a comment in `playwright.config.ts` change, so doctor reports them as
   drifted until you do. Until then nothing fails: doctor, `/qa-warden:coverage` and `/qa-warden:impact`

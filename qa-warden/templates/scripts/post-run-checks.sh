@@ -60,25 +60,29 @@ done < <(find artifacts -maxdepth 1 -name '.healer-needs-*' -type f 2>/dev/null)
 # The inventory can fail to answer: a spec-links.sh stamped before the `tests` mode exits 2 on it.
 # Reading its empty output would report `stray=0` for a scan that never ran, so that case is its
 # own counted warning. Doctor sets QA_SPEC_LINKS to the copy it fell back on (the plugin's, for
-# such a stamp), so its Check 14 still gets the real answer. stderr is read with the rows: a
-# `spec-links: …` line names a test the inventory had to leave out (a TAB in its path), and is
-# counted as a warning too; any other stderr line has no TAB-separated spec column and is skipped.
+# such a stamp), so its Check 14 still gets the real answer. stderr is kept APART from the rows (in
+# a temp file): only its `spec-links: skipped …` lines are read, each naming a test the inventory
+# had to leave out (a TAB in its path) and counted as a warning. Read together with the rows, any
+# other diagnostic whose 4th TAB field happened to be `-` would have been counted as a stray test.
 if enabled stray; then
   SL="${QA_SPEC_LINKS:-scripts/spec-links.sh}"
-  if inv=$(bash "$SL" tests 2>&1); then
+  sl_err=$(mktemp "${TMPDIR:-/tmp}/qa-spec-links.XXXXXX")
+  if inv=$(bash "$SL" tests 2>"$sl_err"); then
     while IFS=$'\t' read -r t base _ spec _; do
       [ -n "$t" ] || continue
-      case "$t" in
-        (spec-links:*) echo "$PREFIX ${t#spec-links: }"; n_stray=$((n_stray+1)); continue ;;
-      esac
       [ "$spec" = - ] || continue
       echo "$PREFIX unmanaged spec $t — no specs/${base}.md, so it sits outside the assertion contract. It is not in this run's lane, but a full 'npx playwright test' WILL collect it: qualify the go/no-go. Delete the stray spec (or pair it with a spec) and run /qa-warden:doctor."
       n_stray=$((n_stray+1))
     done <<<"$inv"
+    while IFS= read -r line; do
+      echo "$PREFIX ${line#spec-links: }"
+      n_stray=$((n_stray+1))
+    done < <(grep '^spec-links: skipped ' "$sl_err")
   else
     echo "$PREFIX unmanaged-spec scan could NOT run — $SL has no \`tests\` inventory (it predates it, or failed), so a test with no paired spec would go unreported here. Run /qa-warden:init --resync, then re-run this check."
     n_stray=$((n_stray+1))
   fi
+  rm -f "$sl_err"
 fi
 
 # (3) Parked open-bug surfacing (F-17/F-19) — Playwright folds conditional `test.fail` xfails into
