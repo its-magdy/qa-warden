@@ -85,6 +85,52 @@ never carry the same number**, or the second one has no way to announce itself.
   written or changed), and doctor through it (the FAILED warning apart from the changed one,
   stderr noise ignored, the no-tool reason).
 
+### One inventory of collected tests and smoke-tagged specs
+
+- **`/qa-warden:impact` and `/qa-warden:coverage` no longer report scratch tests Playwright never
+  runs.** The `unmanifested` walk in `scripts/spec-links.sh` did not apply `playwright.config.ts`'s
+  `testIgnore`, so `tests/_demo/failure-demo.spec.ts` (and any `_`-prefixed file or directory)
+  showed up under impact's `### BLIND SPOTS` and coverage's "compiled but UNMANIFESTED" arm, and
+  inflated coverage's "FLOOR, not the total" count. Doctor and `post-run-checks.sh` already
+  excluded them; the three walks now share one.
+- **Smoke tags are read one way everywhere.** Doctor Check 16 only saw a line-leading
+  `tags: [… smoke …]`, so it missed the per-scenario `scenarios: [{ …, tags: [smoke] }]` form the
+  test-case contract requires for a multi-scenario spec, and a block-list `tags:` / `- smoke`. Such a
+  spec with no compiled test was reported by Check 17's generic "spec with no compiled test"
+  instead of Check 16's smoke-gate warning. `/qa-warden:coverage` dim 1b had the opposite bug: it
+  matched `smoke` anywhere, so a spec saying "this is not a smoke test" was flagged as blinding the
+  smoke gate. The one parser now reads only a spec's ```` ```yaml ```` blocks (or the whole file when it
+  has none), counts only the spec-level and per-scenario `tags:` keys (not one under `meta:` or a
+  scenario's `data:`), and treats `#` inside quotes as text, so `name: "issue #3"` no longer hides
+  the tag after it.
+- **`scripts/spec-links.sh` gains `tests`, `specs` and `smoke`.** `tests` lists each collected test
+  with its spec, its manifest and whether it is a metamorphic twin; `specs` lists each authored spec
+  with its test, its smoke tag and its `basis:` link; `smoke` lists the smoke-tagged specs. Doctor,
+  `/qa-warden:coverage`, `/qa-warden:impact` and `post-run-checks.sh` read these rows instead of walking
+  `tests/` and `specs/` themselves. Doctor Check 9k now also checks that the shared walk keeps both
+  `_` exclusions. Specs with a `_`-prefixed file name (not only directory) are now skipped by
+  doctor's spec checks and by `index` too, matching the test side, so a scratch spec's `basis:`
+  no longer satisfies doctor Check 18 or `/qa-warden:coverage` dims 1/5/6.
+- **The smoke parser reads escaped quotes and split tag lists.** An escaped `\"` inside a
+  double-quoted scenario name ended the quote early, so `name: "say \" #3"` lost its tag to a
+  "comment" and an escaped `{` threw off the depth count. A `tags: [` list split over lines
+  (`tags: [`, then `smoke, regression`, then `]`) was read as no tag at all, in both scenario
+  forms and at the top level. Both now count.
+- **The stray-spec scan no longer reports 0 when it could not run.** `post-run-checks.sh` read an
+  older `spec-links.sh`'s empty answer to `tests` as "no stray specs". It now prints a warning
+  that the scan could NOT run, naming `/qa-warden:init --resync`, and counts it in `stray`; doctor
+  hands it the plugin's copy, so doctor's Check 14 still finds strays on such a stamp. A test file
+  with a TAB in its path is left out of the `tests` rows (it would shift the columns and hide the
+  stray) and named on stderr, which `post-run-checks.sh` prints and counts as a warning. It reads
+  only those `spec-links: skipped` lines from stderr, kept apart from the rows, so no other
+  diagnostic can be counted as a stray test.
+- `bin/qa-scaffoldtest` covers all of this: +61 cases on top of the two entries above (450 → 511; 512 under mawk).
+- **Upgrading:** run `/qa-warden:init --resync`. `scripts/spec-links.sh`, `scripts/post-run-checks.sh`,
+  `scripts/README.md` and a comment in `playwright.config.ts` change, so doctor reports them as
+  drifted until you do. Until then nothing fails: doctor, `/qa-warden:coverage` and `/qa-warden:impact`
+  see the older `spec-links.sh` has no inventory and run the plugin's copy of it instead. Doctor
+  adds an uncounted ℹ️ line, and coverage and impact print a `WARN:` line suggesting the resync.
+
 ### `/qa-warden:coverage` reads the oracle keys from the manifest
 
 - `coverage.sh` builds its `KEYS_RE` at runtime from `scripts/oracle-keys.txt` instead of carrying a

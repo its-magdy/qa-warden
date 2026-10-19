@@ -61,7 +61,8 @@ const APP_BASE_URL = process.env.BASE_URL_APP ?? process.env.BASE_URL ?? 'http:/
 //   ignores a `_`-prefixed BASENAME, the second any file under a `_`-prefixed DIRECTORY
 //   (`_probe/mischosen.spec.ts`). With only the first, a `_probe/` dir was collected (0 valid
 //   tests) yet nagged by doctor Check 15 while Check 14 stayed blind: un-ignored, un-caught,
-//   review-nag-only (F-027). In lockstep with doctor Checks 3/14/15's `/_`-segment exclusion.
+//   review-nag-only (F-027). In lockstep with scripts/spec-links.sh's collected-test walk (which
+//   doctor, coverage, impact and post-run-checks.sh read) and doctor Check 3's `/_` filter.
 //
 // Deliberately NOT here: a path ignore for '**/admin/**'. Each site's `grep` already excludes
 // the other site's tagged specs, so a path ignore would only affect UNTAGGED specs under

@@ -13,7 +13,8 @@
 # Prints zero or more warning lines, then ALWAYS a machine-readable trailer:
 #   post-run: sentinels=<n> stray=<n> open-bugs=<n>
 # so a caller can fold the counts into its roll-up (`… · 1 open bug → NOT all-clear`) without
-# re-deriving them.
+# re-deriving them. `stray` counts every stray-scan warning, "the scan could NOT run" included, so
+# a scan that never ran is never a silent 0.
 #
 # WHY THIS EXISTS: all three scans were copy-pasted across /qa-warden:run mode=smoke, /qa-warden:report,
 # /qa-warden:run mode=single and doctor Checks 4/11b/14 — the sentinel one-liner was BYTE-identical in
@@ -50,20 +51,39 @@ done < <(find artifacts -maxdepth 1 -name '.healer-needs-*' -type f 2>/dev/null)
 # unmanaged spec (no paired specs/<base>.md — e.g. a `tests/_demo/failure-demo.spec.ts` left after
 # a trace-capture demo) is invisible to this run's stats yet WILL run, and can fail, in a full
 # suite: the green being reported is not the full-suite truth.
-# EXCLUDE `_`-prefixed scratch specs in BOTH forms — basename AND directory segment — in lockstep
-# with playwright.config.ts's `testIgnore: ['**/_*.spec.ts','**/_*/**']`. `-path '*/_*/*'` alone
-# catches only a `_`-prefixed DIRECTORY; a `_`-prefixed BASENAME at the tests/ root (the sanctioned
-# /qa-warden:review url=<url> throwaway `tests/_audit-visual.spec.ts`) has just ONE slash and never matches it. Without
-# both, the warning below is FACTUALLY WRONG for that file — it claims a full run "WILL run it" when
-# testIgnore provably drops it from collection, and a false alarm trains readers to ignore a warning
+# The tests read here are scripts/spec-links.sh's collected-test inventory (`tests`, its header
+# rule 4), which applies playwright.config.ts's testIgnore — `_`-prefixed scratch specs, basename
+# AND directory form, are already gone — and pairs a twin with its parent's spec. Without the `_`
+# exclusion the warning below is FACTUALLY WRONG for a scratch file: it claims a full run "WILL
+# run it" when testIgnore provably drops it, and a false alarm trains readers to ignore a warning
 # whose whole job is catching a genuinely stray spec.
-enabled stray && while IFS= read -r t; do
-  [ -n "$t" ] || continue
-  rel="${t#tests/}"; base="${rel%.spec.ts}"; base="${base%.metamorphic}"   # twins pair by stripping .metamorphic
-  [ -f "specs/${base}.md" ] && continue
-  echo "$PREFIX unmanaged spec $t — no specs/${base}.md, so it sits outside the assertion contract. It is not in this run's lane, but a full 'npx playwright test' WILL collect it: qualify the go/no-go. Delete the stray spec (or pair it with a spec) and run /qa-warden:doctor."
-  n_stray=$((n_stray+1))
-done < <(find tests -name '*.spec.ts' -type f ! -name '_*' ! -path '*/_*/*' 2>/dev/null)
+# The inventory can fail to answer: a spec-links.sh stamped before the `tests` mode exits 2 on it.
+# Reading its empty output would report `stray=0` for a scan that never ran, so that case is its
+# own counted warning. Doctor sets QA_SPEC_LINKS to the copy it fell back on (the plugin's, for
+# such a stamp), so its Check 14 still gets the real answer. stderr is kept APART from the rows (in
+# a temp file): only its `spec-links: skipped …` lines are read, each naming a test the inventory
+# had to leave out (a TAB in its path) and counted as a warning. Read together with the rows, any
+# other diagnostic whose 4th TAB field happened to be `-` would have been counted as a stray test.
+if enabled stray; then
+  SL="${QA_SPEC_LINKS:-scripts/spec-links.sh}"
+  sl_err=$(mktemp "${TMPDIR:-/tmp}/qa-spec-links.XXXXXX")
+  if inv=$(bash "$SL" tests 2>"$sl_err"); then
+    while IFS=$'\t' read -r t base _ spec _; do
+      [ -n "$t" ] || continue
+      [ "$spec" = - ] || continue
+      echo "$PREFIX unmanaged spec $t — no specs/${base}.md, so it sits outside the assertion contract. It is not in this run's lane, but a full 'npx playwright test' WILL collect it: qualify the go/no-go. Delete the stray spec (or pair it with a spec) and run /qa-warden:doctor."
+      n_stray=$((n_stray+1))
+    done <<<"$inv"
+    while IFS= read -r line; do
+      echo "$PREFIX ${line#spec-links: }"
+      n_stray=$((n_stray+1))
+    done < <(grep '^spec-links: skipped ' "$sl_err")
+  else
+    echo "$PREFIX unmanaged-spec scan could NOT run — $SL has no \`tests\` inventory (it predates it, or failed), so a test with no paired spec would go unreported here. Run /qa-warden:init --resync, then re-run this check."
+    n_stray=$((n_stray+1))
+  fi
+  rm -f "$sl_err"
+fi
 
 # (3) Parked open-bug surfacing (F-17/F-19) — Playwright folds conditional `test.fail` xfails into
 # the `expected` count, and a `test.fixme` in a lane this run didn't grep leaves NO trace in the

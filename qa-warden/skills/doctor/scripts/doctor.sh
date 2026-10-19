@@ -125,15 +125,32 @@ fi
 # These checks used to re-run the SAME walks over tests/ and specs/ (eight-plus traversals, and
 # as many copies of filters that have already had to be fixed in lockstep). Walk each tree ONCE
 # here, up front, and let every check downstream consume the result.
-# `! -name '_*'` AND `! -path '*/_*/*'` — BOTH forms, in lockstep with playwright.config.ts's
-# `testIgnore: ['**/_*.spec.ts','**/_*/**']`. `-path '*/_*/*'` alone catches only a `_`-prefixed
-# DIRECTORY (tests/_probe/x.spec.ts); a `_`-prefixed BASENAME at the tests/ root
-# (tests/_audit-visual.spec.ts, the sanctioned /qa-warden:review url=<url> throwaway) has just ONE slash and so never
-# matches it — it survived that filter and drew a false "unmanaged test" WARN on a spec Playwright
-# provably never collects (verified: `--list` on the shipped testIgnore reports it dropped).
-# A scratch spec carries no verified-stamp / review-attestation contract either.
-TEST_FILES=$(find tests -name '*.spec.ts' -type f ! -name '_*' ! -path '*/_*/*' 2>/dev/null)
-SPEC_FILES=$(find specs -name '*.md' ! -path 'specs/_context/*' ! -path '*/_*/*' -type f 2>/dev/null)
+# The tests/ and specs/ walks, the spec↔test join and the smoke-tag parse are owned by
+# scripts/spec-links.sh (`tests` / `specs`, its header rules 4 and 5): the same inventory
+# /qa-warden:coverage, /qa-warden:impact and scripts/post-run-checks.sh read, so none of them can
+# disagree about which tests Playwright collects. That walk applies playwright.config.ts's
+# `testIgnore: ['**/_*.spec.ts','**/_*/**']` in BOTH forms. A `_`-prefixed BASENAME at the tests/
+# root (tests/_audit-visual.spec.ts, the sanctioned /qa-warden:review url=<url> throwaway) has just
+# ONE slash, so a `-path '*/_*/*'`-only filter let it through, and it drew a false "unmanaged test"
+# WARN on a spec Playwright provably never collects (verified: `--list` on the shipped testIgnore
+# reports it dropped). A scratch spec carries no verified-stamp / review-attestation contract either.
+#   TEST_INV rows: <test> <base> <kind: spec|twin> <spec|-> <manifest|->     (Checks 3, 9l, 13, 15b)
+#   SPEC_INV rows: <spec> <base> <test|-> <smoke|-> <basis|->                (Checks 15, 16, 17)
+# SPEC_LINKS is the copy every call below runs. A project's stamp only changes on
+# `/qa-warden:init --resync`, so a newer plugin meets an older stamp — one with no `tests`/`specs`
+# mode, which exits 2 on them. Reading nothing would show an EMPTY suite (Check 3 then cannot see
+# a vacuous smoke gate, and Check 13 reports compiled tests as missing), so doctor runs the PLUGIN's
+# copy of the script instead. It only reads the project tree, so the answers are the ones the
+# resynced stamp will give; Check 9's substrate-drift ⚠️ already names the file and the resync.
+SPEC_LINKS=scripts/spec-links.sh
+SPEC_LINKS_PLUGIN=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../templates/scripts" 2>/dev/null && pwd)
+SPEC_LINKS_PLUGIN="${SPEC_LINKS_PLUGIN:+$SPEC_LINKS_PLUGIN/spec-links.sh}"
+if ! TEST_INV=$(bash "$SPEC_LINKS" tests 2>/dev/null) && [ -f "$SPEC_LINKS_PLUGIN" ]; then
+  SPEC_LINKS=$SPEC_LINKS_PLUGIN
+  TEST_INV=$(bash "$SPEC_LINKS" tests 2>/dev/null)
+fi
+SPEC_INV=$(bash "$SPEC_LINKS" specs 2>/dev/null)
+TEST_FILES=$(printf '%s\n' "$TEST_INV" | cut -f1 | grep -v '^$')
 # specs/_context/ is the tree with the MOST consumers — Checks 5, 5b, 13, 18 and 19 each used to
 # walk it separately (five traversals for one small tree). Walk it once; the checks below filter
 # this list in memory or pass it as operands to a single grep.
@@ -144,17 +161,7 @@ CTX_FILES=$(find specs/_context -type f -name '*.md' 2>/dev/null)
 # trailing-comment-tolerant match anchor now live in scripts/spec-links.sh (`index` / `match`),
 # which /qa-warden:coverage and /qa-warden:impact call too — that anchor had already needed one lockstep fix
 # applied by hand in three places.
-BASIS_LINKS=$(bash scripts/spec-links.sh index 2>/dev/null)
-# The spec↔test naming rule (specs/<p>.md ↔ tests/<p>.spec.ts, twins add .metamorphic) is applied
-# by Checks 14/15/15b/16/17. As a shell FUNCTION rather than five copies of the same three
-# parameter expansions — a layout change is one edit here, at zero fork cost per file.
-# Accepts EITHER half of the pair (a tests/… or a specs/… path) and prints the shared <area>/<feature>
-# stem, so a caller can name its counterpart as tests/<base>.spec.ts / specs/<base>.md.
-spec_base() { local r="${1#tests/}"; r="${r#specs/}"; r="${r%.spec.ts}"; r="${r%.metamorphic}"; printf '%s' "${r%.md}"; }
-# Specs declaring a `tags: [… smoke …]` scenario (the machine-authored tag, not a prose `@smoke`
-# mention). Checks 16 and 17 partition this set between them; harvesting once means Check 17 needs
-# no per-spec re-grep to find the half Check 16 owns.
-SMOKE_SPECS_LIST=$(grep -rlE '^[[:space:]]*tags:[[:space:]]*\[[^]]*\bsmoke\b' specs --include='*.md' 2>/dev/null | grep -v '^specs/_context/')
+BASIS_LINKS=$(bash "$SPEC_LINKS" index 2>/dev/null)
 
 # 3. Vacuous smoke gate — `--grep @smoke` must select ≥1 test, so count @smoke ON ITS OWN.
 #    A combined '@smoke\|@regression' count is blind to the exact failure this check exists
@@ -198,7 +205,9 @@ echo "smoke-tagged spec files: $SMOKE_SPECS / $TOTAL_SPECS (smoke-or-regression:
 #    just the open ones, so letting the script surface them here would double-count the rollup.
 #    The script prints its warnings already-formatted and a trailing `post-run: … stray=<n> …`
 #    count line, which is what feeds $warn — no re-derivation of either scan here.
-prc=$(bash scripts/post-run-checks.sh --prefix '⚠️ ' --only sentinels,stray 2>/dev/null)
+#    QA_SPEC_LINKS hands it the copy SPEC_LINKS settled on above, so an old stamp's Check 14 reads
+#    the plugin's inventory like every other check (the script warns, counted, when it has none).
+prc=$(QA_SPEC_LINKS=$SPEC_LINKS bash scripts/post-run-checks.sh --prefix '⚠️ ' --only sentinels,stray 2>/dev/null)
 printf '%s\n' "$prc" | grep -v '^post-run:' | grep -v '^$'
 prc_n=$(printf '%s\n' "$prc" | sed -nE 's/^post-run: sentinels=([0-9]+) stray=([0-9]+).*/\1 \2/p')
 for n in $prc_n; do warn=$((warn+n)); done
@@ -855,13 +864,24 @@ fi
 #     verifier withheld the manifest for. The walk therefore lives in `scripts/spec-links.sh
 #     unmanifested` and nowhere else (the same move that put the `feature:` extractor and the
 #     back-link anchor there — see that file's header rules 1-3).
-#     Keys on SYMBOLS, never wording — the mode name, the twin-exclusion glob, and the shape of
-#     a manifest path built from a variable. Three arms:
+#     The walk itself is the collected-test inventory (spec-links.sh `collected_tests()`, header
+#     rule 4), which doctor's own TEST_INV/SPEC_INV, coverage and post-run-checks.sh also read.
+#     Keys on SYMBOLS, never wording — the mode name, the function name, the twin marker, the two
+#     testIgnore exclusions, and the shape of a manifest path built from a variable. Three arms:
 #       Arm 1 — scripts/spec-links.sh still carries the `unmanifested)` arm (the owner exists).
-#       Arm 2 — that arm still excludes `*.metamorphic.spec.ts`. This is the property that is
-#               SILENT when dropped: a twin never carries a manifest BY DESIGN (verifier V4
-#               emits one per spec), so without the exclusion every twin is reported as a blind
-#               spot and both consumers cry wolf until someone disables the section.
+#       Arm 2 — the shared walk exists, and its two silent properties hold. A stamp with no
+#               `collected_tests()` predates the inventory: doctor already fell back to the
+#               plugin's copy (SPEC_LINKS, at the top), so that is an uncounted ℹ️ line, never a
+#               ❌ — an upgrade alone must not fail doctor. The ❌ branches below fire only on a
+#               stamp that HAS the walk and was edited away from it.
+#               (a) twins: the walk's `(*.metamorphic)` case marks a twin and the arm skips `= twin`.
+#               A twin never carries a manifest BY DESIGN (verifier V4 emits one per spec), so
+#               without the skip every twin is reported as a blind spot and both consumers cry
+#               wolf until someone disables the section.
+#               (b) scratch specs: the walk's find keeps BOTH `! -name '_*'` and `! -path
+#               '*/_*/*'` (playwright.config.ts's testIgnore). Without them every consumer lists
+#               `tests/_demo/…` files Playwright never runs — the bug this arm was widened for.
+#               Comment lines are dropped before matching, so a mention in prose cannot pass it.
 #       Arm 3 — no OTHER file re-derives the walk. ADJACENCY is the anchor, as in 9j, and the
 #               exact anchor point was found by RUNNING the check, not by designing it. The
 #               obvious symbol — a manifest directory immediately followed by a shell
@@ -884,12 +904,21 @@ fi
 #               on its own comment line — which is where documentation lives anyway.
 #               Re-measured after both fixes: exactly one live site, spec-links.sh, the owner.
 if [ -f scripts/spec-links.sh ]; then
-  sl_arm=$(awk '/^[[:space:]]*unmanifested\)/{f=1} f{print} f&&/^[[:space:]]*;;/{exit}' scripts/spec-links.sh)
+  sl_arm=$(awk '/^[[:space:]]*unmanifested\)/{f=1} f{print} f&&/^[[:space:]]*;;/{exit}' scripts/spec-links.sh | sed '/^[[:space:]]*#/d')
+  sl_walk=$(awk '/^collected_tests\(\)/{f=1} f{print} f&&/^}/{exit}' scripts/spec-links.sh | sed '/^[[:space:]]*#/d')
   if [ -z "$sl_arm" ]; then
     echo "❌ scripts/spec-links.sh has no \`unmanifested)\` arm — /qa-warden:impact's ### BLIND SPOTS and /qa-warden:coverage dim 0 both call it; without it impact reports a zero-match as if it were exhaustive and coverage re-labels every unmanifested test's routes as 'planned, untested'"
     fail=$((fail+1))
-  elif ! printf '%s\n' "$sl_arm" | grep -q 'metamorphic'; then
+  elif [ -z "$sl_walk" ]; then
+    # An OLDER STAMP, not a defect: doctor and /qa-warden:coverage already read the plugin's copy
+    # (SPEC_LINKS, above), and Check 9's drift ⚠️ carries the resync. Say which copy answered;
+    # do not count it, so an upgrade alone never turns doctor red.
+    echo "ℹ️  scripts/spec-links.sh predates the shared test inventory (no collected_tests()) — doctor used the plugin's copy for its test/spec checks; /qa-warden:init --resync updates the stamp"
+  elif ! printf '%s\n' "$sl_walk" | grep -qF -e '(*.metamorphic)' || ! printf '%s\n' "$sl_arm" | grep -q '= twin'; then
     echo "❌ scripts/spec-links.sh \`unmanifested\` no longer excludes *.metamorphic.spec.ts — a twin never carries a manifest by design (verifier V4 emits one per SPEC), so every twin now reports as a blind spot in /qa-warden:impact and as an UNMANIFESTED warning in /qa-warden:coverage dim 0"
+    fail=$((fail+1))
+  elif ! printf '%s\n' "$sl_walk" | grep -qF -e "! -name '_*'" || ! printf '%s\n' "$sl_walk" | grep -qF -e "! -path '*/_*/*'"; then
+    echo "❌ scripts/spec-links.sh collected_tests() no longer excludes \`_\`-prefixed scratch specs in both forms (\`! -name '_*'\` and \`! -path '*/_*/*'\`, playwright.config.ts's testIgnore) — /qa-warden:impact, /qa-warden:coverage, post-run-checks.sh and doctor now count tests Playwright never runs"
     fail=$((fail+1))
   fi
 fi
@@ -1144,12 +1173,12 @@ fi
 #     reviewer's code-level Check 13 remains the enforcing gate; this catches the
 #     declared-then-ignored gap. Test resolution mirrors /qa-warden:coverage dim 1 (LOCKSTEP): the
 #     direct path tests/<feat>.spec.ts PLUS every fanned spec linking back via a top-level
-#     `basis: <area>/<feature>` key, mapped spec→test by the Check-14 naming rule
-#     (specs/<p>.md ↔ tests/<p>.spec.ts, twins add .metamorphic). A mutating feature that
+#     `basis: <area>/<feature>` key, mapped spec→test by the inventory's <base> column
+#     (scripts/spec-links.sh `tests`; a twin shares its spec's base). A mutating feature that
 #     resolves to ZERO test files is itself a WARN — never a silent skip.
 while read -r basis; do
   grep -qE '^[[:space:]]*mutates_server_state:[[:space:]]*true' "$basis" || continue
-  feat=$(bash scripts/spec-links.sh feature "$basis")   # canonical indent-tolerant extractor (F-31)
+  feat=$(bash "$SPEC_LINKS" feature "$basis")   # canonical indent-tolerant extractor (F-31)
   [ -z "$feat" ] && continue
   bases="$feat"
   while read -r sp; do
@@ -1160,11 +1189,12 @@ while read -r basis; do
     # feature, and let scripts/spec-links.sh own the anchor — Check 18 and /qa-warden:coverage dims 1/5/6
     # need the identical trailing-comment tolerance, which has already needed one hand-applied
     # lockstep fix across those three sites.
-  done < <(printf '%s\n' "$BASIS_LINKS" | bash scripts/spec-links.sh match "$feat")
+  done < <(printf '%s\n' "$BASIS_LINKS" | bash "$SPEC_LINKS" match "$feat")
   found=0
   for b in $bases; do
-    for t in "tests/${b}.spec.ts" "tests/${b}.metamorphic.spec.ts"; do
-      [ -f "$t" ] || continue
+    # The collected tests whose base is $b — the spec and its twin, paired by the inventory
+    # (TEST_INV column 2) rather than by re-typing the tests/<b>[.metamorphic].spec.ts join here.
+    for t in $(printf '%s\n' "$TEST_INV" | awk -F'\t' -v b="$b" '$2 == b { print $1 }'); do
       found=$((found+1))
       grep -qE "parallelIndex|workerIndex|mode:[[:space:]]*[\"']serial[\"']|seeded[A-Z]|lock:[[:space:]]*[\"'[]" "$t" \
         || { echo "⚠️  $feat: basis declares mutates_server_state:true but $t shows no isolation marker (parallelIndex/serial/seed fixture/lock:) — un-isolated mutation is green at 1 worker, flaky at scale"; warn=$((warn+1)); }
@@ -1173,8 +1203,8 @@ while read -r basis; do
   [ "$found" -eq 0 ] && { echo "⚠️  $feat: basis declares mutates_server_state:true but NO compiled test resolved (neither tests/${feat}.spec.ts nor any fanned spec via 'basis: ${feat}') — the mutating feature is never isolation-checked; compile it or fix the basis 'feature:' path"; warn=$((warn+1)); }
 done < <(ctx_grep_l '^[[:space:]]*mutates_server_state:[[:space:]]*true')
 
-# (The tests/ and specs/ tree walks Checks 15/15b consume — $TEST_FILES / $SPEC_FILES — are
-#  hoisted to the top of the script, above Check 3.)
+# (The test and spec inventories Checks 15/15b consume — $TEST_INV / $SPEC_INV, with the
+#  spec↔test pairing already joined — are hoisted to the top of the script, above Check 3.)
 
 # 14. Unmanaged tests — see Check 4+14 above; scripts/post-run-checks.sh owns that scan.
 
@@ -1192,11 +1222,9 @@ REVIEW_MARKER="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)/r
 if [ ! -f "$REVIEW_MARKER" ]; then
   echo "⚠️  the plugin's review-marker.sh was not found at $REVIEW_MARKER — review attestation (Check 15) is UNVERIFIED (run doctor from the plugin: /qa-warden:doctor)"; warn=$((warn+1))
 else
-  while read -r spec; do
+  while IFS=$'\t' read -r spec base t smoke basis; do
     [ -n "$spec" ] || continue
-    base=$(spec_base "$spec")
-    t="tests/${base}.spec.ts"
-    [ -f "$t" ] || continue
+    [ "$t" = - ] && continue
     # stdout ONLY: the answer is one word there. Folding stderr in let any noise from the shell
     # itself (a setlocale warning under an LC_ALL that names a missing locale) turn every
     # reviewed pair into "could not be checked".
@@ -1213,23 +1241,21 @@ else
         review_why=$(bash "$REVIEW_MARKER" check "$spec" "$t" 2>&1 >/dev/null | grep '^review-marker:' | tail -1)
         echo "⚠️  ${base}: review attestation could not be checked: ${review_why:-review-marker.sh gave no answer}"; warn=$((warn+1)) ;;
     esac
-  done < <(printf '%s\n' "$SPEC_FILES")
+  done < <(printf '%s\n' "$SPEC_INV")
 fi
 # 15b. Stale verified-comment — a `// verified: must_fail_when "<text>"` stamp in a test whose
 #      captured text no longer appears in the paired spec means the invariant was edited/removed
 #      AFTER verification; the stamp attests a probe of an invariant that no longer exists.
 #      (Portable grep+sed spelling of `rg -o '…"([^"]+)"' -r '$1'` — doctor guarantees only grep/sed.)
-while read -r t; do
+while IFS=$'\t' read -r t base _ spec _; do
   [ -n "$t" ] || continue
-  base=$(spec_base "$t")
-  spec="specs/${base}.md"
-  [ -f "$spec" ] || continue
+  [ "$spec" = - ] && continue
   while IFS= read -r vtxt; do
     [ -n "$vtxt" ] || continue
     grep -qF "$vtxt" "$spec" \
       || { echo "⚠️  ${base}: test carries // verified: must_fail_when \"$vtxt\" but that text is not in $spec — the invariant changed since verification; re-run --verify-invariants or update the stamp"; warn=$((warn+1)); }
   done < <(grep -o '// verified: must_fail_when "[^"]*"' "$t" 2>/dev/null | sed 's/.*must_fail_when "\(.*\)"/\1/')
-done < <(printf '%s\n' "$TEST_FILES")
+done < <(printf '%s\n' "$TEST_INV")
 
 # 16. Smoke-tagged spec with NO compiled test (RUN-27) — the smoke-gate-blind catch. Check 3 above
 #     confirms SOME test carries @smoke so `--grep @smoke` isn't vacuous; this is the complementary
@@ -1237,16 +1263,25 @@ done < <(printf '%s\n' "$TEST_FILES")
 #     spec author put a P1 flow on the fast gate (the smoke-lane rule), but with no .spec.ts the
 #     `--grep @smoke` run selects nothing for it — a fully-broken governed flow (admin RBAC, checkout
 #     charge==total) passes the nightly smoke gate silently because there's simply no test to fail.
-#     Match the YAML `tags: [ … smoke … ]` list form (the machine-authored tag), not prose `@smoke`
-#     mentions. Resolution mirrors Check 15: direct tests/<base>.spec.ts (twins never carry smoke).
-while read -r spec; do
-  base=$(spec_base "$spec")
-  [ -f "tests/${base}.spec.ts" ] && continue                       # compiled → on the gate, fine
+#     The smoke column comes from the ONE tag parser (scripts/spec-links.sh rule 5): the YAML `tags:`
+#     key in its inline, per-scenario (`scenarios: [{ …, tags: [smoke] }]`) and block-list forms —
+#     the machine-authored tag, not a prose `@smoke` mention. The old line-leading-only regex missed
+#     the per-scenario form the test-case contract REQUIRES for a multi-scenario spec, so exactly
+#     the specs that follow the smoke-lane rule fell through to Check 17's weaker message.
+#     Resolution mirrors Check 15: direct tests/<base>.spec.ts (twins never carry smoke).
+while IFS=$'\t' read -r spec base t smoke basis; do
+  [ "$smoke" = smoke ] || continue
+  [ "$t" = - ] || continue                                          # compiled → on the gate, fine
   # fanned: a sibling spec may own the compiled test via a `basis: <area>/<feature>` back-link
-  feat=$(grep -m1 -E '^basis:[[:space:]]*' "$spec" 2>/dev/null | sed -E 's/^basis:[[:space:]]*//; s/[[:space:]#].*$//')
-  [ -n "$feat" ] && [ -f "tests/${feat}.spec.ts" ] && continue
+  # (the inventory's basis column, cut at the same boundary `spec-links.sh match` anchors on)
+  if [ "$basis" != - ]; then
+    fanned_test=$(printf '%s\n' "$TEST_INV" | awk -F'\t' -v b="$basis" '$2 == b && $3 == "spec" { print $1 }')
+    if [ -n "$fanned_test" ]; then
+      continue
+    fi
+  fi
   echo "⚠️  smoke-tagged spec with no compiled test: $spec declares 'tags: [… smoke …]' but tests/${base}.spec.ts does not exist — /qa-warden:run mode=smoke's --grep @smoke is BLIND to this P1 flow; compile it with /qa-warden:gen or drop the smoke tag"; warn=$((warn+1))
-done < <(printf '%s\n' "$SMOKE_SPECS_LIST" | grep -v '^$')
+done < <(printf '%s\n' "$SPEC_INV")
 
 # 17. Spec authored but NEVER compiled (ANY tag) — the complement to Check 16 (F-026). Check 16
 #     catches the @smoke subset with a stronger gate-blind message; a @regression-only spec that
@@ -1257,21 +1292,12 @@ done < <(printf '%s\n' "$SMOKE_SPECS_LIST" | grep -v '^$')
 #     (its .cases.md), NOT where its tests live — so it is deliberately NOT treated as coverage
 #     here (that over-lenient skip is exactly what let a fanned sibling like session-guard.md
 #     escape). Skip @smoke-tagged specs: Check 16 already reports them, don't double-warn.
-while read -r spec; do
+while IFS=$'\t' read -r spec base t smoke basis; do
   [ -n "$spec" ] || continue
-  base=$(spec_base "$spec")
-  [ -f "tests/${base}.spec.ts" ] && continue
-  # smoke → Check 16 owns it. Membership test against the hoisted set Check 16 iterated, instead
-  # of re-applying the tag regex to every spec (a fourth copy of it, and one grep per spec).
-  # Newline-delimited on BOTH sides so the match is whole-line: a bare substring test would let
-  # `specs/auth/login.md` be "found" inside `specs/auth/login-extra.md`.
-  case "
-$SMOKE_SPECS_LIST
-" in *"
-$spec
-"*) continue ;; esac
+  [ "$t" = - ] || continue
+  [ "$smoke" = smoke ] && continue                # smoke → Check 16 owns it (same inventory row)
   echo "⚠️  spec with no compiled test: $spec has no tests/${base}.spec.ts (any tag) — authored but never generated, so it is outside the assertion contract and no run exercises it. Run /qa-warden:gen on it; or if its scenarios are intentionally folded into a sibling spec, /qa-warden:retire it or add a '# waived:' note"; warn=$((warn+1))
-done < <(printf '%s\n' "$SPEC_FILES")
+done < <(printf '%s\n' "$SPEC_INV")
 
 # 18. Abandoned authoring chain — a `.cases.md` (the human-approval artifact) with NO downstream
 #     spec (F-026). The intake→ideate→approve chain ran (a checklist exists) but /qa-warden:new-spec/gen
@@ -1281,7 +1307,7 @@ done < <(printf '%s\n' "$SPEC_FILES")
 while read -r cases; do
   feat=$(printf '%s' "$cases" | sed -E 's#^specs/_context/[^/]+/##; s#\.cases\.md$##')
   [ -f "specs/${feat}.md" ] && continue                                          # spec exists → chain completed
-  [ -n "$(printf '%s\n' "$BASIS_LINKS" | bash scripts/spec-links.sh match "$feat")" ] && continue   # a fanned spec back-links it (hoisted index, canonical anchor — same call as Check 13)
+  [ -n "$(printf '%s\n' "$BASIS_LINKS" | bash "$SPEC_LINKS" match "$feat")" ] && continue   # a fanned spec back-links it (hoisted index, canonical anchor — same call as Check 13)
   echo "⚠️  abandoned authoring chain: ${cases} has no downstream spec (specs/${feat}.md absent, no spec back-links 'basis: ${feat}') — the approved checklist never became a spec; run /qa-warden:new-spec ${feat} or /qa-warden:retire the chain"; warn=$((warn+1))
 done < <(printf %s\\n "$CTX_FILES" | grep -e "\\.cases\\.md$")
 

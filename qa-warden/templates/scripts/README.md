@@ -98,8 +98,8 @@ defect, never hide one).
 
 ## `spec-links.sh` — canonical basis/feature ↔ spec relation
 
-`scripts/spec-links.sh feature <basisfile> | index | match <feat> | unmanifested` — the one
-place three mechanical rules live: the **indent-tolerant `feature:` extractor** (a col-0-only `^feature:`
+`scripts/spec-links.sh feature <basisfile> | index | match <feat> | tests | specs | smoke | unmanifested`
+— the one place the spec relation's mechanical rules live: the **indent-tolerant `feature:` extractor** (a col-0-only `^feature:`
 anchor silently drops indented YAML, leaving the caller with `specs/.md` and a no-op check
 instead of an error) and the **fanned-spec back-link anchor** (which must tolerate the trailing
 `# comment` the plugin's own fanned-spec convention writes). Both were hand-copied across
@@ -116,6 +116,18 @@ design, so a copy that forgets it reports every twin as a blind spot. Doctor **C
 enforces the ownership (and, per its arm 3, scans code rather than comments — an ownership
 check must name the construct it bans, so it matches its own documentation otherwise).
 
+That walk is the **collected-test inventory** (`tests` — one TAB-separated row per test
+Playwright collects: `<test> <base> <spec|twin> <spec path|-> <manifest|->`), the one place
+`playwright.config.ts`'s `testIgnore` is applied: a `_`-prefixed basename AND a `_`-prefixed
+directory are both dropped. Three walks used to disagree on that (the unmanifested one applied
+neither, so `/qa-warden:impact` and `/qa-warden:coverage` listed `tests/_demo/…` files Playwright never
+runs). A test path with a TAB in it cannot be one column, so it is left out of the rows and
+named on stderr (`spec-links: skipped …`). Its specs-side twin is `specs` (`<spec> <base> <test|-> <smoke|-> <basis|->`), and
+`smoke` lists the specs that put a scenario on the `@smoke` gate — the YAML `tags:` key in its
+inline, per-scenario (`scenarios: [{ …, tags: [smoke] }]`) and block-list forms, never a prose
+mention. Doctor, `/qa-warden:coverage`, `/qa-warden:impact` and `post-run-checks.sh` all read these rows
+instead of walking `tests/` or `specs/` themselves.
+
 ## `post-run-checks.sh` — the canonical "is this green actually all-clear?" scans
 
 `bash scripts/post-run-checks.sh [--prefix <str>] [--only sentinels,stray,bugs]` — three
@@ -125,7 +137,10 @@ a full `npx playwright test` would collect but the smoke lane never touched, and
 and ends with a parseable `post-run: sentinels=<n> stray=<n> open-bugs=<n> test-gaps=<n>` trailer for the
 caller's roll-up. Called by `/qa-warden:run mode=smoke`, `/qa-warden:report`, `/qa-warden:run mode=single` (`--only bugs`) and
 `doctor.sh` Checks 4/14 (`--only sentinels,stray`) — each of which used to inline all three,
-byte-identically in places, with its own copy of the `testIgnore` lockstep filter.
+byte-identically in places, with its own copy of the `testIgnore` lockstep filter. When
+`spec-links.sh` has no `tests` inventory (a stamp older than it), the stray scan says it could
+NOT run and counts that in `stray`, rather than reporting 0; doctor passes it the plugin's copy
+(`QA_SPEC_LINKS`) so its Check 14 still answers.
 
 ## `oracle-keys.txt` — the oracle vocabulary as data
 
