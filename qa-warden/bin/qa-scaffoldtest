@@ -29,7 +29,8 @@
 #                      pointer nudged, Check 2 compares key sets with the skill exactly,
 #                      fault:/clock: no longer demanded in CLAUDE.md); the review skill's
 #                      review-marker.sh tested directly (write, then check answers current /
-#                      stale / failed / missing, a broken sha256sum falls back to shasum) and
+#                      stale / failed / missing, a broken or junk-printing sha256sum falls back
+#                      to shasum, every refusal exits 2 and writes nothing) and
 #                      Check 15 warning on a FAILED review apart from a changed pair
 #   5. prod-guard.sh   the URL table: staging passes, a word-boundary prod marker refuses,
 #                      QA_ALLOW_PROD=1 lifts the marker refusal ONLY, placeholders never pass
@@ -715,11 +716,6 @@ grep -v '^result:' "$SHAP/reports/review/demo/widget.reviewed" > "$SHAP/marker.n
 mv "$SHAP/marker.new" "$SHAP/reports/review/demo/widget.reviewed"
 rmk -- check "${WPAIR[@]}"
 check_eq "a marker with no result line and current hashes: current" "current" "$RMK_OUT"
-rmk -- check specs/demo/widget.md
-check_eq "check with one path refuses (exit 2)" "2" "$RMK_RC"
-rmk -- check specs/demo/../widget.md tests/demo/widget.spec.ts
-check_eq "check refuses a '..' path (exit 2)" "2" "$RMK_RC"
-
 # An x86-only sha256sum on Apple silicon is on PATH but exits 126 ("Bad CPU type"). A digest picked
 # by `command -v` alone hashed every file to "" and every reviewed pair read as changed. One that
 # exits 0 and prints nothing must fall through to shasum the same way.
@@ -761,6 +757,75 @@ rmk -- "${WPAIR[@]}" FAIL
 printf '\nA criterion added after the review.\n' >> "$SHAP/specs/demo/widget.md"
 rmk -- check "${WPAIR[@]}"
 check_eq "an edited spec after a FAIL review: stale, not failed" "stale" "$RMK_OUT"
+
+# A sha256sum that prints something that is not a digest ("unavailable", exit 1) must fall through
+# too. Accepting any non-empty output recorded "unavailable" as both hashes, and an edited test
+# still read current afterwards: junk == junk.
+new_dir; JUNKSHA=$DIR
+printf '#!/bin/sh\necho unavailable\nexit 1\n' > "$JUNKSHA/sha256sum"
+chmod +x "$JUNKSHA/sha256sum"
+new_dir; JUNKBOTH=$DIR
+printf '#!/bin/sh\necho unavailable\nexit 1\n' > "$JUNKBOTH/sha256sum"
+printf '#!/bin/sh\necho unavailable\nexit 1\n' > "$JUNKBOTH/shasum"
+chmod +x "$JUNKBOTH/sha256sum" "$JUNKBOTH/shasum"
+WMARK="$SHAP/reports/review/demo/widget.reviewed"
+rmk -- "${WPAIR[@]}" PASS
+rec=$(grep '^test_sha256:' "$WMARK")
+rmk PATH="$JUNKSHA:$PATH" -- "${WPAIR[@]}" PASS
+check_eq "a sha256sum that prints junk falls back to shasum: the same digest is recorded" "$rec" \
+  "$(grep '^test_sha256:' "$WMARK")"
+rmk PATH="$JUNKSHA:$PATH" -- check "${WPAIR[@]}"
+check_eq "  and check answers current" "current" "$RMK_OUT"
+printf '// edited for the junk-digest case\n' >> "$SHAP/tests/demo/widget.spec.ts"
+rmk PATH="$JUNKSHA:$PATH" -- check "${WPAIR[@]}"
+check_eq "an edited test after a PASS review: stale (sha256sum prints junk)" "stale" "$RMK_OUT"
+# A marker that already recorded a non-digest (the old, lax writer) never compares current.
+rmk -- "${WPAIR[@]}" PASS
+sed -e 's/^spec_sha256: .*/spec_sha256: unavailable/' -e 's/^test_sha256: .*/test_sha256: unavailable/' \
+  "$WMARK" > "$SHAP/marker.new"
+mv "$SHAP/marker.new" "$WMARK"
+rmk -- check "${WPAIR[@]}"
+check_eq "a marker that recorded a non-digest hash: stale, never current" "stale" "$RMK_OUT"
+rmk -- "${WPAIR[@]}" PASS
+
+# Every refusal, in both modes: exit 2, nothing on stdout, and no file in the project written or
+# changed (the PASS marker above stays as it is; no marker appears for any other pair). Real files
+# outside specs/ and tests/ make the path cases fail on the path rule, not on a missing file.
+mkdir -p "$SHAP/other"
+cp "$SHAP/specs/demo/widget.md" "$SHAP/other/widget.md"
+cp "$SHAP/tests/demo/widget.spec.ts" "$SHAP/other/widget.spec.ts"
+# refuses <label> [VAR=value ...] -- <args...> — one row of the refusal table.
+refuses() {
+  local label=$1; shift
+  local before
+  before=$(snapshot "$SHAP")
+  rmk "$@"
+  check_eq "$label: exit 2, nothing on stdout" "2:" "$RMK_RC:$RMK_OUT"
+  check_same "  and no file in the project changed" "$before" "$(snapshot "$SHAP")"
+}
+refuses "write, one path"               -- specs/demo/widget.md
+refuses "write, no verdict"             -- "${WPAIR[@]}"
+refuses "write, an extra argument"      -- "${WPAIR[@]}" PASS extra
+refuses "write, a lower-case verdict"   -- "${WPAIR[@]}" pass
+refuses "write, a verdict not PASS/FAIL" -- "${WPAIR[@]}" MAYBE
+refuses "write, a spec not under specs/" -- other/widget.md tests/demo/widget.spec.ts PASS
+refuses "write, a test not under tests/" -- specs/demo/widget.md other/widget.spec.ts PASS
+refuses "write, a '..' path"            -- specs/demo/../demo/widget.md tests/demo/widget.spec.ts PASS
+refuses "write, a missing spec"         -- specs/demo/nope.md tests/demo/widget.spec.ts PASS
+refuses "write, a missing test"         -- specs/demo/widget.md tests/demo/nope.spec.ts PASS
+refuses "write, no working sha256 tool" PATH="$NOSHA:$PATH" -- "${WPAIR[@]}" FAIL
+refuses "write, both tools print junk"  PATH="$JUNKBOTH:$PATH" -- "${WPAIR[@]}" FAIL
+refuses "check, no paths"               -- check
+refuses "check, one path"               -- check specs/demo/widget.md
+refuses "check, three paths"            -- check "${WPAIR[@]}" PASS
+refuses "check, a spec not under specs/" -- check other/widget.md tests/demo/widget.spec.ts
+refuses "check, a test not under tests/" -- check specs/demo/widget.md other/widget.spec.ts
+refuses "check, a '..' path"            -- check specs/demo/../demo/widget.md tests/demo/widget.spec.ts
+refuses "check, a missing spec"         -- check specs/demo/nope.md tests/demo/widget.spec.ts
+refuses "check, a missing test"         -- check specs/demo/widget.md tests/demo/nope.spec.ts
+refuses "check, no working sha256 tool" PATH="$NOSHA:$PATH" -- check "${WPAIR[@]}"
+refuses "check, both tools print junk"  PATH="$JUNKBOTH:$PATH" -- check "${WPAIR[@]}"
+rm -rf "$SHAP/other"
 
 echo "  -- Check 15 reports what review-marker.sh check answers"
 STALE_RV="demo/widget: changed since last review (or never reviewed) — re-run /qa-warden:review"

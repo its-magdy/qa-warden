@@ -38,8 +38,8 @@
 #
 # Refuses (exit 2, writes nothing, prints nothing on stdout): wrong arg count, a verdict other than
 # PASS/FAIL, a spec not under specs/ or a test not under tests/, either file missing, or no working
-# sha256 tool. It records a verdict the CALLER confirmed — it does not judge; never call it on a
-# guessed or truncated review.
+# sha256 tool (one whose output is a 64-hex digest). It records a verdict the CALLER confirmed — it
+# does not judge; never call it on a guessed or truncated review.
 set -u
 MODE="write"
 if [ "${1:-}" = "check" ]; then
@@ -67,12 +67,20 @@ case "$SPEC$TEST" in *..*) echo "review-marker: '..' is not allowed in a path" >
 # is found but cannot run (an x86-only binary on Apple silicon: "Bad CPU type", exit 126) must fall
 # through to shasum, not yield an empty hash that makes every reviewed pair look changed. The test
 # is the OUTPUT, not the exit status, so a sha256sum that exits 0 and prints nothing falls through too.
+# And the output must BE a digest — exactly 64 lowercase hex chars — not merely be non-empty: a
+# broken tool that prints "unavailable" would otherwise be recorded as both hashes, and every later
+# edit would still compare equal (junk == junk) and read `current`. Anything else falls through, and
+# if neither tool yields a digest, digest prints nothing and the caller refuses.
+is_digest() {
+  case "$1" in ''|*[!0-9a-f]*) return 1 ;; esac
+  [ "${#1}" -eq 64 ]
+}
 digest() {
   _d=$(sha256sum "$1" 2>/dev/null | awk '{print $1}')
-  if [ -z "$_d" ]; then
+  if ! is_digest "$_d"; then
     _d=$(shasum -a 256 "$1" 2>/dev/null | awk '{print $1}')
   fi
-  printf '%s\n' "$_d"
+  if is_digest "$_d"; then printf '%s\n' "$_d"; fi
 }
 # field <marker> <name> — the value of the first `<name>: <value>` line, or nothing.
 field() { grep -m1 "^$2:" "$1" | awk '{print $2}'; }
@@ -89,7 +97,9 @@ fi
 s_now=$(digest "$SPEC")
 t_now=$(digest "$TEST")
 # With no working tool both digests are empty. The writer would then record "", and the checker
-# would call a marker that recorded "" current. Refuse instead.
+# would call a marker that recorded "" current. Refuse instead. Because a non-empty digest is always
+# 64-hex, a marker whose recorded hash is anything else (junk from an older, laxer writer) can never
+# compare equal, so it reads `stale`, never `current`.
 if [ -z "$s_now" ] || [ -z "$t_now" ]; then
   echo "review-marker: neither sha256sum nor shasum -a 256 produced a digest" >&2; exit 2
 fi
