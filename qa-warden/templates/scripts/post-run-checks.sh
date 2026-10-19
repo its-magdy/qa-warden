@@ -56,7 +56,7 @@ done < <(find artifacts -maxdepth 1 -name '.healer-needs-*' -type f 2>/dev/null)
 # exclusion the warning below is FACTUALLY WRONG for a scratch file: it claims a full run "WILL
 # run it" when testIgnore provably drops it, and a false alarm trains readers to ignore a warning
 # whose whole job is catching a genuinely stray spec.
-enabled stray && while IFS=$'\t' read -r t base kind spec mf; do
+enabled stray && while IFS=$'\t' read -r t base _ spec _; do
   [ -n "$t" ] || continue
   [ "$spec" = - ] || continue
   echo "$PREFIX unmanaged spec $t — no specs/${base}.md, so it sits outside the assertion contract. It is not in this run's lane, but a full 'npx playwright test' WILL collect it: qualify the go/no-go. Delete the stray spec (or pair it with a spec) and run /qa-warden:doctor."

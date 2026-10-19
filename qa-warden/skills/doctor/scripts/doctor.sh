@@ -1245,7 +1245,7 @@ fi
 #      captured text no longer appears in the paired spec means the invariant was edited/removed
 #      AFTER verification; the stamp attests a probe of an invariant that no longer exists.
 #      (Portable grep+sed spelling of `rg -o '…"([^"]+)"' -r '$1'` — doctor guarantees only grep/sed.)
-while IFS=$'\t' read -r t base kind spec mf; do
+while IFS=$'\t' read -r t base _ spec _; do
   [ -n "$t" ] || continue
   [ "$spec" = - ] && continue
   while IFS= read -r vtxt; do
