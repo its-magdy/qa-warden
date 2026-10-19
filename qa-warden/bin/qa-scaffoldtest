@@ -1568,6 +1568,20 @@ printf '%s\n' '# Fenced smoke' '' 'Prose first.' '' '```yaml' 'name: fenced-smok
 printf '%s\n' 'name: bare' 'We ran it fast, tags: smoke-ish' '- tags: smoke was dropped' \
   'data: { tags: [smoke] }' 'scenarios:' '  - name: ok' '    data:' '      tags: [smoke]' \
   > "$G/specs/shop/bare.md"
+# An escaped `\"` inside a double-quoted name is not its end: read as one, the ` #3` became a
+# comment (cutting the tag) and the `{` went uncounted (so the second scenario's key was never seen).
+printf '%s\n' 'scenarios: [{ name: "say \" #3", tags: [smoke] }]' > "$G/specs/shop/esc.md"
+printf '%s\n' 'scenarios: [{ name: "a \" {", tags: [regression] }, { name: b, tags: [smoke] }]' \
+  > "$G/specs/shop/esc-depth.md"
+# A `tags: [` list split over lines: per scenario in the flow and the block form, and top level.
+printf '%s\n' 'scenarios: [{ name: ok, tags: [' '  smoke, regression' '] }]' > "$G/specs/shop/ml-flow.md"
+printf '%s\n' 'scenarios:' '  - name: ok' '    tags: [' '      regression,' '      smoke' '    ]' \
+  > "$G/specs/shop/ml-block.md"
+printf '%s\n' 'tags: [' '  smoke' ']' > "$G/specs/shop/ml-top.md"
+# ...and split lists that must NOT count: regression-only lists, a split `data: { tags: [` and an
+# escaped quote whose name text reads `tags: [smoke]`.
+printf '%s\n' 'tags: [' '  regression' ']' 'scenarios: [{ name: "a \" tags: [smoke]", tags: [' '  regression ] },' \
+  '  { name: b, data: { tags: [' '    smoke ] } }]' > "$G/specs/shop/ml-none.md"
 # The four scratch names, for the "reported nowhere" cases below. Matched by name rather than by
 # `/_`, which the stamp's own specs/_context/ paths would hit.
 SCRATCH_RE='_scratch|_probe|_demo|_drafts|_ghost'
@@ -1587,22 +1601,33 @@ check_eq "specs: the authored specs only, with test, smoke and basis columns" \
   "specs/shop/bare.md${TAB}shop/bare${TAB}-${TAB}-${TAB}-
 specs/shop/cart.md${TAB}shop/cart${TAB}tests/shop/cart.spec.ts${TAB}smoke${TAB}-
 specs/shop/crlf.md${TAB}shop/crlf${TAB}-${TAB}smoke${TAB}shop/login
+specs/shop/esc-depth.md${TAB}shop/esc-depth${TAB}-${TAB}smoke${TAB}-
+specs/shop/esc.md${TAB}shop/esc${TAB}-${TAB}smoke${TAB}-
 specs/shop/fenced-smoke.md${TAB}shop/fenced-smoke${TAB}-${TAB}smoke${TAB}-
 specs/shop/fenced.md${TAB}shop/fenced${TAB}-${TAB}-${TAB}-
 specs/shop/hash.md${TAB}shop/hash${TAB}-${TAB}smoke${TAB}-
 specs/shop/login-locked.md${TAB}shop/login-locked${TAB}-${TAB}smoke${TAB}shop/login
 specs/shop/login.md${TAB}shop/login${TAB}tests/shop/login.spec.ts${TAB}-${TAB}-
+specs/shop/ml-block.md${TAB}shop/ml-block${TAB}-${TAB}smoke${TAB}-
+specs/shop/ml-flow.md${TAB}shop/ml-flow${TAB}-${TAB}smoke${TAB}-
+specs/shop/ml-none.md${TAB}shop/ml-none${TAB}-${TAB}-${TAB}-
+specs/shop/ml-top.md${TAB}shop/ml-top${TAB}-${TAB}smoke${TAB}-
 specs/shop/nonsmoke.md${TAB}shop/nonsmoke${TAB}-${TAB}-${TAB}-
 specs/shop/pay.md${TAB}shop/pay${TAB}-${TAB}smoke${TAB}-
 specs/shop/refund.md${TAB}shop/refund${TAB}-${TAB}smoke${TAB}-
 specs/shop/search.md${TAB}shop/search${TAB}-${TAB}-${TAB}-" \
   "$(sl "$BASH" specs | LC_ALL=C sort)"
-check_eq "smoke: inline, quoted-@, per-scenario (flow, block, CRLF, quoted #) count; prose, bullets, nested and non-yaml-fence tags and smoke-containing tokens do not" \
+check_eq "smoke: inline, quoted-@, per-scenario (flow, block, CRLF, quoted #, escaped quote), split lists count; prose, bullets, nested and non-yaml-fence tags and smoke-containing tokens do not" \
   "specs/shop/cart.md
 specs/shop/crlf.md
+specs/shop/esc-depth.md
+specs/shop/esc.md
 specs/shop/fenced-smoke.md
 specs/shop/hash.md
 specs/shop/login-locked.md
+specs/shop/ml-block.md
+specs/shop/ml-flow.md
+specs/shop/ml-top.md
 specs/shop/pay.md
 specs/shop/refund.md" \
   "$(sl "$BASH" smoke | LC_ALL=C sort)"
@@ -1620,6 +1645,18 @@ for m in tests specs smoke unmanifested; do
 done
 check_eq "an unknown mode exits 2 (what the callers key their old-stamp fallback on)" "2" \
   "$(cd "$G" && "$BASH" scripts/spec-links.sh no-such-mode >/dev/null 2>&1; echo $?)"
+# A TAB in a test path would shift every column after it (the old checker saw such a stray; the
+# TSV hid it). It is left out of the rows and named on stderr, and post-run-checks.sh warns on it.
+new_dir; TT=$DIR
+mkdir -p "$TT/scripts" "$TT/tests" "$TT/specs"
+cp "$here/templates/scripts/spec-links.sh" "$here/templates/scripts/post-run-checks.sh" "$TT/scripts/"
+printf "test('t @smoke', async () => {});\n" > "$TT/tests/a${TAB}b.spec.ts"
+check_eq "tests: a TAB-named test is not a row" "" "$(cd "$TT" && "$BASH" scripts/spec-links.sh tests 2>/dev/null)"
+check "  but is named on stderr, the TAB shown" grep -qF -e "spec-links: skipped tests/a<TAB>b.spec.ts" \
+  <<<"$(cd "$TT" && "$BASH" scripts/spec-links.sh tests 2>&1 >/dev/null)"
+PR_OUT=$(cd "$TT" && "$BASH" scripts/post-run-checks.sh --only stray 2>&1)
+check "  post-run-checks prints it as a warning" grep -qF -e "WARN: skipped tests/a<TAB>b.spec.ts" <<<"$PR_OUT"
+check_eq "  and counts it" "post-run: sentinels=0 stray=1 open-bugs=0 test-gaps=0" "$(grep '^post-run:' <<<"$PR_OUT")"
 
 echo "  -- doctor reads the inventory"
 run_doctor "$G"
@@ -1683,9 +1720,17 @@ dr_has "  (the INFO line names the plugin's copy)" "ℹ️  scripts/spec-links.s
 dr_lacks "  no false Check 13 'NO compiled test resolved'" "NO compiled test resolved"
 check_eq "  Check 3 counts the same suite as on the new stamp" \
   "$(grep '^smoke-tagged spec files:' <<<"$NEW_STAMP_OUT")" "$(grep '^smoke-tagged spec files:' <<<"$DR_OUT")"
-check_eq "  Checks 15-18 say the same as on the new stamp" \
-  "$(grep -E 'compiled test|abandoned|changed since last review|isolation marker' <<<"$NEW_STAMP_OUT")" \
-  "$(grep -E 'compiled test|abandoned|changed since last review|isolation marker' <<<"$DR_OUT")"
+check_eq "  Checks 14-18 say the same as on the new stamp" \
+  "$(grep -E 'unmanaged spec|compiled test|abandoned|changed since last review|isolation marker' <<<"$NEW_STAMP_OUT")" \
+  "$(grep -E 'unmanaged spec|compiled test|abandoned|changed since last review|isolation marker' <<<"$DR_OUT")"
+dr_lacks "  (Check 14 read the plugin's inventory: no 'could NOT run')" "scan could NOT run"
+# post-run-checks.sh run on its own (/qa-warden:run mode=smoke, /qa-warden:report) has no plugin
+# copy to fall back on: it must say the stray scan did not run, and count that, never print stray=0.
+PR_OUT=$(cd "$G" && "$BASH" scripts/post-run-checks.sh --only stray 2>&1)
+check "post-run-checks on an old stamp says the stray scan could NOT run, and names the resync" \
+  grep -qF -e "WARN: unmanaged-spec scan could NOT run — scripts/spec-links.sh has no \`tests\` inventory" <<<"$PR_OUT"
+check "  (the resync hint)" grep -qF -e "Run /qa-warden:init --resync" <<<"$PR_OUT"
+check_eq "  and counts it" "post-run: sentinels=0 stray=1 open-bugs=0 test-gaps=0" "$(grep '^post-run:' <<<"$PR_OUT")"
 CV_OUT=$(cd "$G" && "$BASH" "$COVERAGE" "" 2>&1); CV_RC=$?
 check_eq "coverage runs on an old stamp (exit 0)" "0" "$CV_RC"
 check "  and prints the resync hint" grep -qF -e "predates the shared test inventory — this report used the plugin's copy. Run /qa-warden:init --resync" <<<"$CV_OUT"

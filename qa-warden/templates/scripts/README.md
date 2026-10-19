@@ -121,7 +121,8 @@ Playwright collects: `<test> <base> <spec|twin> <spec path|-> <manifest|->`), th
 `playwright.config.ts`'s `testIgnore` is applied: a `_`-prefixed basename AND a `_`-prefixed
 directory are both dropped. Three walks used to disagree on that (the unmanifested one applied
 neither, so `/qa-warden:impact` and `/qa-warden:coverage` listed `tests/_demo/…` files Playwright never
-runs). Its specs-side twin is `specs` (`<spec> <base> <test|-> <smoke|-> <basis|->`), and
+runs). A test path with a TAB in it cannot be one column, so it is left out of the rows and
+named on stderr (`spec-links: skipped …`). Its specs-side twin is `specs` (`<spec> <base> <test|-> <smoke|-> <basis|->`), and
 `smoke` lists the specs that put a scenario on the `@smoke` gate — the YAML `tags:` key in its
 inline, per-scenario (`scenarios: [{ …, tags: [smoke] }]`) and block-list forms, never a prose
 mention. Doctor, `/qa-warden:coverage`, `/qa-warden:impact` and `post-run-checks.sh` all read these rows
@@ -136,7 +137,10 @@ a full `npx playwright test` would collect but the smoke lane never touched, and
 and ends with a parseable `post-run: sentinels=<n> stray=<n> open-bugs=<n> test-gaps=<n>` trailer for the
 caller's roll-up. Called by `/qa-warden:run mode=smoke`, `/qa-warden:report`, `/qa-warden:run mode=single` (`--only bugs`) and
 `doctor.sh` Checks 4/14 (`--only sentinels,stray`) — each of which used to inline all three,
-byte-identically in places, with its own copy of the `testIgnore` lockstep filter.
+byte-identically in places, with its own copy of the `testIgnore` lockstep filter. When
+`spec-links.sh` has no `tests` inventory (a stamp older than it), the stray scan says it could
+NOT run and counts that in `stray`, rather than reporting 0; doctor passes it the plugin's copy
+(`QA_SPEC_LINKS`) so its Check 14 still answers.
 
 ## `oracle-keys.txt` — the oracle vocabulary as data
 

@@ -111,7 +111,18 @@ never carry the same number**, or the second one has no way to announce itself.
   `_` exclusions. Specs with a `_`-prefixed file name (not only directory) are now skipped by
   doctor's spec checks and by `index` too, matching the test side, so a scratch spec's `basis:`
   no longer satisfies doctor Check 18 or `/qa-warden:coverage` dims 1/5/6.
-- `bin/qa-scaffoldtest` covers all of this: +51 cases on top of the review-marker entry above (314 → 365; 293 → 365 across both; 366 under mawk).
+- **The smoke parser reads escaped quotes and split tag lists.** An escaped `\"` inside a
+  double-quoted scenario name ended the quote early, so `name: "say \" #3"` lost its tag to a
+  "comment" and an escaped `{` threw off the depth count. A `tags: [` list split over lines
+  (`tags: [`, then `smoke, regression`, then `]`) was read as no tag at all, in both scenario
+  forms and at the top level. Both now count.
+- **The stray-spec scan no longer reports 0 when it could not run.** `post-run-checks.sh` read an
+  older `spec-links.sh`'s empty answer to `tests` as "no stray specs". It now prints a warning
+  that the scan could NOT run, naming `/qa-warden:init --resync`, and counts it in `stray`; doctor
+  hands it the plugin's copy, so doctor's Check 14 still finds strays on such a stamp. A test file
+  with a TAB in its path is left out of the `tests` rows (it would shift the columns and hide the
+  stray) and named on stderr, which `post-run-checks.sh` prints and counts as a warning.
+- `bin/qa-scaffoldtest` covers all of this: +59 cases on top of the review-marker entry above (314 → 373; 293 → 373 across both; 374 under mawk).
 - **Upgrading:** run `/qa-warden:init --resync`. `scripts/spec-links.sh`, `scripts/post-run-checks.sh`,
   `scripts/README.md` and a comment in `playwright.config.ts` change, so doctor reports them as
   drifted until you do. Until then nothing fails: doctor, `/qa-warden:coverage` and `/qa-warden:impact`

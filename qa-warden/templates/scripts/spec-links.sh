@@ -75,9 +75,16 @@ TAB=$(printf '\t')
 # collected_tests — rule (4), the tests/ half, in the `tests` row format. `while read -r` (not
 # `for t in $(find …)`) so a path containing a space is one record. A twin pairs with its
 # parent's spec and manifest by stripping `.metamorphic`, and is marked `twin` because it never
-# carries a manifest of its own (rule 3).
+# carries a manifest of its own (rule 3). A path with a TAB in it cannot be one column of a
+# TAB-separated row, so it is left out and named on stderr (`spec-links: …`, the TAB shown as
+# `<TAB>`) instead; post-run-checks.sh prints that line as a warning rather than lose the test.
 collected_tests() {
   find tests -name '*.spec.ts' -type f ! -name '_*' ! -path '*/_*/*' 2>/dev/null | while read -r t; do
+    case "$t" in
+      (*"$TAB"*)
+        echo "spec-links: skipped $(printf '%s' "$t" | sed "s/$TAB/<TAB>/g") — a TAB in a test path cannot be one column of the inventory, so its spec is unchecked; rename it" >&2
+        continue ;;
+    esac
     rel="${t#tests/}"; base="${rel%.spec.ts}"; kind=spec
     case "$base" in
       (*.metamorphic) base="${base%.metamorphic}"; kind=twin ;;
@@ -111,8 +118,11 @@ collected_tests() {
 # A `tags:` under any other key (`meta:`, `data:`) or nested deeper inside a scenario (its
 # `data: { tags: … }`) is not a test tag and is ignored. Flow collections are walked with a
 # quote-aware depth counter, and ` #` starts a comment only outside quotes, so
-# `name: "issue #3"` does not cut the line. Not read: a top-level `tags:` flow list split across
-# lines (`tags: [` … `]`), which the contract never writes.
+# `name: "issue #3"` does not cut the line. Inside double quotes `\"` is an escaped quote, not the
+# end (`name: "say \" #3"`); a single-quoted `''` needs no special case, because closing and
+# reopening the quote leaves the same state. A `tags: [` flow list may run over several lines,
+# at the top level and in a scenario of either form: the value is collected until its brackets
+# close.
 # The top-level `basis:` value is read from any line (as `index` does) and cut at the first space
 # or `#`, the same boundary `match` anchors on.
 # Portable awk only (BSD awk, gawk, mawk): getline from a named file, no `for (k in arr)`, nothing
@@ -141,33 +151,56 @@ spec_scan() {
       q = ""
       for (i = 1; i <= length(s); i++) {
         c = substr(s, i, 1)
-        if (q != "") { if (c == q) q = ""; continue }
+        if (q != "") {
+          if (c == "\\" && q == "\"") i++
+          else if (c == q) q = ""
+          continue
+        }
         if (c == "\"" || c == sq) q = c
         else if (c == "#" && (i == 1 || substr(s, i - 1, 1) ~ /[ \t]/)) return substr(s, 1, i - 1)
       }
       return s
     }
+    # The collected value of a `tags:` key (ftbuf) is complete: read it.
+    function tagend() { if (taglist(ftbuf)) smoke = 1; ftag = 0 }
     # Walk flow text, carrying quote state (fq), depth (fd) and the last non-blank character
     # (fprev) across lines. A `tags:` key right after `{` or `,` at depth fkey is a scenario key.
+    # Its value is copied into ftbuf (ftag set, ftagd = the depth of the key) until a `,` `}` or
+    # `]` back at that depth, or the bracket that closes it, so a list split over lines is whole.
     function flowscan(s,   i, n, c) {
       n = length(s)
+      if (ftag) ftbuf = ftbuf " "
       for (i = 1; i <= n; i++) {
         c = substr(s, i, 1)
-        if (fq != "") { if (c == fq) fq = ""; continue }
+        if (ftag && fq == "" && fd == ftagd && (c == "," || c == "}" || c == "]")) tagend()
+        if (ftag) ftbuf = ftbuf c
+        if (fq != "") {
+          if (c == "\\" && fq == "\"") { i++; if (ftag) ftbuf = ftbuf substr(s, i, 1) }
+          else if (c == fq) fq = ""
+          continue
+        }
         if (c == "\"" || c == sq) fq = c
         else if (c == "[" || c == "{") fd++
-        else if (c == "]" || c == "}") fd--
+        else if (c == "]" || c == "}") { fd--; if (ftag && fd == ftagd) tagend() }
         else if (c == "t" && fd == fkey && (fprev == "{" || fprev == ",") && substr(s, i, 5) == "tags:") {
-          if (taglist(substr(s, i + 5))) smoke = 1
+          ftag = 1; ftagd = fd; ftbuf = ""; i += 4; fprev = ":"
+          continue
         }
         if (c !~ /[ \t]/) fprev = c
       }
     }
-    function flowstart(s, depth) { fq = ""; fd = 0; fprev = ""; fkey = depth; flowscan(s) }
-    # The value after a `tags:` key at column col: a block list when empty, else a flow/scalar.
+    function flowstart(s, depth) { fq = ""; fd = 0; fprev = ""; fkey = depth; ftag = 0; flowscan(s) }
+    # The value after a `tags:` key at column col: a block list when empty; a flow list, read
+    # through flowscan (with no scenario keys to find, fkey -1) so it may close on a later line;
+    # else a scalar.
     function tagval(rest, col) {
       sub(/^[ \t]+/, "", rest)
       if (rest == "") { inblock = 1; blockcol = col }
+      else if (substr(rest, 1, 1) == "[") {
+        fq = ""; fd = 0; fprev = ""; fkey = -1
+        ftag = 1; ftagd = 0; ftbuf = ""
+        flowscan(rest)
+      }
       else if (taglist(rest)) smoke = 1
     }
     {
@@ -176,7 +209,7 @@ spec_scan() {
       while ((getline line < f) > 0) if (line ~ /^[ \t]*```[ \t]*(yaml|yml)/) { fenced = 1; break }
       close(f)
       infence = 0; isyaml = 0
-      topkey = ""; inblock = 0; blockcol = 0; itemcol = -1; keycol = 0; fd = 0
+      topkey = ""; inblock = 0; blockcol = 0; itemcol = -1; keycol = 0; fd = 0; ftag = 0
       while ((getline line < f) > 0) {
         sub(/\r$/, "", line)
         if (basis == "" && line ~ /^basis:/) {
@@ -185,7 +218,7 @@ spec_scan() {
         if (line ~ /^[ \t]*```/) {
           if (infence) infence = 0
           else { infence = 1; isyaml = (line ~ /^[ \t]*```[ \t]*(yaml|yml)/) }
-          topkey = ""; inblock = 0; itemcol = -1; fd = 0
+          topkey = ""; inblock = 0; itemcol = -1; fd = 0; ftag = 0
           continue
         }
         if (fenced ? !(infence && isyaml) : infence) continue
@@ -193,7 +226,7 @@ spec_scan() {
         l = stripc(line)
         if (l ~ /^[ \t]*$/) continue
         match(l, /^[ \t]*/); ind = RLENGTH
-        # Still inside a multi-line flow collection that a scenarios: line opened.
+        # Still inside a multi-line flow collection that a scenarios: or tags: line opened.
         if (fd > 0) { flowscan(l); continue }
         # Inside a block list: `- item` lines at or right of the key column are its items; the
         # first other line ends it and is then read as an ordinary line.

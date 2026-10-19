@@ -205,7 +205,9 @@ echo "smoke-tagged spec files: $SMOKE_SPECS / $TOTAL_SPECS (smoke-or-regression:
 #    just the open ones, so letting the script surface them here would double-count the rollup.
 #    The script prints its warnings already-formatted and a trailing `post-run: … stray=<n> …`
 #    count line, which is what feeds $warn — no re-derivation of either scan here.
-prc=$(bash scripts/post-run-checks.sh --prefix '⚠️ ' --only sentinels,stray 2>/dev/null)
+#    QA_SPEC_LINKS hands it the copy SPEC_LINKS settled on above, so an old stamp's Check 14 reads
+#    the plugin's inventory like every other check (the script warns, counted, when it has none).
+prc=$(QA_SPEC_LINKS=$SPEC_LINKS bash scripts/post-run-checks.sh --prefix '⚠️ ' --only sentinels,stray 2>/dev/null)
 printf '%s\n' "$prc" | grep -v '^post-run:' | grep -v '^$'
 prc_n=$(printf '%s\n' "$prc" | sed -nE 's/^post-run: sentinels=([0-9]+) stray=([0-9]+).*/\1 \2/p')
 for n in $prc_n; do warn=$((warn+n)); done

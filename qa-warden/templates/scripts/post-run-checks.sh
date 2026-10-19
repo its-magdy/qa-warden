@@ -13,7 +13,8 @@
 # Prints zero or more warning lines, then ALWAYS a machine-readable trailer:
 #   post-run: sentinels=<n> stray=<n> open-bugs=<n>
 # so a caller can fold the counts into its roll-up (`… · 1 open bug → NOT all-clear`) without
-# re-deriving them.
+# re-deriving them. `stray` counts every stray-scan warning, "the scan could NOT run" included, so
+# a scan that never ran is never a silent 0.
 #
 # WHY THIS EXISTS: all three scans were copy-pasted across /qa-warden:run mode=smoke, /qa-warden:report,
 # /qa-warden:run mode=single and doctor Checks 4/11b/14 — the sentinel one-liner was BYTE-identical in
@@ -56,12 +57,29 @@ done < <(find artifacts -maxdepth 1 -name '.healer-needs-*' -type f 2>/dev/null)
 # exclusion the warning below is FACTUALLY WRONG for a scratch file: it claims a full run "WILL
 # run it" when testIgnore provably drops it, and a false alarm trains readers to ignore a warning
 # whose whole job is catching a genuinely stray spec.
-enabled stray && while IFS=$'\t' read -r t base _ spec _; do
-  [ -n "$t" ] || continue
-  [ "$spec" = - ] || continue
-  echo "$PREFIX unmanaged spec $t — no specs/${base}.md, so it sits outside the assertion contract. It is not in this run's lane, but a full 'npx playwright test' WILL collect it: qualify the go/no-go. Delete the stray spec (or pair it with a spec) and run /qa-warden:doctor."
-  n_stray=$((n_stray+1))
-done < <(bash scripts/spec-links.sh tests 2>/dev/null)
+# The inventory can fail to answer: a spec-links.sh stamped before the `tests` mode exits 2 on it.
+# Reading its empty output would report `stray=0` for a scan that never ran, so that case is its
+# own counted warning. Doctor sets QA_SPEC_LINKS to the copy it fell back on (the plugin's, for
+# such a stamp), so its Check 14 still gets the real answer. stderr is read with the rows: a
+# `spec-links: …` line names a test the inventory had to leave out (a TAB in its path), and is
+# counted as a warning too; any other stderr line has no TAB-separated spec column and is skipped.
+if enabled stray; then
+  SL="${QA_SPEC_LINKS:-scripts/spec-links.sh}"
+  if inv=$(bash "$SL" tests 2>&1); then
+    while IFS=$'\t' read -r t base _ spec _; do
+      [ -n "$t" ] || continue
+      case "$t" in
+        (spec-links:*) echo "$PREFIX ${t#spec-links: }"; n_stray=$((n_stray+1)); continue ;;
+      esac
+      [ "$spec" = - ] || continue
+      echo "$PREFIX unmanaged spec $t — no specs/${base}.md, so it sits outside the assertion contract. It is not in this run's lane, but a full 'npx playwright test' WILL collect it: qualify the go/no-go. Delete the stray spec (or pair it with a spec) and run /qa-warden:doctor."
+      n_stray=$((n_stray+1))
+    done <<<"$inv"
+  else
+    echo "$PREFIX unmanaged-spec scan could NOT run — $SL has no \`tests\` inventory (it predates it, or failed), so a test with no paired spec would go unreported here. Run /qa-warden:init --resync, then re-run this check."
+    n_stray=$((n_stray+1))
+  fi
+fi
 
 # (3) Parked open-bug surfacing (F-17/F-19) — Playwright folds conditional `test.fail` xfails into
 # the `expected` count, and a `test.fixme` in a lane this run didn't grep leaves NO trace in the
