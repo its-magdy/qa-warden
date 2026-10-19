@@ -27,7 +27,8 @@
 # Exit codes (the four /qa-warden:run modes): 0 = completed cleanly, caller reads the named JSON
 # and summarizes. 2 = do NOT report a pass — the printed reason names why
 # (missing/stale/corrupt/zero-test JSON, a non-zero Playwright exit masked by a
-# 0-failure JSON — F-04 — or a resolver/validation failure).
+# 0-failure JSON — F-04 — a run interrupted or killed before it finished, or a
+# resolver/validation failure).
 # precheck: 0 = ≥1 test failing, batch-fix proceeds · 1 = nothing to fix, or the filter matched
 # nothing — batch-fix stops · 2 = no usable result, batch-fix stops and relays the reason.
 # recheck: 0 = green · 1 = not green (still red, crashed or matched nothing — indistinguishable
@@ -51,14 +52,23 @@ set -uo pipefail
 # sit anywhere). The skill used to bind `mode=` in an inline multi-line shell block before calling
 # this script; only `bash …/run.sh *` is pre-approved, so that block prompted — and was denied
 # headless (Test-35, 2026-09-21). Parsing here keeps the whole invocation one allow-listed call.
+# precheck/recheck are the exception: batch-fix passes its raw $ARGUMENTS after the mode word,
+# so every argument after it is filter data — a filter like `mode=smoke` must not pick a mode.
 MODE=""; _rest=()
-for _a in "$@"; do
-  case "$_a" in
-    mode=*) MODE="${_a#mode=}" ;;
-    *) _rest+=("$_a") ;;
-  esac
-done
-if [ -z "$MODE" ] && [ "${#_rest[@]}" -gt 0 ]; then MODE="${_rest[0]}"; _rest=("${_rest[@]:1}"); fi
+case "${1:-}" in
+  precheck|recheck)
+    MODE=$1; shift
+    _rest=("$@") ;;
+  *)
+    for _a in "$@"; do
+      case "$_a" in
+        mode=*) MODE="${_a#mode=}" ;;
+        *) _rest+=("$_a") ;;
+      esac
+    done
+    if [ -z "$MODE" ] && [ "${#_rest[@]}" -gt 0 ]; then MODE="${_rest[0]}"; _rest=("${_rest[@]:1}"); fi
+    ;;
+esac
 set -- ${_rest[@]+"${_rest[@]}"}
 
 # run_verdict <pw_exit> <json> <max_age> → $VERDICT $LR $TOTAL $FAILED (see that file's header).
@@ -66,8 +76,9 @@ set -- ${_rest[@]+"${_rest[@]}"}
 
 # The `incomplete` message, shared by every mode. $1 = mode label, $2 = what to inspect.
 incomplete_exit() {
-  echo "run($1): playwright exited non-zero ($PW_EXIT) but the report shows 0 failures —"
-  echo "the run did NOT complete cleanly (timeout / --max-failures / worker crash). NOT green; inspect $2 and re-run."
+  echo "run($1): playwright exited $PW_EXIT with $FAILED failure(s) recorded — the run did NOT complete cleanly"
+  echo "(exit 1 with 0 failures: timeout / --max-failures / worker crash; any exit but 0 or 1: interrupted, killed"
+  echo "or crashed, so any recorded failures are a partial count). NOT green, NOT a finished red; inspect $2 and re-run."
   exit 2
 }
 

@@ -1162,6 +1162,13 @@ check_eq "exit 0 + all passed → green"                        "green 3 0"     
 check_eq "exit 1 + 2 failed → red"                             "red 3 2"        "$(verdict 1 "$FX/red.json")"
 check_eq "exit 1 + 0 failed → incomplete (timeout / crash)"    "incomplete 3 0" "$(verdict 1 "$FX/green.json")"
 check_eq "an empty exit code is not a clean exit"              "incomplete 3 0" "$(verdict '' "$FX/green.json")"
+# Playwright itself exits only 0, 1 or 130 (interrupted); anything but 0/1 is a run that stopped
+# early, so failures recorded before it stopped are a partial count, not a completed red.
+check_eq "exit 130 (SIGINT) + 2 failed → incomplete, never red" "incomplete 3 2" "$(verdict 130 "$FX/red.json")"
+check_eq "exit 137 (SIGKILL) + 2 failed → incomplete"            "incomplete 3 2" "$(verdict 137 "$FX/red.json")"
+check_eq "exit 143 (SIGTERM) + 0 failed → incomplete"            "incomplete 3 0" "$(verdict 143 "$FX/green.json")"
+check_eq "a non-numeric exit code + 2 failed → incomplete"       "incomplete 3 2" "$(verdict x "$FX/red.json")"
+check_eq "exit 130 + 0 resolved tests → still zero-test"         "zero-test 0 0"  "$(verdict 130 "$FX/zero.json")"
 check_eq "no file → missing"                                   "missing -1 0"   "$(verdict 0 "$FX/absent.json")"
 check_eq "unparseable file → corrupt"                          "corrupt -1 0"   "$(verdict 0 "$FX/corrupt.json")"
 check_eq "a JSON with no .stats → corrupt, never zero-test"    "corrupt -1 0"   "$(verdict 0 "$FX/statsless.json")"
@@ -1193,6 +1200,12 @@ out_has  "unexpected=0 + exit 1: incomplete, not green" "the run did NOT complet
 runsh 1 "" "" mode=single auth/login
 check_eq "nothing written (empty report): exit 2" "2" "$RRC"
 out_has  "nothing written: corrupt" "(verdict=corrupt)"
+runsh 0 "$FX/green.json" "" auth/login mode=single
+check_eq "mode= after the spec still picks single: exit 0" "0" "$RRC"
+out_has  "mode= after the spec still picks single: its line" "run(single):"
+runsh 130 "$FX/red.json" "" mode=single auth/login
+check_eq "interrupted (exit 130) with 2 failed: exit 2, not a red to summarize" "2" "$RRC"
+out_has  "interrupted with 2 failed: incomplete" "the run did NOT complete cleanly"
 runsh 0 "$FX/zero.json" "" mode=single auth/login
 check_eq "zero tests: exit 2" "2" "$RRC"
 out_has  "zero tests: a resolution error" "resolved no tests"
@@ -1256,6 +1269,10 @@ runsh 1 "$FX/green.json" "" precheck tests/auth
 check_eq "unexpected=0 + exit 1: exit 2, not 'nothing to fix'" "2" "$RRC"
 out_has  "unexpected=0 + exit 1: incomplete" "the run did NOT complete cleanly"
 check_eq "unexpected=0 + exit 1: never says nothing to fix" "0" "$(grep -c 'nothing to fix' <<<"$ROUT")"
+runsh 130 "$FX/red.json" "" precheck tests/auth
+check_eq "interrupted (exit 130) with 2 failed: exit 2, not a batch to fix" "2" "$RRC"
+out_has  "interrupted with 2 failed: incomplete, names the exit code" "playwright exited 130"
+check_eq "interrupted with 2 failed: never says proceed" "0" "$(grep -c 'proceed to step 2' <<<"$ROUT")"
 runsh 1 "$FX/zero.json" "" precheck tests/nowhere
 check_eq "zero tests: exit 1" "1" "$RRC"
 out_has  "zero tests: the pattern resolved to nothing" "filter matched 0 tests"
@@ -1270,6 +1287,12 @@ runsh 1 "$FX/red.json" "" precheck tests/auth
 check    "Playwright's stderr lands in the .log" grep -qF stub-npx-stderr-marker "$RP/artifacts/batch-fix-precheck.log"
 check_eq "  and never in the .json" "0" "$(grep -c stub-npx-stderr-marker "$RP/artifacts/batch-fix-precheck.json")"
 check    "  so the .json still parses" jq -e .stats "$RP/artifacts/batch-fix-precheck.json"
+# A filter is data: one that looks like `mode=…` must not pick another mode.
+rm -f "$STUB/args"
+runsh 1 "$FX/red.json" "" precheck mode=smoke
+check_eq "a 'mode=smoke' filter stays precheck: exit 0" "0" "$RRC"
+out_has  "a 'mode=smoke' filter stays precheck: precheck's line" "run(precheck):"
+check    "a 'mode=smoke' filter is passed to Playwright as the filter" grep -qx -- 'playwright test mode=smoke --retries=0 --reporter=json' "$STUB/args"
 
 echo "  -- recheck (/qa-warden:batch-fix step 5)"
 # A run-of-record environment: if the inline --reporter were dropped, the stub (like the config's
@@ -1290,6 +1313,9 @@ rm -f "$STUB/args"
 runsh 0 "$FX/green.json" "" recheck
 check_eq "no filter: exit 2" "2" "$RRC"
 check    "no filter: Playwright never ran (no whole-suite run)" test ! -e "$STUB/args"
+runsh 0 "$FX/green.json" "" recheck mode=single
+check_eq "a 'mode=single' filter stays recheck: exit 0" "0" "$RRC"
+check    "a 'mode=single' filter is passed to Playwright as the filter" grep -qx -- 'playwright test mode=single --retries=0 --reporter=line' "$STUB/args"
 
 echo "---"
 if [ "$bad" -ne 0 ]; then echo "qa-scaffoldtest: ❌ $bad of $((pass+bad)) cases FAILED"; exit 1; fi

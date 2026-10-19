@@ -29,7 +29,9 @@ never carry the same number**, or the second one has no way to announce itself.
   `allowed-tools` rule, instead of ~40 lines of inline shell that matched no allow rule. It exits
   `0` when there is something to fix (with the heal-log signature hint, as before), `1` when the
   filter matched nothing or nothing is failing, and `2` when the run did not complete or never
-  started — and says which. Playwright's stderr now goes to `artifacts/batch-fix-precheck.log`
+  started — and says which. "Did not complete" covers an interrupted or killed run too: Playwright
+  exits only 0, 1 or 130 (interrupted), so any exit other than 0 or 1 reads as `incomplete` even
+  when the report already recorded failures — a Ctrl-C'd precheck is no longer a batch to fix. Playwright's stderr now goes to `artifacts/batch-fix-precheck.log`
   instead of `/dev/null`.
 - Step 5's re-run is `run.sh recheck $ARGUMENTS` under the same rule, replacing the last inline
   block. It still runs `--retries=0 --reporter=line`, so `artifacts/last-run.json` is never rewritten,
@@ -42,7 +44,10 @@ never carry the same number**, or the second one has no way to announce itself.
   failures) rather than reporting the repeats that ran as stable, and the `mode=single` /
   `mode=changed` status line ends in `(verdict=<word>)` instead of `(rc=<n>)`.
 - No stamped file changed: `scripts/check-last-run.sh` keeps its CLI, so no `--resync` is needed.
-- `bin/qa-scaffoldtest` gains 71 cases (293 → 364). It runs every verdict on fixture JSONs and drives
+- `precheck` and `recheck` take every argument after the mode word as the filter. A filter that
+  starts with `mode=` (`precheck mode=smoke`) used to pick that mode instead; the other modes still
+  accept `mode=<name>` anywhere on the line.
+- `bin/qa-scaffoldtest` gains 88 cases (293 → 381). It runs every verdict on fixture JSONs and drives
   `run.sh`'s single, smoke, repeat, changed, precheck and recheck modes end to end against a stub
   `npx`.
 

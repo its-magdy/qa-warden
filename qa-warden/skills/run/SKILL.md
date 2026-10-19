@@ -40,7 +40,8 @@ recipes; this skill owns the mode-selection, caveats, and output format below
 **Exit codes (every mode):** `0` = completed cleanly — read the named JSON and
 summarize per the mode section below. `2` = do NOT report a pass; the script
 already printed why (missing/stale/corrupt/zero-test JSON, a non-zero
-Playwright exit masked by a 0-failure JSON — F-04 — or bad args). Stop and
+Playwright exit masked by a 0-failure JSON — F-04 — a run interrupted or killed
+before it finished, or bad args). Stop and
 relay that message rather than summarizing.
 
 ## mode=single

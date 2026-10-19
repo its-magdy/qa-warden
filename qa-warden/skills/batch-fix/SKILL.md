@@ -50,9 +50,10 @@ Workflow:
      fix" and do not invent a patch; or the filter resolved to nothing → say so and stop. The match
      count is every resolved test (expected+unexpected+skipped+flaky), so an all-red batch never
      reads as "matched nothing" (F-39).
-   - **`2` — anything else** (`incomplete`: Playwright exited non-zero with 0 failures recorded — a
-     timeout or worker crash; `missing`/`corrupt`: it never started — globalSetup/prod-guard/config;
-     a missing filter): relay the printed reason and stop. This is NOT "nothing to fix" and NOT
+   - **`2` — anything else** (`incomplete`: the run did not finish — Playwright exited non-zero with
+     0 failures recorded (a timeout or worker crash), or exited with anything but 0 or 1
+     (interrupted, killed), whatever it recorded; `missing`/`corrupt`: it never started —
+     globalSetup/prod-guard/config; a missing filter): relay the printed reason and stop. This is NOT "nothing to fix" and NOT
      "nothing matched" — do NOT proceed to step 2.
 
    The filter is a path prefix or substring Playwright matches, NOT a shell glob — prefer a
