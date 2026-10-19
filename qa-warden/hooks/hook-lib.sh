@@ -80,6 +80,22 @@ hook_qa_root() {
   return 1
 }
 
+# --- comment stripping --------------------------------------------------------------
+# hook_strip_js_comments — reads TypeScript on stdin, writes it to stdout with comments removed,
+# one output line per input line. Both hooks scan the stripped text: generated specs are heavily
+# commented and the comments legitimately NAME the banned constructs ("web-first assertion
+# instead of networkidle", "// covers oracle: …"), so a raw grep would deny an agent for
+# documenting the rule it is following. Full-line comments (`//`, `*`, `/*`) become blank lines; a
+# trailing `//` comment is cut, but only when the slashes are not preceded by `:`, so that
+# `https://` inside a string survives intact.
+hook_strip_js_comments() {
+  awk '
+    { s = $0; sub(/^[ \t]+/, "", s)
+      if (s ~ /^(\/\/|\*|\/\*)/) { print ""; next }
+      if (match($0, /[^:]\/\/.*$/)) { print substr($0, 1, RSTART) } else { print $0 }
+    }'
+}
+
 # --- path resolution ----------------------------------------------------------------
 # The harness may hand us a relative file_path; resolve it against the session cwd from
 # the payload (NOT $PWD — the hook process inherits a cwd we do not control).
