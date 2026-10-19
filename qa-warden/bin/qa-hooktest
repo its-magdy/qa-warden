@@ -55,6 +55,12 @@ run spec-lint.sh deny  "Check 11: routeFromHAR"              "$(write tests/a.sp
 run spec-lint.sh allow "clean role locator + web-first expect" "$(write tests/a.spec.ts "await expect(page.getByRole('button',{name:'Save'})).toBeVisible();")"
 run spec-lint.sh allow "expect timeout option is not a sleep" "$(write tests/a.spec.ts "await expect(page.getByRole('alert')).toBeVisible({ timeout: 10000 });")"
 run spec-lint.sh allow "out of scope: product source"        "$(write src/app.ts "await page.waitForTimeout(500);")"
+# hook_strip_js_comments (hook-lib.sh): a comment may name a banned construct, a trailing comment
+# does not hide the code before it, and `https://` in a string is not a comment.
+run spec-lint.sh allow "a comment that names networkidle"    "$(write tests/a.spec.ts "// settle on the post-condition, never networkidle
+await expect(page.getByRole('alert')).toBeVisible();")"
+run spec-lint.sh deny  "code before a trailing comment"      "$(write tests/a.spec.ts "await page.waitForTimeout(500); // settle")"
+run spec-lint.sh deny  "a URL string is not a comment"       "$(write tests/a.spec.ts "await page.goto('https://x.test/'); await page.waitForTimeout(500);")"
 echo "spec-lint.sh — KNOWN GAPS (the reviewer is the backstop; see hooks/README.md)"
 run spec-lint.sh allow "gap: call split across lines"        "$(write tests/a.spec.ts "await page
   .waitForTimeout(500);")"
@@ -154,6 +160,8 @@ $G")"
 run assertion-contract.sh deny  "healer adds context.clock"          "$(edit healer $S "$G" "await context.clock.runFor(2000);
 $G")"
 run assertion-contract.sh deny  "healer adds browserContext.route"   "$(edit healer $S "$G" "await browserContext.route('**/api', r => r.abort());
+$G")"
+run assertion-contract.sh allow "healer adds a comment naming page.route" "$(edit healer $S "$G" "// never page.route('**/api') here
 $G")"
 
 echo "assertion-contract.sh — the deny reason reaches the agent whole"

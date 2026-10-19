@@ -45,6 +45,15 @@ never carry the same number**, or the second one has no way to announce itself.
   symlink, new marker dirs under a real and under a symlinked `reports/`, a sibling-prefix dir
   (`proj` vs `proj2`), dir symlinks back inside the project, and the plain paths.
 
+### The two hooks share one comment stripper
+
+- `hooks/spec-lint.sh` and the healer arm of `hooks/assertion-contract.sh` each carried the same
+  awk program that blanks comment lines before scanning. It now lives once in `hooks/hook-lib.sh`
+  as `hook_strip_js_comments`, which both hooks already source. No behaviour change.
+- `bin/qa-hooktest` gains 4 cases (58 → 62) that fail if the stripper stops stripping: a comment
+  naming `networkidle` and a healer comment naming `page.route` are allowed, while code before a
+  trailing comment and a `waitForTimeout` after an `https://` string are still denied.
+
 ### `/qa-warden:batch-fix` no longer reads a crashed precheck as "nothing to fix"
 
 - Step 1's precheck ignored Playwright's exit code (`|| true`), so a timeout or worker crash that

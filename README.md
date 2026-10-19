@@ -383,7 +383,7 @@ Agents, skills, hooks and `reference/` update automatically with the plugin. Eve
 
 ```bash
 qa-warden/bin/qa-selfcheck                    # 14 consistency checks over the plugin's own source
-qa-warden/bin/qa-hooktest                     # 58 real payloads through the two PreToolUse hooks
+qa-warden/bin/qa-hooktest                     # 62 real payloads through the two PreToolUse hooks
 qa-warden/bin/qa-scaffoldtest                 # qa-scaffold stamp, settings merge, --resync and doctor in temp dirs, the prod-guard.sh URL table, run.sh's run verdicts and the symlink-containment table
 claude plugin validate --strict ./qa-warden   # mandatory after any frontmatter edit
 ```
@@ -392,7 +392,7 @@ Expected tail:
 
 ```
 qa-selfcheck: ✅ plugin is self-consistent — all 14 checks passed
-qa-hooktest: ✅ all 58 cases passed
+qa-hooktest: ✅ all 62 cases passed
 qa-scaffoldtest: ✅ all 585 cases passed
 ```
 
