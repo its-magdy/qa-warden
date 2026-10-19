@@ -506,7 +506,9 @@ delete them to make the toolkit sound more complete than it is.
   older stamps.** The plugin doctor runs the project's `check-last-run.sh`, `spec-links.sh`,
   `post-run-checks.sh`, `bug-status.sh` and `prod-guard.sh`, as `coverage.sh` and `impact.sh` already
   do with `spec-links.sh` and `run.sh` with three others; those copies change only on `/qa-warden:init --resync`, so a new plugin
-  can meet an old helper until the user resyncs.
+  can meet an old helper until the user resyncs. `prod-guard-core.mjs` is the case where a stamp can
+  be old, current or MIXED: doctor Check 8 warns on guards that predate the core (they still work)
+  and fails only on a guard that needs a core the project lacks, which refuses every run itself.
 - **Mobile is deliberately out of scope, and the successor is a sibling plugin, not a mode here.**
   Playwright does mobile-**web** emulation only (viewport/touch) — no native iOS/Android — so the entire
   template layer (`playwright.config.ts`, fixtures, `prod-guard.ts`) and the doctor are Playwright-shaped
@@ -560,7 +562,7 @@ Every fact below has exactly one authoritative home. Do not copy them here — p
 | Skill invocation policy (who may invoke each `/qa-warden:*`) | The `disable-model-invocation:` / `context:` frontmatter of each `skills/*/SKILL.md`, plus §"Why the invocation policy is what it is" below for the reasoning. Every skill is one of three shapes — see that section before adding a new one. |
 | Page-object reuse rules | `templates/CLAUDE.md` §"Page-object reuse layer" |
 | Subagent roster (models, tools, who-writes-what) | `templates/CLAUDE.md` §"Subagent roster" + `agents/**` |
-| Prod-guard, env-loading, writable-path policy | `templates/CLAUDE.md` (policy). The shell guard implementation is `templates/scripts/prod-guard.sh`; the enforced `globalSetup` layer is `templates/scripts/prod-guard.ts` — their marker regexes must stay in lockstep. |
+| Prod-guard, env-loading, writable-path policy | `templates/CLAUDE.md` (policy). The shell guard implementation is `templates/scripts/prod-guard.sh`; the enforced `globalSetup` layer is `templates/scripts/prod-guard.ts`. Both take their verdict from `templates/scripts/prod-guard-core.mjs` (dependency-free ESM: the .ts imports it, the .sh runs it with node), so there is no hand-mirrored logic to keep in lockstep; `bin/qa-scaffoldtest` section 9 runs one URL table through both. |
 | Test-case ideation — operational mechanics (lens definitions, per-kind processes, artifact shapes) | `skills/intake/SKILL.md` + `agents/ideation.md` + the templates under `templates/specs/_context/_templates/`. The rationale + research grounding live in `reference/test-case-ideation.md` (which, per the maintenance rule below, must not restate the mechanics). |
 | PR/Slack summary shape (totals, failures table, signature grouping, value ledger) | `skills/report/reference/report-template.md` — sole owner (moved out of `skills/report/SKILL.md` §"Template", which now points at it, to keep the skill under the ~5k-token ceiling), alongside the SCOPE line it derives from `--grep` in `.config.argv`. The shape used to live in a separate `report-summarizer` skill that `/qa-warden:report` pointed at; the two carried divergent copies (report said "top 5 failing tests" vs. the summarizer's top-3-by-signature) and needed doctor Check 22 to police the split. Both that second file and that check are now retired — one file owns the shape, so there is no pointer to dangle. |
 
