@@ -57,7 +57,8 @@
 #                      (proj vs proj2) are refused with nothing deleted or written; plain paths,
 #                      new marker dirs under a real reports/ and a dir symlink back inside pass;
 #                      a newline or tab in a path or the root is refused; and a stub rm /
-#                      sha256sum swaps the tree after the checks (narrowed, not race-proof)
+#                      sha256sum swaps the tree after the checks (narrowed, not race-proof); the
+#                      marker's temp dir refuses a planted symlink and leaves nothing on failure
 #
 # The prod-guard.ts twin is not tested here: qa-hooktest only copies it as a project marker, and
 # running it needs node + Playwright's dependencies, which this test deliberately does not install.
@@ -1765,8 +1766,8 @@ echo "symlink containment — retire-delete.sh and review-marker.sh against one 
 # as its spec (specs/…) or its test (tests/…); for reports/review/<rel>.reviewed it gets the spec
 # whose marker lands there.
 # Columns: label | retire-delete | review-marker | symlink to plant (- for none) | its target | path |
-# create the path first (yes/no). Targets: @OUT is $X/outside, @PROJ2 is $X/proj2, anything else is
-# a relative target used as written. <NL> and <TAB> in a link or path stand for a newline and a tab:
+# create the path first (yes; no; dir = as a directory). Targets: @OUT is $X/outside, @PROJ2 is
+# $X/proj2, anything else is a relative target used as written. <NL> and <TAB> in a link or path stand for a newline and a tab:
 # a `$( )` strips trailing newlines, so `tests/safe<NL>` was checked as the real tests/safe while
 # rm followed the symlink. Both scripts now refuse any control character in a path. @NLSIB is a
 # sibling dir named `proj<NL>`: a resolved dir captured by a plain `$( )` lost its newline and read
@@ -1795,7 +1796,9 @@ a trailing newline: tests/safe<NL> -> out beside a real tests/safe|refuse|refuse
 a trailing newline: specs/safe<NL> -> out beside a real specs/safe|refuse|refuse|specs/safe<NL>|@OUT|specs/safe<NL>/widget.md|yes
 a trailing newline: reports/review/safe<NL> -> out beside a real one|refuse|refuse|reports/review/safe<NL>|@OUT|reports/review/safe<NL>/widget.reviewed|yes
 a tab in a plain file name|refuse|refuse|-|-|tests/demo/a<TAB>b.spec.ts|yes
-reports/review points at a sibling dir named proj<NL>|refuse|refuse|reports/review|@NLSIB|reports/review/w.reviewed|yes'
+reports/review points at a sibling dir named proj<NL>|refuse|refuse|reports/review|@NLSIB|reports/review/w.reviewed|yes
+the marker leaf is an existing directory|refuse|refuse|-|-|reports/review/demo/widget.reviewed|dir
+reports -> . (a symlink to the project root itself)|refuse|allow|reports|.|reports/review/demo/widget.reviewed|no'
 RD="$TEMPLATES/scripts/retire-delete.sh"
 check "section 9: retire-delete.sh exists" test -f "$RD"
 check "section 9: review-marker.sh exists" test -f "$RMK"
@@ -1827,6 +1830,8 @@ contain_fixture() {
   if [ "$create" = "yes" ]; then
     mkdir -p "$P/${path%/*}"
     printf 'planted\n' > "$P/$path"
+  elif [ "$create" = "dir" ]; then
+    mkdir -p "$P/$path"
   fi
 }
 # contain_expect <label> <expect> <rc> <effect-command...> — one script's verdict on one row: an
@@ -1896,19 +1901,46 @@ printf '#!/bin/sh\nmv "%s/tests" "%s/tests.real"\nln -s "%s/outside" "%s/tests"\
 chmod +x "$X/stub/rm"
 OUT_BEFORE=$(snapshot "$X/outside"; snapshot "$X/proj2")
 (cd "$P" && PATH="$X/stub:$REALPATH" "$BASH" "$RD" tests/demo/widget.spec.ts) >/dev/null 2>&1
-contain_expect "retire-delete, tests/ swapped for a symlink out just before the rm" allow "$?" \
+rc=$?
+# Without these two, a run where the stub never ran would pass: tests.real would not exist at all.
+check "precondition: the stub rm ran (tests/ is now a symlink)" test -L "$P/tests"
+check "precondition: the real tests/ moved to tests.real/" test -d "$P/tests.real/demo"
+contain_expect "retire-delete, tests/ swapped for a symlink out just before the rm" allow "$rc" \
   test ! -e "$P/tests.real/demo/widget.spec.ts"
 contain_fixture - - - no
 mkdir -p "$X/stub"
 printf '#!/bin/sh\nif [ ! -e "%s/swapped" ]; then\n  : > "%s/swapped"\n  rm -rf "%s/reports/review"\n  ln -s "%s/outside" "%s/reports/review"\nfi\nPATH="%s"\nif command -v sha256sum >/dev/null 2>&1; then exec sha256sum; fi\nexec shasum -a 256\n' \
   "$X" "$X" "$P" "$X" "$P" "$REALPATH" > "$X/stub/sha256sum"
 chmod +x "$X/stub/sha256sum"
-ALL_BEFORE=$(snapshot "$X")
 (cd "$P" && PATH="$X/stub:$REALPATH" "$BASH" "$RMK" specs/demo/widget.md tests/demo/widget.spec.ts PASS) >/dev/null 2>&1
 rc=$?
+check "precondition: the stub sha256sum ran (its flag file exists)" test -e "$X/swapped"
 check "precondition: the stub swapped reports/review" test -L "$P/reports/review"
 check_eq "review-marker, reports/review swapped for a symlink out before the write: refused (exit 2)" "2" "$rc"
 check "  and nothing was written outside the project" test -z "$(ls -A "$X/outside")"
+
+echo "  -- the marker's temp file"
+# The temp file lives in a private dir made with mkdir, which fails on any existing entry: a
+# symlink planted at that name (the pid is predictable) is refused, not written through. `exec`
+# keeps the pid, so the planting shell's $$ is the script's.
+contain_fixture - - - no
+mkdir -p "$P/reports/review/demo"
+(cd "$P" && "$BASH" -c 'ln -s "$2" "reports/review/demo/.review-marker.$$.d"; exec "$0" "$1" specs/demo/widget.md tests/demo/widget.spec.ts PASS' \
+  "$BASH" "$RMK" "$X/outside") >/dev/null 2>&1
+rc=$?
+check "precondition: the planted temp-dir symlink is there" \
+  test -n "$(find "$P/reports/review/demo" -name '.review-marker.*.d' -type l -print)"
+check_eq "review-marker, a symlink planted at its temp-dir name: refused (exit 2)" "2" "$rc"
+check "  and nothing was written outside the project" test -z "$(ls -A "$X/outside")"
+check "  and no marker was written" test ! -e "$P/reports/review/demo/widget.reviewed"
+# A write that fails part-way (here `ulimit -f 0`: the first byte raises SIGXFSZ) leaves nothing.
+contain_fixture - - - no
+(cd "$P" && "$BASH" -c 'ulimit -f 0; exec "$0" "$1" specs/demo/widget.md tests/demo/widget.spec.ts PASS' \
+  "$BASH" "$RMK") >/dev/null 2>&1
+rc=$?
+check_eq "review-marker, the temp write fails (ulimit -f 0): exit 2" "2" "$rc"
+check "  and no temp dir or marker is left behind" \
+  test -z "$(find "$P/reports" \( -name '.review-marker.*' -o -path '*/demo/widget.reviewed' \) -print)"
 
 echo "---"
 if [ "$bad" -ne 0 ]; then echo "qa-scaffoldtest: ❌ $bad of $((pass+bad)) cases FAILED"; exit 1; fi

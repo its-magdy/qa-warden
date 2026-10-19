@@ -47,17 +47,21 @@ never carry the same number**, or the second one has no way to announce itself.
   against another process rewriting the tree during the call. They narrow the window:
   retire-delete re-checks the target's directory from inside it and runs `rm` there, and
   review-marker creates the marker's directories one level at a time, re-checks each from inside,
-  and renames a temp file onto the marker (a rename replaces a symlinked leaf instead of following
-  it). Swapping an ancestor directory after that no longer redirects them. `check` mode only reads
-  a hash and is not narrowed.
+  writes the marker in a private temp dir made with `mkdir` (which fails on a planted symlink), and
+  renames it onto the marker. Swapping an ancestor directory after that no longer redirects them.
+  A marker path that is a directory or a symlink is refused right before the rename; swapping one
+  in after that check is still possible. A failed or interrupted write leaves no temp files.
+  `check` mode only reads a hash and is not narrowed.
 - The resolving function is the same few lines in both files (one is stamped into projects, the
-  other runs from the plugin, so they cannot share it). `bin/qa-scaffoldtest` gains 104 cases
-  (511 → 615): a new section 9 runs one path table against both scripts, covering a symlinked
+  other runs from the plugin, so they cannot share it). `bin/qa-scaffoldtest` gains 122 cases
+  (511 → 633): a new section 9 runs one path table against both scripts, covering a symlinked
   `tests/`, `specs/` and `reports/`, a symlinked intermediate dir, a leaf symlink, a dangling
   symlink, new marker dirs under a real and under a symlinked `reports/`, a sibling-prefix dir
-  (`proj` vs `proj2`), dir symlinks back inside the project, trailing-newline and tab names, a
-  sibling dir named `proj<newline>`, a project root named so, and the plain paths. Two more cases
-  swap the tree at a fixed point after the checks (a stub `rm` and a stub `sha256sum` on `PATH`).
+  (`proj` vs `proj2`), dir symlinks back inside the project and `reports -> .`, trailing-newline
+  and tab names, a sibling dir named `proj<newline>`, a project root named so, a marker path that
+  is a directory, and the plain paths. Further cases swap the tree at a fixed point after the
+  checks (a stub `rm` and a stub `sha256sum` on `PATH`), plant a symlink at the temp dir's name,
+  and make the temp write fail with `ulimit -f 0`.
 
 ### The two hooks share one comment stripper
 

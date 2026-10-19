@@ -176,9 +176,12 @@ fi
 # The write narrows the race window without closing it (see in_root's comment). The marker's dirs
 # are entered one level at a time: create the next one if it is missing, `cd -P` into it, and
 # re-check from the held cwd that it is still inside the project. Swapping an ancestor dir after
-# that no longer redirects the write. The marker goes to a temp file created with noclobber in the
-# held dir and is renamed onto its name; rename replaces a symlink planted at the leaf instead of
-# following it.
+# that no longer redirects the write. The marker is written inside a private dir made with mkdir in
+# the held dir (mkdir fails on ANY existing entry, a planted symlink included, so the temp file is
+# never opened through someone else's link), then renamed onto its name. A leaf that is a directory
+# or a symlink is refused just before the rename, because mv would move the file INTO a directory;
+# a leaf swapped for a dir symlink after that check is the accepted race (POSIX mv has no
+# no-follow destination).
 commit=$(git rev-parse --verify -q HEAD 2>/dev/null || echo unknown)
 rest="${out%/*}/"
 while [ -n "$rest" ]; do
@@ -194,22 +197,34 @@ while [ -n "$rest" ]; do
     *[[:cntrl:]]*) held='' ;;
   esac
   case "$held" in
-    "$ROOT"/*) : ;;
+    "$ROOT"|"$ROOT"/*) : ;;
     *) echo "review-marker: the directory for $out changed while it was being written — refused" >&2; exit 2 ;;
   esac
 done
-tmp=".review-marker.$$.tmp"
-if ! (
-  set -C
-  {
-    echo "commit: $commit"
-    echo "spec_sha256: $s_now"
-    echo "test_sha256: $t_now"
-    echo "date: $(date +%F)"
-    echo "result: $RESULT"
-  } > "$tmp"
-) 2>/dev/null; then
-  echo "review-marker: could not create a temp file for $out — refused" >&2; exit 2
+# Whatever this script creates from here on is removed on any exit but success, a signal included
+# (a full disk or `ulimit -f` raises SIGXFSZ, whose default action would kill the shell before any
+# cleanup). The EXIT trap keeps the exit status it was called with.
+PRIV=''
+trap '_rc=$?; if [ -n "$PRIV" ]; then rm -rf -- "$PRIV"; fi; exit "$_rc"' EXIT
+trap 'exit 2' HUP INT TERM XFSZ
+priv=".review-marker.$$.d"
+mkdir "./$priv" 2>/dev/null || { echo "review-marker: could not create a private temp dir for $out — refused" >&2; exit 2; }
+PRIV="$held/$priv"
+if ! {
+  echo "commit: $commit"
+  echo "spec_sha256: $s_now"
+  echo "test_sha256: $t_now"
+  echo "date: $(date +%F)"
+  echo "result: $RESULT"
+} > "./$priv/marker" 2>/dev/null; then
+  echo "review-marker: could not write a temp file for $out — refused" >&2; exit 2
 fi
-mv -f "$tmp" "./${out##*/}" || { rm -f "$tmp"; echo "review-marker: could not write $out" >&2; exit 2; }
+leaf="./${out##*/}"
+if [ -d "$leaf" ] || [ -L "$leaf" ]; then
+  echo "review-marker: $out is a directory or a symlink — refused" >&2; exit 2
+fi
+mv -f "./$priv/marker" "$leaf" || { echo "review-marker: could not write $out" >&2; exit 2; }
+rmdir "./$priv" 2>/dev/null
+PRIV=''
+trap - EXIT HUP INT TERM XFSZ
 echo "review-marker: wrote $out ($RESULT)"
