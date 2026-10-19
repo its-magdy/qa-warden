@@ -74,11 +74,13 @@ never carry the same number**, or the second one has no way to announce itself.
   hashes, and an edited test still read `current` afterwards (junk equals junk); it now falls
   through to `shasum -a 256` like the other broken cases, and if neither tool yields a digest the
   script refuses. A marker that already recorded a non-digest hash reads `stale`, never `current`.
+  The file is hashed from stdin, so a backslash or newline in its name (which makes both tools
+  prefix their line with `\`) cannot turn a valid file into a refusal.
 - Doctor reads the script's answer from stdout only, so a shell warning on stderr (a setlocale
   warning under an `LC_ALL` naming a missing locale) cannot turn a reviewed pair into "could not be
   checked".
-- `bin/qa-scaffoldtest` gains 67 cases (293 → 360): the script is tested directly (each of the
-  four answers, the `sha256sum` fallbacks including one that prints junk, and a table of every
+- `bin/qa-scaffoldtest` gains 69 cases (293 → 362): the script is tested directly (each of the
+  four answers, the `sha256sum` fallbacks including one that prints junk, a backslash in a file name, and a table of every
   refusal in both write and check mode, each asserting exit 2, nothing on stdout and no file
   written or changed), and doctor through it (the FAILED warning apart from the changed one,
   stderr noise ignored, the no-tool reason).

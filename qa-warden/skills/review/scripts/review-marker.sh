@@ -71,14 +71,17 @@ case "$SPEC$TEST" in *..*) echo "review-marker: '..' is not allowed in a path" >
 # broken tool that prints "unavailable" would otherwise be recorded as both hashes, and every later
 # edit would still compare equal (junk == junk) and read `current`. Anything else falls through, and
 # if neither tool yields a digest, digest prints nothing and the caller refuses.
+# The file goes in on STDIN, never as an argument: given a name with a backslash or a newline, both
+# tools escape it and prefix the line with `\`, so `awk '{print $1}'` would read a 65-char token and
+# a valid file would be refused. On stdin the line is always `<digest>  -`.
 is_digest() {
   case "$1" in ''|*[!0-9a-f]*) return 1 ;; esac
   [ "${#1}" -eq 64 ]
 }
 digest() {
-  _d=$(sha256sum "$1" 2>/dev/null | awk '{print $1}')
+  _d=$(sha256sum < "$1" 2>/dev/null | awk '{print $1}')
   if ! is_digest "$_d"; then
-    _d=$(shasum -a 256 "$1" 2>/dev/null | awk '{print $1}')
+    _d=$(shasum -a 256 < "$1" 2>/dev/null | awk '{print $1}')
   fi
   if is_digest "$_d"; then printf '%s\n' "$_d"; fi
 }

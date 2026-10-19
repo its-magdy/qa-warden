@@ -786,6 +786,14 @@ sed -e 's/^spec_sha256: .*/spec_sha256: unavailable/' -e 's/^test_sha256: .*/tes
 mv "$SHAP/marker.new" "$WMARK"
 rmk -- check "${WPAIR[@]}"
 check_eq "a marker that recorded a non-digest hash: stale, never current" "stale" "$RMK_OUT"
+# A backslash in a file name makes both tools escape the name and prefix their line with `\`; the
+# digest is read from stdin so a valid file is never refused for its name.
+cp "$SHAP/tests/demo/widget.spec.ts" "$SHAP/tests/demo/back\\slash.spec.ts"
+rmk -- specs/demo/widget.md 'tests/demo/back\slash.spec.ts' PASS
+check_eq "a backslash in the test's file name: the marker is written" "0" "$RMK_RC"
+rmk -- check specs/demo/widget.md 'tests/demo/back\slash.spec.ts'
+check_eq "  and check answers current" "current" "$RMK_OUT"
+rm -f "$SHAP/tests/demo/back\\slash.spec.ts"
 rmk -- "${WPAIR[@]}" PASS
 
 # Every refusal, in both modes: exit 2, nothing on stdout, and no file in the project written or
