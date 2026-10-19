@@ -11,8 +11,8 @@
 # placeholder / empty-target refusals are config errors with NO env escape (fix .env).
 #
 # Layer 2 is scripts/prod-guard.ts — the ENFORCED globalSetup that throws before
-# any browser opens on a bare `npx playwright test`. Keep the marker regex in the
-# two files in lockstep.
+# any browser opens on a bare `npx playwright test`. Neither layer decides anything
+# itself: both ask scripts/prod-guard-core.mjs (see below), so they cannot drift apart.
 #
 # Usage:  bash scripts/prod-guard.sh [url ...]
 # Any URL passed as an argument is screened by the SAME logic as the env vars — for
@@ -24,15 +24,52 @@
 # call: vars this script exports do NOT reach the caller's next invocation.
 set -a; [ -f "${CLAUDE_PROJECT_DIR:-.}/.env" ] && . "${CLAUDE_PROJECT_DIR:-.}/.env"; set +a
 
-# The ONE definition of "every target a run could touch": BASE_URL* (including the bare BASE_URL
-# single-site forks use), API_URL and *_API_URL (the test-data-seed create/delete-users path drives
-# the API host directly, so a prod API with a real admin token would mutate production rows outside
-# a BASE_URL-only guard). `--list-targets` prints this set as `NAME<TAB>value` and exits WITHOUT
-# screening — it is how /qa-warden:explore's reachability probe enumerates the same targets instead of
-# re-typing the regex. That copy had already drifted narrower (`^BASE_URL_[A-Z0-9_]*`), so a target
-# could be prod-GUARDED but never reachability-probed and a down seed API surfaced later as a
-# mystery red instead of a STOP.
-target_names() { env | sed -n -E 's/^(BASE_URL[A-Z0-9_]*|API_URL|[A-Z0-9_]*_API_URL)=.*/\1/p' | sort -u; }
+# The verdict lives in ONE place: scripts/prod-guard-core.mjs, plain ESM with no dependencies,
+# which scripts/prod-guard.ts imports too. This script keeps what is shell-shaped — the .env load
+# above, `--list-targets`, `--probe`, mask() and every line it prints — and asks the core for the
+# rest with ONE `node` call per run. Before the core each layer parsed hosts its own way, and the
+# sed strip this file used PASSED `https://prod.acme.com\@staging.acme.dev`,
+# `https://PROD%2Eacme.com` and a fullwidth `https://ｐｒｏｄ.acme.com` — three URLs a browser
+# resolves to prod.acme.com.
+# Fail CLOSED when the core cannot run: no node on PATH, or a stamp that has this script but not
+# the core (a partial copy). Node ≥22 is a project requirement already (scripts/init.sh checks the
+# version); this guard only needs `node` to exist.
+CORE="$(dirname "$0")/prod-guard-core.mjs"
+refuse_early() {
+  echo "REFUSING: $1"
+  echo "prod-guard: REFUSED (exit 1) — STOP"
+  exit 1
+}
+if ! command -v node >/dev/null 2>&1; then
+  refuse_early "Node ≥22 required — this guard runs scripts/prod-guard-core.mjs with node, and there is no node on PATH. Install Node ≥22 (the project needs it for npx playwright anyway), then re-run."
+fi
+if [ ! -f "$CORE" ]; then
+  refuse_early "scripts/prod-guard-core.mjs is missing — this prod-guard.sh cannot decide without it (a partial stamp). Run /qa-warden:init --resync to restore the toolkit-owned scripts."
+fi
+
+# The ONE definition of "every target a run could touch" is the core's TARGET_NAME_RE: BASE_URL*
+# (including the bare BASE_URL single-site forks use), API_URL and *_API_URL (the test-data-seed
+# create/delete-users path drives the API host directly, so a prod API with a real admin token
+# would mutate production rows outside a BASE_URL-only guard). `--list-targets` prints this set as
+# `NAME<TAB>value` and exits WITHOUT screening — it is how /qa-warden:explore's reachability probe
+# enumerates the same targets instead of re-typing the regex. That copy had already drifted
+# narrower (`^BASE_URL_[A-Z0-9_]*`), so a target could be prod-GUARDED but never
+# reachability-probed and a down seed API surfaced later as a mystery red instead of a STOP.
+# `names` prints only the names (never a value); `$v` is then a var NAME matched by that fixed
+# regex ([A-Z0-9_] only), so eval-ing it is safe. `eval "val=\$$v"`, NOT `printenv` — printenv is
+# not POSIX-guaranteed.
+# A core that fails here would read as "no targets set" — refuse instead: a non-zero node exit,
+# or any line that is not a bare var name, is a refusal, never a shorter list.
+# `NODE_OPTIONS=''` (empty, for this one command) on EVERY core call: an inherited
+# NODE_OPTIONS=--import=<file> / --require preload runs before the core and could print a
+# verdict-shaped line of its own. Clearing it means only the core's code writes the output.
+if [ "${1:-}" = "--list-targets" ] || [ "${1:-}" = "--probe" ]; then
+  TARGET_NAMES=$(NODE_OPTIONS='' node "$CORE" names) \
+    || refuse_early "scripts/prod-guard-core.mjs failed to list the targets (its error, if any, is printed above) — is node ≥22? Run /qa-warden:init --resync if the core was edited."
+  printf '%s\n' "$TARGET_NAMES" | awk '$0 != "" && $0 !~ /^[A-Z0-9_]+$/ { bad = 1 } END { exit bad }' \
+    || refuse_early "scripts/prod-guard-core.mjs printed something that is not a var name — run /qa-warden:init --resync if the core was edited."
+fi
+target_names() { printf '%s\n' "$TARGET_NAMES" | grep -E '^[A-Z0-9_]+$'; }
 if [ "${1:-}" = "--list-targets" ]; then
   for v in $(target_names); do
     eval "envval=\$$v"
@@ -68,8 +105,8 @@ fi
 mask() { printf '%s' "$1" | sed -E 's#^([a-zA-Z]+://)?[^/?#]*@#\1***@#'; }  # greedy to the LAST pre-path @ — a password containing @ must not leak a fragment
 
 # `-` (not `:-`) on the primary: a SET-but-EMPTY BASE_URL_APP must NOT fall through to
-# BASE_URL — scripts/prod-guard.ts uses `??` (nullish), which treats '' as set, and the
-# two layers must refuse the same inputs. Empty primary → empty URL → the refusal below.
+# BASE_URL (the core uses `??`, which treats '' as set). This line only DISPLAYS the target;
+# the empty-primary refusal comes from the core's `primary empty` record below.
 URL="${BASE_URL_APP-${BASE_URL:-}}"
 if [ -n "$URL" ]; then
   echo "effective target: $(mask "$URL")"
@@ -78,84 +115,95 @@ else
 fi
 rc=0
 
+# ONE node call screens every env target AND every positional URL argument. A command whose
+# TARGET comes from its arguments rather than from .env (`/qa-warden:review url=<url>`) passes it
+# here — `bash scripts/prod-guard.sh "$URL"` — and it gets the same screening as the env vars;
+# args are additive, the env sweep always runs too. The core prints one TAB-separated record per
+# line (see its CLI comment) and `verdict` LAST. The output is accepted only WHOLE, or the run is
+# refused — never read leniently:
+#   • node must exit 0 (a crash after a verdict-shaped line is a crash);
+#   • line 1 is `primary set|empty`; every other line but the last is a well-formed `target` or
+#     `argument` record; the LAST line is exactly `verdict PASS` or `verdict REFUSED`, once;
+#   • a PASS verdict next to a non-ok record or an empty primary is a contradiction → refuse.
+# NODE_OPTIONS is cleared for the call (see the `names` call above for why).
+CORE_OUT=$(NODE_OPTIONS='' node "$CORE" screen "$@")
+core_rc=$?
+TAB=$(printf '\t')
+if [ "$core_rc" -ne 0 ]; then
+  refuse_early "scripts/prod-guard-core.mjs exited $core_rc (its error, if any, is printed above) — is node ≥22? Run /qa-warden:init --resync if the core was edited."
+fi
+printf '%s\n' "$CORE_OUT" | awk -F'\t' '
+  NR == 1 { if ($0 != "primary\tset" && $0 != "primary\tempty") bad = 1; if ($0 == "primary\tempty") refusing = 1; next }
+  ($1 == "target" && $2 ~ /^[A-Z0-9_]+$/) || ($1 == "argument" && $2 ~ /^[0-9]+$/) {
+    if (NF != 4 || $3 !~ /^(ok|placeholder|prod)$/) bad = 1
+    if ($3 != "ok") refusing = 1
+    next
+  }
+  $0 == "verdict\tPASS" || $0 == "verdict\tREFUSED" { verdicts++; last = NR; verdict = $2; next }
+  { bad = 1 }
+  END {
+    if (bad || NR < 2 || verdicts != 1 || last != NR) exit 1
+    if (verdict == "PASS" && refusing) exit 1
+  }' \
+  || refuse_early "scripts/prod-guard-core.mjs returned no well-formed verdict (its error, if any, is printed above) — is node ≥22? Run /qa-warden:init --resync if the core was edited."
+
 # Fail-CLOSED on an UNCONFIGURED target (F-08, per-var). The shipped `.env.example` uses a
 # `CHANGEME` sentinel; an empty or placeholder host means the user copied `.env` but never
 # set a real target. A green guard against a host the user never chose (the old
 # `staging.example.com` default passed silently) is worse than a STOP. The PRIMARY must be
-# non-empty (this check); placeholder detection runs PER-VAR in the loop below, so a
-# CHANGEME left in a SECONDARY (BASE_URL_ADMIN) also refuses — an unset/empty secondary
-# stays fine (only the primary is mandatory). NO env escape here: an empty/placeholder
-# target is a CONFIG ERROR whose only remedy is editing .env — QA_ALLOW_PROD covers the
-# prod-marker check ONLY (one semantic per override; a false placeholder refusal must
-# never train users to disable the prod guard to get past it).
-if [ -z "$URL" ]; then
+# non-empty (this check); placeholder detection runs PER-VAR, so a CHANGEME left in a
+# SECONDARY (BASE_URL_ADMIN) also refuses — an unset/empty secondary stays fine (only the
+# primary is mandatory). NO env escape here: an empty/placeholder target is a CONFIG ERROR
+# whose only remedy is editing .env — QA_ALLOW_PROD covers the prod-marker check ONLY (one
+# semantic per override; a false placeholder refusal must never train users to disable the
+# prod guard to get past it).
+if printf '%s\n' "$CORE_OUT" | grep -q "^primary${TAB}empty\$"; then
   echo "REFUSING: BASE_URL_APP is empty — edit .env and set it to your staging/QA target before running QA."
   rc=1
 fi
-# screen_target <label> <url> — the ONE screening body: host extraction + placeholder sentinel
-# + word-boundary prod marker. Sets rc=1 on refusal. Used for every BASE_URL_*/API_URL in the
-# environment AND for any URL passed as a positional argument (see the arg loop below), so a
-# caller that takes a bare URL — /qa-warden:review url=<url> — no longer has to re-implement this screening by
-# hand in prose. Prose can't reproduce the scheme strip, the greedy userinfo strip, or the
-# placeholder sentinels correctly, and a hand-rolled copy drifts from the .ts layer.
-screen_target() {
-  v="$1"; val="$2"
-  [ -z "$val" ] && return 0
-  # Host extraction — 3-rule scheme strip, then userinfo/port/path cut:
-  #   (1) any `scheme://` — the `//` is REQUIRED, so a bare host:port like
-  #       `prod:8080` / `localhost:3000` is never eaten as a scheme;
-  #   (2) no-slash `http:` / `https:` ONLY (WHATWG parses `https:prod.acme.com`
-  #       as a host — mirror it);
-  #   (3) protocol-relative `//host`.
-  # Then a GREEDY userinfo strip to the LAST `@` before any `/ ? #` (a first-`@`
-  # strip leaves `ss@prod…` for `user:p@ss@prod…`, which defeats the word-boundary
-  # match), then cut port/path/query/fragment. `|` as the sed delimiter because
-  # `/ ? # @ :` all occur in the patterns.
-  host=$(printf '%s' "$val" | sed -E 's|^[a-zA-Z][a-zA-Z0-9+.-]*://||; s|^[hH][tT][tT][pP][sS]?:||; s|^//||; s|^[^/?#]*@||; s|[:/?#].*$||')
-  echo "guard: $v → $(mask "$val")"
-  # Placeholder sentinel per-var (F-08): CHANGEME / <angle-brackets> anywhere in the VALUE;
-  # RFC 2606/6761 reserved example domains LABEL-ANCHORED on the extracted HOST (exact or
-  # `.`-suffix) — an unanchored *example.com* substring falsely refused real hosts like
-  # qa.example.company.com. NO env escape: example.com/net/org and *.example are
-  # IANA-reserved and unregistrable, so no real target can live there — the fix is editing
-  # .env, and QA_ALLOW_PROD covers the prod-marker check ONLY. Keep these two case patterns
-  # in lockstep with prod-guard.ts's PLACEHOLDER_VALUE_RE / PLACEHOLDER_HOST_RE.
-  placeholder=0
-  case "$(printf '%s' "$val" | tr 'A-Z' 'a-z')" in *changeme*|*'<'*|*'>'*) placeholder=1 ;; esac
-  case "$(printf '%s' "$host" | tr 'A-Z' 'a-z')" in
-    example.com|*.example.com|example.org|*.example.org|example.net|*.example.net|example|*.example) placeholder=1 ;;
+
+# One record per screened value, in the core's order. Each line names the value by its var NAME
+# (env) or its 1-based POSITION (argument) — never the value itself — so the value is read back
+# here and only ever printed through mask(). The NAME is checked before it reaches eval: a var
+# name is [A-Z0-9_] only (the core's fixed regex), a position is digits only.
+while IFS="$TAB" read -r kind name verdict host; do
+  val=""
+  case "$name" in
+    ''|*[!A-Z0-9_]*) continue ;;
   esac
-  if [ "$placeholder" -eq 1 ]; then
-    # Name the right remedy: an env var is fixed in .env, an argument by the caller.
-    if [ "$v" = argument ]; then remedy="pass a real staging/QA URL"; else remedy="edit .env and set it to a real staging/QA target"; fi
-    echo "REFUSING: $v is a placeholder ('$(mask "$val")') — $remedy."
-    rc=1
-    return 0
-  fi
-  if printf '%s' "$host" | grep -qiE '(^|[.-])(prod|production)[0-9]*($|[.-])' && [ "${QA_ALLOW_PROD:-0}" != "1" ]; then
-    echo "REFUSING: '$host' ($v) looks like production. Set QA_ALLOW_PROD=1 only if you are certain."
-    rc=1
-  fi
-}
-
-for v in $(target_names); do
-  # `eval "val=\$$v"`, NOT `printenv` — printenv is not POSIX-guaranteed; on a minimal
-  # image without it every `val` would be empty, the loop would skip every var, and the
-  # prod-MARKER check (which lives ONLY in screen_target) would silently perform zero checks —
-  # a fail-OPEN on the advisory layer. `$v` is a var NAME extracted by the fixed regex above
-  # (BASE_URL*/…_API_URL — [A-Z0-9_] only), so eval-ing it is safe here.
-  eval "envval=\$$v"
-  screen_target "$v" "$envval"
-done
-
-# Positional URL arguments — screened by the SAME body as the env vars. A command whose TARGET
-# comes from its arguments rather than from .env (`/qa-warden:review url=<url>`) passes it here:
-#   bash scripts/prod-guard.sh "$URL"
-# This script's header promises to screen "every target a run could touch", and an argument URL
-# is exactly that. Args are additive: the env sweep above always runs too.
-for arg in "$@"; do
-  screen_target "argument" "$arg"
-done
+  case "$kind" in
+    target)
+      v="$name"
+      eval "val=\$$name"
+      remedy="edit .env and set it to a real staging/QA target"
+      ;;
+    argument)
+      case "$name" in *[!0-9]*) continue ;; esac
+      v="argument"
+      eval "val=\${$name}"
+      remedy="pass a real staging/QA URL"
+      ;;
+    *) continue ;;
+  esac
+  echo "guard: $v → $(mask "$val")"
+  case "$verdict" in
+    placeholder)
+      echo "REFUSING: $v is a placeholder ('$(mask "$val")') — $remedy."
+      rc=1
+      ;;
+    prod)
+      echo "REFUSING: '$host' ($v) looks like production. Set QA_ALLOW_PROD=1 only if you are certain."
+      rc=1
+      ;;
+  esac
+done <<EOF
+$CORE_OUT
+EOF
+# The core's own verdict must agree; if it says REFUSED for a reason this loop did not print,
+# refuse anyway (fail closed).
+case "$CORE_OUT" in
+  *"verdict${TAB}REFUSED") rc=1 ;;
+esac
 # Residual limit: a prod host with NO telltale name (www.acme.com) cannot be
 # auto-detected — keep every BASE_URL_* on staging/QA explicitly and treat an
 # empty/unexpected host as STOP-and-ask.

@@ -44,6 +44,7 @@ tsconfig.json
 .mcp.explore.json
 scripts/prod-guard.sh
 scripts/prod-guard.ts
+scripts/prod-guard-core.mjs
 scripts/resolve-spec-path.sh
 scripts/spec-links.sh
 scripts/post-run-checks.sh

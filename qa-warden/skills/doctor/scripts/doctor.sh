@@ -367,57 +367,47 @@ if [ -d fixtures/schemas ]; then
   esac
 fi
 
-# 8. Canonical scripts present + prod-guard lockstep. scripts/prod-guard.sh and
+# 8. Canonical scripts present + one prod-guard core. scripts/prod-guard.sh and
 #    scripts/resolve-spec-path.sh are what every command's safety rail / path
 #    resolution calls — a project scaffolded before they shipped needs a /qa-warden:init
-#    refresh. And the two prod-guard layers must carry the SAME word-boundary marker
-#    (sh spells it [0-9]*, ts spells it \d* — same semantics); a drifted pair means
-#    the advisory layer and the enforced layer disagree on what "prod" means.
-#
-#    FOUR lockstep pairs, not one (2026-09-06 parity audit, §4b finding 3). The files'
-#    OWN comments demand lockstep on three more literals, and nothing checked them:
-#    prod-guard.ts:15 "Keep this var-name set in lockstep with prod-guard.sh", and
-#    prod-guard.sh:101 "Keep these two case patterns in lockstep with prod-guard.ts's
-#    PLACEHOLDER_VALUE_RE / PLACEHOLDER_HOST_RE". Differential testing proved the two
-#    layers AGREE today (55 cases, 54 identical verdicts), so this pins the agreement
-#    rather than fixing a break — the same unchecked-hand-mirrored-pair shape Checks
-#    9b/9bb/9bc exist for. The var-name set is the load-bearing one: NARROWING it on one
-#    side silently unscreens a target on that layer, so a prod URL parked in the dropped
-#    var sails past that guard while the other still refuses — a divergence that presents
-#    as "the guard is inconsistent", not as an obvious break.
-#    Two of the three pairs are pinned PER-FILE rather than compared byte-to-byte,
-#    because the layers legitimately spell them in different languages (JS regex vs shell
-#    `case` glob) — exactly like the marker regex above.
+#    refresh.
+#    Both prod-guard layers — the advisory prod-guard.sh and the enforced globalSetup
+#    prod-guard.ts — take their verdict from ONE stamped file, scripts/prod-guard-core.mjs
+#    (the var-name set, WHATWG host parse, placeholder sentinels, prod marker, QA_ALLOW_PROD).
+#    So the check is "the stamped core is the plugin's core", one cmp. It replaced four
+#    lockstep greps that pinned hand-mirrored literals in the two files (marker regex,
+#    var-name set, two placeholder patterns) while the two files parsed hosts differently:
+#    three measured URLs (`prod.acme.com\@staging…`, `PROD%2Eacme.com`, a fullwidth prod) passed
+#    the shell guard and refused in the .ts, and every grep stayed green.
+#    Three stamp generations meet this check, because doctor runs from the plugin:
+#      • current  — core present; it must match the plugin's copy. A difference is a ⚠️ with
+#                   the resync (an edit is denied by settings.json, so it is a stale stamp).
+#      • old      — neither guard mentions the core: they carry their own verdict logic and
+#                   still work. A ⚠️ names the resync that brings the core; never a ❌.
+#      • mixed    — a guard that needs the core, and no core: prod-guard.sh REFUSES every run
+#                   and prod-guard.ts fails to import, so this is a ❌ (the guard itself
+#                   names the same repair).
+#    Check 9 skips the core: this check owns its presence and its compare.
 for f in scripts/prod-guard.sh scripts/resolve-spec-path.sh scripts/spec-links.sh scripts/post-run-checks.sh scripts/oracle-keys.txt; do
   [ -f "$f" ] || { echo "⚠️  $f missing — project scaffolded before it shipped; re-run /qa-warden:init"; warn=$((warn+1)); }
 done
-if [ -f scripts/prod-guard.sh ]; then
-  grep -qF '(^|[.-])(prod|production)[0-9]*($|[.-])' scripts/prod-guard.sh \
-    || { echo "❌ scripts/prod-guard.sh: canonical prod-marker regex not found (drifted or removed)"; fail=$((fail+1)); }
-  # Pair 2 of 4 — screened var-name set. Byte-identical in both layers, so this same
-  # literal is asserted against the .ts below; a narrowed set unscreens a live target.
-  grep -qF '(BASE_URL[A-Z0-9_]*|API_URL|[A-Z0-9_]*_API_URL)' scripts/prod-guard.sh \
-    || { echo "❌ scripts/prod-guard.sh: screened var-name set drifted — must stay in lockstep with prod-guard.ts (a narrowed set silently stops screening a target on this layer)"; fail=$((fail+1)); }
-  # Pair 3 of 4 — placeholder VALUE sentinel (.ts spells it /changeme|[<>]/i).
-  grep -qF "*changeme*|*'<'*|*'>'*" scripts/prod-guard.sh \
-    || { echo "❌ scripts/prod-guard.sh: placeholder-value case pattern drifted — must stay in lockstep with prod-guard.ts's PLACEHOLDER_VALUE_RE"; fail=$((fail+1)); }
-  # Pair 4 of 4 — RFC-2606 placeholder HOST list, label-anchored (.ts spells it
-  # /(^|\.)example(\.(com|org|net))?$/i).
-  grep -qF 'example.com|*.example.com|example.org|*.example.org|example.net|*.example.net|example|*.example' scripts/prod-guard.sh \
-    || { echo "❌ scripts/prod-guard.sh: RFC-2606 placeholder-host case list drifted — must stay in lockstep with prod-guard.ts's PLACEHOLDER_HOST_RE"; fail=$((fail+1)); }
-fi
-if [ -f scripts/prod-guard.ts ]; then
-  grep -qF '(^|[.-])(prod|production)\d*($|[.-])' scripts/prod-guard.ts \
-    || { echo "❌ scripts/prod-guard.ts: canonical prod-marker regex not found (drifted or removed)"; fail=$((fail+1)); }
-  # Pair 2 of 4 — same literal as the .sh above (this pair IS byte-identical).
-  grep -qF '(BASE_URL[A-Z0-9_]*|API_URL|[A-Z0-9_]*_API_URL)' scripts/prod-guard.ts \
-    || { echo "❌ scripts/prod-guard.ts: screened var-name set drifted — must stay in lockstep with prod-guard.sh (a narrowed set silently stops screening a target on this layer)"; fail=$((fail+1)); }
-  # Pair 3 of 4 — PLACEHOLDER_VALUE_RE.
-  grep -qF 'changeme|[<>]' scripts/prod-guard.ts \
-    || { echo "❌ scripts/prod-guard.ts: PLACEHOLDER_VALUE_RE drifted — must stay in lockstep with prod-guard.sh's *changeme*/<>/ case pattern"; fail=$((fail+1)); }
-  # Pair 4 of 4 — PLACEHOLDER_HOST_RE.
-  grep -qF '(^|\.)example(\.(com|org|net))?$' scripts/prod-guard.ts \
-    || { echo "❌ scripts/prod-guard.ts: PLACEHOLDER_HOST_RE drifted — must stay in lockstep with prod-guard.sh's RFC-2606 case list"; fail=$((fail+1)); }
+PG_CORE=scripts/prod-guard-core.mjs
+PG_CORE_PLUGIN=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../templates/scripts" 2>/dev/null && pwd)
+PG_CORE_PLUGIN="${PG_CORE_PLUGIN:+$PG_CORE_PLUGIN/prod-guard-core.mjs}"
+pg_needs_core=""
+for f in scripts/prod-guard.sh scripts/prod-guard.ts; do
+  [ -f "$f" ] && grep -qF 'prod-guard-core.mjs' "$f" && pg_needs_core="$pg_needs_core $f"
+done
+if [ -f "$PG_CORE" ]; then
+  if [ -z "$PG_CORE_PLUGIN" ] || [ ! -f "$PG_CORE_PLUGIN" ]; then
+    echo "⚠️  $PG_CORE could not be compared — the plugin's templates/scripts/prod-guard-core.mjs is not beside this doctor (run it as /qa-warden:doctor); the prod-guard verdict is UNVERIFIED"; warn=$((warn+1))
+  elif ! cmp -s "$PG_CORE_PLUGIN" "$PG_CORE"; then
+    echo "⚠️  $PG_CORE differs from the plugin's core — both prod-guard layers take their verdict from it, so this project screens URLs by a different rule than the one shipped and tested. Run /qa-warden:init --resync (backs up to $PG_CORE.qa-bak)"; warn=$((warn+1))
+  fi
+elif [ -n "$pg_needs_core" ]; then
+  echo "❌ $PG_CORE missing, but${pg_needs_core} need it — a partial stamp: prod-guard.sh refuses every run and the globalSetup cannot load. Run /qa-warden:init --resync"; fail=$((fail+1))
+elif [ -f scripts/prod-guard.sh ] || [ -f scripts/prod-guard.ts ]; then
+  echo "⚠️  prod-guard predates the shared core ($PG_CORE): the stamped guards still work, but carry their own host parsing, which passes some URLs a browser resolves to a prod host. Run /qa-warden:init --resync"; warn=$((warn+1))
 fi
 # 8b. Playwright FOUR-SITE PAIRED-BUMP lockstep. package.json's own `overrides_comment` mandates
 #     four sites move together — `@playwright/test`, `overrides.playwright`,
@@ -515,7 +505,7 @@ fi
 #    protection tiers, and this check is the only thing that covers all three:
 #      (a) HARD-DENIED in settings.json deny[] — package.json, package-lock.json,
 #          playwright.config.ts, tsconfig.json, .mcp.json, .mcp.explore.json, prod-guard.sh/.ts,
-#          and every scripts/*.sh EXCEPT init.sh. Blocked outright.
+#          prod-guard-core.mjs and every scripts/*.sh EXCEPT init.sh. Blocked outright.
 #      (b) Write-allowlist-EXCLUDED — scripts/init.sh, scripts/README.md, and the two stamped
 #          scripts/*.txt manifests (runtime-dirs.txt, oracle-keys.txt), .github/**, .env. Not in
 #          deny[], so per-prompt-approved. The manifests nothing in a project reads
@@ -570,6 +560,9 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   [ -n "$OWNED" ] || { echo "⚠️  toolkit-owned manifest (manifests/resync-set.txt) not readable in the plugin at $TMPL/.. — substrate drift is UNVERIFIED (the plugin install is incomplete; reinstall it)"; warn=$((warn+1)); }
   for rel in $OWNED; do
     [ -f "$TMPL/$rel" ] || continue
+    # Check 8 owns the prod-guard core: a stamp older than the core lacks it and must get a ⚠️,
+    # not this loop's "substrate missing" ❌ (only a guard that NEEDS the core makes it a ❌).
+    [ "$rel" = scripts/prod-guard-core.mjs ] && continue
     if [ ! -f "$rel" ]; then
       echo "❌ substrate missing: $rel absent from project — run /qa-warden:init --resync"; fail=$((fail+1))
     elif ! cmp -s "$TMPL/$rel" "$rel"; then
@@ -1339,7 +1332,7 @@ done < <(printf %s\\n "$CTX_FILES" | grep -e "\\.basis\\.md$")
 #      scripts/prod-guard.sh itself in its default mode (offline — only `--probe` touches the
 #      network; the default mode screens strings and exits) and keeps only its empty/placeholder
 #      REFUSING lines, so the CHANGEME / <…> / example.com|net|org / *.example sentinels stay
-#      single-sourced in prod-guard (and its .ts lockstep twin). Prod-marker refusals are
+#      single-sourced in scripts/prod-guard-core.mjs (which the .ts imports too). Prod-marker refusals are
 #      deliberately NOT surfaced here: QA_ALLOW_PROD is a per-command override, so doctor cannot
 #      tell a deliberate prod target from a mistake. Empty QA_USER_* is NOT checked either — a
 #      site with no login legitimately has none. WARN, not FAIL: nothing is wrong with the

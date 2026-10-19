@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# qa-scaffoldtest — regression tests for bin/qa-scaffold and templates/scripts/prod-guard.sh.
+# qa-scaffoldtest — regression tests for bin/qa-scaffold, doctor and the prod-guard (templates/scripts/prod-guard*).
 # Run from the toolkit repo:
 #
 #     qa-warden/bin/qa-scaffoldtest
@@ -8,7 +8,8 @@
 # fixture (evals/_lib/base-project.sh) that needs `claude plugin eval`, so the settings.json
 # merge, the --resync backups and the .gitignore carve-out its comments describe were asserted
 # nowhere. Every case stamps into its own mktemp directory, so nothing here touches a real
-# project. No network, no npm install (--no-install), no model calls.
+# project. No network, no npm install (--no-install), no model calls. Needs `node` on PATH:
+# prod-guard.sh takes its verdict from scripts/prod-guard-core.mjs (section 9).
 #
 # What is pinned:
 #   1. fresh stamp     the file set is DERIVED from templates/ + manifests/resync-set.txt (not a hand
@@ -51,7 +52,15 @@
 #                      twin, a fanned spec and all three YAML smoke-tag forms plus a prose
 #                      mention; and that doctor, /qa-warden:coverage, /qa-warden:impact and
 #                      post-run-checks.sh read that one inventory (no `_` file reported anywhere)
-#   9. symlink         one path table run against templates/scripts/retire-delete.sh and the
+#   9. prod-guard core  one URL->verdict table (the 3 URLs the pre-core shell guard passed, scheme-
+#                      less host:port, placeholders, userinfo, IPv6, ports, case, trailing dot,
+#                      percent-encoding, IDN/punycode, QA_ALLOW_PROD, empty/unset) that BOTH
+#                      entry points must reproduce: prod-guard.sh via node, prod-guard.ts imported
+#                      under node type stripping with a stub dotenv (Node >=22.6). The shell guard
+#                      refuses with no node, no core or any core output it cannot accept whole
+#                      (crash, malformed record, a NODE_OPTIONS preload); doctor Check 8 on current, drifted, mixed
+#                      and pre-core stamps
+#  10. symlink         one path table run against templates/scripts/retire-delete.sh and the
 #      containment     review skill's review-marker.sh: a symlinked tests/, specs/ or reports/, an
 #                      intermediate dir or leaf symlink, a dangling one, a sibling-prefix dir
 #                      (proj vs proj2) are refused with nothing deleted or written; plain paths,
@@ -59,12 +68,6 @@
 #                      a newline or tab in a path or the root is refused; and a stub rm /
 #                      sha256sum swaps the tree after the checks (narrowed, not race-proof); the
 #                      marker's temp dir refuses a planted symlink and leaves nothing on failure
-#
-# The prod-guard.ts twin is not tested here: qa-hooktest only copies it as a project marker, and
-# running it needs node + Playwright's dependencies, which this test deliberately does not install.
-#
-# Not asserted, on purpose: the `\@`, `https:/` and `%70` host-parsing quirks. prod-guard.sh
-# documents them as correctness-only, not a security boundary.
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TEMPLATES="$here/templates"
 SCAFFOLD="$here/bin/qa-scaffold"
@@ -1756,6 +1759,252 @@ check "  and its BLIND SPOTS name no _-prefixed test" test "$(grep -cE -e "$SCRA
 mv "$SLG.keep" "$SLG"
 
 # ------------------------------------------------------------------------------------------
+echo "prod-guard-core.mjs — one URL table, both entry points"
+# Both prod-guard layers take their verdict from templates/scripts/prod-guard-core.mjs. This table
+# is the fixture they must both reproduce: prod-guard.sh (which runs the core with node) and
+# prod-guard.ts (which imports it, loaded here by node's type stripping with a stub `dotenv`).
+# It is TEST DATA ONLY — the guards never read it. Columns: verdict | reason | label | VAR=value…
+# (whitespace-separated assignments; no row may contain a `|` or a space inside a value). The
+# reason is the FIRST refusal in the order the .ts throws them: empty, placeholder, prod.
+# The first three rows are the URLs the pre-core sed strip in prod-guard.sh PASSED although WHATWG
+# parsing (what a browser navigates to) resolves them to prod.acme.com.
+command -v node >/dev/null 2>&1 || { echo "qa-scaffoldtest: node is required (prod-guard.sh runs scripts/prod-guard-core.mjs)" >&2; exit 2; }
+CORE_TMPL="$TEMPLATES/scripts/prod-guard-core.mjs"
+check "the core ships beside the two guards" test -f "$CORE_TMPL"
+new_dir; PGT=$DIR
+TABLE="$PGT/prod-guard-table.txt"
+cat > "$TABLE" <<'EOF'
+# verdict | reason      | label                                              | environment
+REFUSED   | prod        | measured: backslash is a path separator in https   | BASE_URL_APP=https://prod.acme.com\@staging.acme.dev
+REFUSED   | prod        | measured: percent-encoded dot in the host          | BASE_URL_APP=https://PROD%2Eacme.com
+REFUSED   | prod        | measured: fullwidth letters fold to ASCII (IDNA)   | BASE_URL_APP=https://ｐｒｏｄ.acme.com
+REFUSED   | prod        | scheme-relative, backslash then @                  | BASE_URL_APP=//prod.acme.com\@staging.acme.dev
+REFUSED   | prod        | scheme-relative plain                              | BASE_URL_APP=//prod.acme.com
+REFUSED   | prod        | scheme-relative slash-backslash                    | BASE_URL_APP=/\prod.acme.com
+REFUSED   | prod        | scheme-relative double backslash                   | BASE_URL_APP=\\prod.acme.com
+REFUSED   | prod        | scheme-less, backslash then @                      | BASE_URL_APP=prod.acme.com\@staging.acme.dev
+REFUSED   | prod        | scheme-relative backslash-slash                    | BASE_URL_APP=\/prod.acme.com
+REFUSED   | prod        | scheme-relative, three slashes                     | BASE_URL_APP=///prod.acme.com
+PASS      | -           | root-relative path names no host                   | BASE_URL_APP=https://staging.acme.dev API_URL=/app
+PASS      | -           | root-relative path that says production            | BASE_URL_APP=https://staging.acme.dev API_URL=/production/users
+PASS      | -           | root-relative path that says example               | BASE_URL_APP=https://staging.acme.dev API_URL=/example/users
+PASS      | -           | dot-relative path that says production             | BASE_URL_APP=https://staging.acme.dev API_URL=./production
+PASS      | -           | query-only reference that says prod                | BASE_URL_APP=https://staging.acme.dev API_URL=?prod=1
+PASS      | -           | staging host                                       | BASE_URL_APP=https://staging.acme.dev
+PASS      | -           | product is not the marker                          | BASE_URL_APP=https://product.acme.dev
+REFUSED   | prod        | scheme-less host:port                              | BASE_URL_APP=prod.acme.com:8080
+REFUSED   | prod        | scheme-less bare host                              | BASE_URL_APP=prod.acme.com
+PASS      | -           | scheme-less localhost:port                         | BASE_URL_APP=localhost:3000
+REFUSED   | prod        | scheme-less host:port, percent-encoded             | BASE_URL_APP=PROD%2Eacme.com:8080
+REFUSED   | prod        | one slash after the scheme                         | BASE_URL_APP=https:/prod.acme.com
+REFUSED   | prod        | userinfo with an @ in the password                 | BASE_URL_APP=https://user:p@ss@prod.acme.com/login
+PASS      | -           | userinfo that says prod, staging host              | BASE_URL_APP=https://prod:secret@staging.acme.dev
+PASS      | -           | IPv6 literal with a port                           | BASE_URL_APP=http://[::1]:3000
+REFUSED   | prod        | prod host with a port and a path                   | BASE_URL_APP=https://prod.acme.com:8443/app
+REFUSED   | prod        | mixed case scheme and host                         | BASE_URL_APP=HTTPS://Admin.PROD.Acme.com
+REFUSED   | prod        | trailing dot (fully-qualified host)                | BASE_URL_APP=https://prod.acme.com.
+REFUSED   | prod        | IDN host with a prod label                         | BASE_URL_APP=https://prod.bücher.de
+PASS      | -           | IDN staging host (punycoded, no marker)            | BASE_URL_APP=https://staging.bücher.de
+REFUSED   | prod        | invalid punycode label falls back to the raw host  | BASE_URL_APP=https://xn--prod-abc.acme.com
+REFUSED   | placeholder | CHANGEME sentinel                                  | BASE_URL_APP=CHANGEME
+REFUSED   | placeholder | angle-bracket placeholder                          | BASE_URL_APP=https://<your-host>.acme.dev
+REFUSED   | placeholder | subdomain of example.com                           | BASE_URL_APP=https://staging.example.com
+REFUSED   | placeholder | example.com with a trailing dot                    | BASE_URL_APP=https://staging.example.com.
+PASS      | -           | a real host that merely contains example           | BASE_URL_APP=https://qa.example.company.com
+PASS      | -           | QA_ALLOW_PROD=1 lifts the prod marker              | QA_ALLOW_PROD=1 BASE_URL_APP=https://prod.acme.com
+REFUSED   | prod        | QA_ALLOW_PROD=true is not the override             | QA_ALLOW_PROD=true BASE_URL_APP=https://prod.acme.com
+REFUSED   | placeholder | QA_ALLOW_PROD=1 does not excuse a placeholder      | QA_ALLOW_PROD=1 BASE_URL_APP=CHANGEME
+REFUSED   | empty       | primary set but empty                              | BASE_URL_APP=
+REFUSED   | empty       | nothing set at all                                 |
+REFUSED   | empty       | empty BASE_URL_APP does not fall through           | BASE_URL_APP= BASE_URL=https://staging.acme.dev
+PASS      | -           | legacy single-site BASE_URL                        | BASE_URL=https://staging.acme.dev
+PASS      | -           | empty secondary is skipped                         | BASE_URL_APP=https://staging.acme.dev BASE_URL_ADMIN=
+REFUSED   | prod        | prod on a *_API_URL                                | BASE_URL_APP=https://staging.acme.dev SEED_API_URL=https://api.production.acme.com
+EOF
+# trim <name> — strips surrounding whitespace from the named variable, in place.
+trim() {
+  local v
+  eval "v=\$$1"
+  v="${v#"${v%%[![:space:]]*}"}"
+  v="${v%"${v##*[![:space:]]}"}"
+  printf -v "$1" '%s' "$v"
+}
+# sh_reason — the first refusal in the last pg run's output, in the .ts throw order.
+sh_reason() {
+  if grep -qF -e "BASE_URL_APP is empty" <<<"$PG_OUT"; then echo empty
+  elif grep -qF -e "is a placeholder" <<<"$PG_OUT"; then echo placeholder
+  elif grep -qF -e "looks like production" <<<"$PG_OUT"; then echo prod
+  elif grep -qF -e "REFUSING" <<<"$PG_OUT"; then echo other
+  else echo -
+  fi
+}
+
+# The .ts entry point: the template, with the core beside it, imported by a driver that sets
+# process.env to each row's assignments and calls the globalSetup. `dotenv` is a no-op stub so no
+# real .env can leak in.
+mkdir -p "$PGT/ts/scripts" "$PGT/ts/node_modules/dotenv"
+cp "$TEMPLATES/scripts/prod-guard.ts" "$CORE_TMPL" "$PGT/ts/scripts/"
+printf '{ "type": "module" }\n' > "$PGT/ts/package.json"
+printf '{ "name": "dotenv", "version": "0.0.0-stub", "type": "module", "main": "index.js" }\n' > "$PGT/ts/node_modules/dotenv/package.json"
+printf 'export function config() {\n  return {};\n}\n' > "$PGT/ts/node_modules/dotenv/index.js"
+cat > "$PGT/ts/driver.mjs" <<'EOF'
+// driver.mjs <table> <prod-guard.ts> — prints "<verdict>\t<reason>" per table row, in order.
+import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+
+const [tablePath, guardPath] = process.argv.slice(2);
+const { default: globalProdGuard } = await import(pathToFileURL(guardPath).href);
+const rows = readFileSync(tablePath, 'utf8')
+  .split('\n')
+  .filter((line) => line.trim() !== '' && !line.trim().startsWith('#'));
+const out = [];
+for (const row of rows) {
+  const assignments = row.split('|').slice(3).join('|').trim();
+  const env = {};
+  for (const a of assignments.split(/\s+/).filter(Boolean)) {
+    const eq = a.indexOf('=');
+    env[a.slice(0, eq)] = a.slice(eq + 1);
+  }
+  process.env = env;
+  let verdict = 'PASS';
+  let reason = '-';
+  try {
+    globalProdGuard();
+  } catch (e) {
+    const message = String(e && e.message);
+    verdict = 'REFUSED';
+    if (/BASE_URL_APP is empty/.test(message)) reason = 'empty';
+    else if (/still a placeholder/.test(message)) reason = 'placeholder';
+    else if (/looks like PRODUCTION/.test(message)) reason = 'prod';
+    else reason = 'other';
+  }
+  out.push(`${verdict}\t${reason}`);
+}
+console.log(out.join('\n'));
+EOF
+TS_OUT=$(cd "$PGT/ts" && node --experimental-strip-types --no-warnings driver.mjs "$TABLE" "$PGT/ts/scripts/prod-guard.ts" 2>/dev/null)
+TS_RC=$?
+check_eq "prod-guard.ts loads under node and runs every row (exit 0)" "0" "$TS_RC"
+
+echo "  -- every row: prod-guard.sh (node CLI) and prod-guard.ts (import) give the table's verdict"
+rows=0
+while IFS='|' read -r want reason label assigns; do
+  trim want
+  case "$want" in ''|'#'*) continue ;; esac
+  trim reason; trim label
+  rows=$((rows+1))
+  envs=()
+  read -r -a envs <<<"$assigns"
+  PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" ${envs[@]+"${envs[@]}"} /bin/sh "$PROD_GUARD" 2>&1)
+  pg_rc=$?
+  case $pg_rc in
+    0) sh_got="PASS -" ;;
+    1) sh_got="REFUSED $(sh_reason)" ;;
+    *) sh_got="exit-$pg_rc" ;;
+  esac
+  ts_got=$(sed -n "${rows}p" <<<"$TS_OUT" | tr '\t' ' ')
+  check_eq "sh  $label" "$want $reason" "$sh_got"
+  check_eq "ts  $label" "$want $reason" "$ts_got"
+done < "$TABLE"
+check "the table has at least 25 rows" test "$rows" -ge 25
+check_eq "the .ts driver printed one verdict per row" "$rows" "$(grep -c . <<<"$TS_OUT")"
+# Not expressible in the whitespace-split table: a TAB the parser removes. `/<TAB>/prod.acme.com`
+# is `//prod.acme.com` to a browser, so it must not be read as a root-relative path.
+pg 1 "a TAB inside a scheme-relative value is removed, as a browser removes it" \
+  BASE_URL_APP=https://staging.acme.dev "API_URL=$(printf '/\t/prod.acme.com')"
+has_out "  and the host is prod.acme.com" "'prod.acme.com' (API_URL) looks like production"
+
+echo "  -- the shell guard fails closed when the core cannot run"
+new_dir; NB=$DIR   # a PATH with dirname (the guard needs it to find the core) and no node
+ln -s "$(command -v dirname)" "$NB/dirname"
+PG_OUT=$(env -i PATH="$NB" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://staging.acme.dev /bin/sh "$PROD_GUARD" 2>&1)
+check_eq "no node on PATH: refused (exit 1)" "1" "$?"
+has_out "  and says Node ≥22 is required" "REFUSING: Node ≥22 required"
+has_out "  and prints the verdict line" "prod-guard: REFUSED (exit 1) — STOP"
+PG_OUT=$(env -i PATH="$NB" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://staging.acme.dev /bin/sh "$PROD_GUARD" --list-targets 2>&1)
+check_eq "  --list-targets without node is refused too, not an empty list" "1" "$?"
+new_dir; MIX=$DIR   # a partial stamp: the new guard, no core beside it
+cp "$PROD_GUARD" "$MIX/prod-guard.sh"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://staging.acme.dev /bin/sh "$MIX/prod-guard.sh" 2>&1)
+check_eq "core missing beside the guard: refused (exit 1)" "1" "$?"
+has_out "  and names the core" "scripts/prod-guard-core.mjs is missing"
+has_out "  and the resync" "/qa-warden:init --resync"
+printf '// a core that never answers\n' > "$MIX/prod-guard-core.mjs"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://staging.acme.dev /bin/sh "$MIX/prod-guard.sh" 2>&1)
+check_eq "a core that prints no verdict: refused (exit 1), never a pass" "1" "$?"
+has_out "  and says so" "returned no well-formed verdict"
+# The core's output is accepted only whole: exit 0, line 1 `primary`, well-formed records, and
+# exactly one `verdict` as the LAST line. Each stand-in below breaks one of those and must refuse.
+printf 'console.log("primary\\tset\\nverdict\\tPASS");\nprocess.exit(1);\n' > "$MIX/prod-guard-core.mjs"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://prod.acme.com /bin/sh "$MIX/prod-guard.sh" 2>&1)
+check_eq "a core that prints a PASS verdict and then exits 1: refused" "1" "$?"
+has_out "  and names the exit code" "prod-guard-core.mjs exited 1"
+lacks_out "  no PASS line" "prod-guard: PASS"
+printf 'console.log("primary\\tset\\nbogus\\tBASE_URL_APP\\tok\\tx\\nverdict\\tPASS");\n' > "$MIX/prod-guard-core.mjs"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://prod.acme.com /bin/sh "$MIX/prod-guard.sh" 2>&1)
+check_eq "a core that prints an unknown record type: refused" "1" "$?"
+has_out "  as malformed" "returned no well-formed verdict"
+printf 'console.log("primary\\tset\\nnoiseverdict\\tPASS");\n' > "$MIX/prod-guard-core.mjs"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://prod.acme.com /bin/sh "$MIX/prod-guard.sh" 2>&1)
+check_eq "a last line that merely ENDS in verdict<TAB>PASS: refused" "1" "$?"
+printf 'console.log("primary\\tset\\ntarget\\tBASE_URL_APP\\tprod\\tprod.acme.com\\nverdict\\tPASS");\n' > "$MIX/prod-guard-core.mjs"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://prod.acme.com /bin/sh "$MIX/prod-guard.sh" 2>&1)
+check_eq "a PASS verdict beside a prod record: refused (the contradiction is not a pass)" "1" "$?"
+printf 'console.log("BASE_URL_APP\\nnot a name");\n' > "$MIX/prod-guard-core.mjs"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://staging.acme.dev /bin/sh "$MIX/prod-guard.sh" --list-targets 2>&1)
+check_eq "--list-targets: a names line that is not a var name is refused, not skipped" "1" "$?"
+# A NODE_OPTIONS preload runs before the core: it prints a verdict-shaped line and throws. The
+# guard clears NODE_OPTIONS for its node calls, so the real core still answers — prod refuses.
+printf 'process.stdout.write("primary\\tset\\nverdict\\tPASS\\n");\nthrow new Error("preload");\n' > "$PGT/preload.mjs"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" NODE_OPTIONS="--import=$PGT/preload.mjs" \
+  BASE_URL_APP=https://prod.acme.com /bin/sh "$PROD_GUARD" 2>&1)
+check_eq "NODE_OPTIONS with a preload that prints PASS: prod is still refused" "1" "$?"
+has_out "  by the real core's verdict" "'prod.acme.com' (BASE_URL_APP) looks like production"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" NODE_OPTIONS="--import=$PGT/preload.mjs" \
+  BASE_URL_APP=https://staging.acme.dev /bin/sh "$PROD_GUARD" --list-targets 2>&1)
+check_eq "  and --list-targets ignores the preload too" "$(printf 'BASE_URL_APP\thttps://staging.acme.dev')" "$PG_OUT"
+
+echo "  -- --list-targets prints NAME<TAB>value for the core's var-name set"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://staging.acme.dev \
+  BASE_URL_ADMIN= SEED_API_URL=https://api.staging.acme.dev OTHER_URL=https://x.acme.dev /bin/sh "$PROD_GUARD" --list-targets 2>&1)
+check_eq "set targets only, one line each, no screening output" \
+  "$(printf 'BASE_URL_APP\thttps://staging.acme.dev\nSEED_API_URL\thttps://api.staging.acme.dev')" "$PG_OUT"
+
+echo "  -- doctor Check 8: the stamped core is the plugin's core"
+new_dir; PGC=$DIR
+stamp "$PGC"
+run_doctor "$PGC"
+dr_lacks "a fresh stamp: nothing to say about the core" "prod-guard-core.mjs"
+check_eq "  and doctor exits 0" "0" "$DR_RC"
+printf '\n// local edit\n' >> "$PGC/scripts/prod-guard-core.mjs"
+run_doctor "$PGC"
+dr_has "a core that differs from the plugin's is a warning with the resync" \
+  "⚠️  scripts/prod-guard-core.mjs differs from the plugin's core"
+check_eq "  and doctor still exits 0" "0" "$DR_RC"
+dr_lacks "  reported once (Check 9 leaves the core to Check 8)" "substrate drift: scripts/prod-guard-core.mjs"
+rm "$PGC/scripts/prod-guard-core.mjs"
+run_doctor "$PGC"
+dr_has "a mixed stamp (guards that need the core, no core) is a ❌" \
+  "❌ scripts/prod-guard-core.mjs missing, but scripts/prod-guard.sh scripts/prod-guard.ts need it"
+check_eq "  and doctor exits 1" "1" "$DR_RC"
+dr_lacks "  (not also Check 9's substrate-missing ❌)" "substrate missing: scripts/prod-guard-core.mjs"
+# Stand-ins for a stamp from before the core: guards that carry their own verdict logic and
+# never mention the core.
+printf '#!/bin/sh\n# a pre-core guard with its own host parsing\necho "prod-guard: PASS (exit 0)"\n' > "$PGC/scripts/prod-guard.sh"
+printf '// a pre-core globalSetup with its own host parsing\nexport default function globalProdGuard(): void {}\n' > "$PGC/scripts/prod-guard.ts"
+run_doctor "$PGC"
+dr_has "an old stamp (no core, guards that do not need it) is a warning with the resync" \
+  "⚠️  prod-guard predates the shared core (scripts/prod-guard-core.mjs)"
+check_eq "  and no ❌ names the prod-guard (an upgrade alone never fails doctor)" "0" \
+  "$(grep '^❌' <<<"$DR_OUT" | grep -c 'prod-guard')"
+check_eq "  and doctor exits 0" "0" "$DR_RC"
+stamp "$PGC" --resync
+run_doctor "$PGC"
+dr_lacks "--resync restores the core and the guards: Check 8 has nothing left to say" "prod-guard-core.mjs"
+dr_lacks "  (no old-stamp warning either)" "predates the shared core"
+check "  the restored core is the plugin's" cmp -s "$CORE_TMPL" "$PGC/scripts/prod-guard-core.mjs"
+
+# ------------------------------------------------------------------------------------------
 echo "symlink containment — retire-delete.sh and review-marker.sh against one path table"
 # Both scripts checked their paths as strings only (specs/…, tests/…, no '..'), and a symlinked dir
 # on the path got past that: with `tests -> /tmp/outside`, retire-delete deleted
@@ -1800,9 +2049,9 @@ reports/review points at a sibling dir named proj<NL>|refuse|refuse|reports/revi
 the marker leaf is an existing directory|refuse|refuse|-|-|reports/review/demo/widget.reviewed|dir
 reports -> . (a symlink to the project root itself)|refuse|allow|reports|.|reports/review/demo/widget.reviewed|no'
 RD="$TEMPLATES/scripts/retire-delete.sh"
-check "section 9: retire-delete.sh exists" test -f "$RD"
-check "section 9: review-marker.sh exists" test -f "$RMK"
-check_nonzero "section 9: the path table has rows" "$(grep -c '|' <<<"$CONTAIN_ROWS")"
+check "section 10: retire-delete.sh exists" test -f "$RD"
+check "section 10: review-marker.sh exists" test -f "$RMK"
+check_nonzero "section 10: the path table has rows" "$(grep -c '|' <<<"$CONTAIN_ROWS")"
 # contain_fixture <link> <target> <path> <create> — a fresh $X with the project at $P.
 contain_fixture() {
   local link=$1 target=$2 path=$3 create=$4 tgt

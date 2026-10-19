@@ -29,14 +29,27 @@ Any URL passed as an **argument** goes through the same screening body — that 
 how a command whose target comes from its arguments rather than `.env`
 (`/qa-warden:review url=<url>`) screens it, instead of re-implementing the host match in prose. Layer 2 is
 `prod-guard.ts` — the enforced Playwright `globalSetup` that throws before any
-browser opens. **Keep the marker regex in the two files in lockstep.** Both are
-deny-listed from agent edits in `.claude/settings.json`.
+browser opens. Neither layer decides anything itself: both take the verdict from
+`prod-guard-core.mjs` (below). The shell guard runs it with `node` once per call and
+**refuses** when there is no `node` on PATH ("Node ≥22 required") or the core is
+missing (run `/qa-warden:init --resync`). All three files are deny-listed from agent
+edits in `.claude/settings.json`.
 
 ## `prod-guard.ts` — enforced globalSetup prod-guard (layer 2 of 2)
 
-Wired as `globalSetup` in `playwright.config.ts`; same word-boundary logic via a
-WHATWG URL parse. Protects even a bare `npx playwright test` that never ran the
+Wired as `globalSetup` in `playwright.config.ts`; imports `prod-guard-core.mjs` and
+throws on its refusal. Protects even a bare `npx playwright test` that never ran the
 shell guard.
+
+## `prod-guard-core.mjs` — the one prod-guard verdict
+
+Plain ESM, no dependencies. Owns everything both layers decide: the screened
+var-name set (`BASE_URL*`, `API_URL`, `*_API_URL`), host extraction (WHATWG
+`new URL()`, the way a browser resolves the host, scheme-relative `//host` and
+scheme-less `host:port` values parsed whole too), the placeholder sentinels, the word-boundary prod marker and the
+`QA_ALLOW_PROD=1` override. `prod-guard.ts` imports it; `prod-guard.sh` runs
+`node scripts/prod-guard-core.mjs screen [url ...]` and prints the result.
+`/qa-warden:doctor` Check 8 compares it with the plugin's copy.
 
 ## `resolve-spec-path.sh` — canonical spec/test path mapping
 
@@ -54,7 +67,7 @@ The checks behind `/qa-warden:doctor` (0–21 + rollup, all read-only: reruns no
 nothing, hits no network, writes nothing) ship in the plugin as `skills/doctor/scripts/doctor.sh`,
 so they are always the same build as the templates they compare this project against. They verify
 the substrate itself: `last-run.json` freshness/zero-test (via `check-last-run.sh`), oracle-vocab
-lockstep (`oracle-keys.txt` vs the plugin's `test-case-contract` skill), prod-guard presence + regex lockstep, substrate drift,
+lockstep (`oracle-keys.txt` vs the plugin's `test-case-contract` skill), prod-guard presence + its core matching the plugin's, substrate drift,
 sentinel files, context staleness, `bugs/` Status hygiene, site-id↔config match, and more. Exit 1
 on any ❌.
 

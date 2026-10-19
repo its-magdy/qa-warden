@@ -259,7 +259,8 @@ echo "[qa-scaffold] target: $TARGET"
 # exceptions: `gitignore` is renamed to `.gitignore`, and `settings.json` is
 # jq-MERGED below (never blind-copied). Note scripts/prod-guard.ts is among these
 # and MUST land — it is the ENFORCED globalSetup wired in playwright.config.ts;
-# without it every `playwright test` fails to resolve globalSetup. All copies
+# without it every `playwright test` fails to resolve globalSetup. So must
+# scripts/prod-guard-core.mjs, the verdict both prod-guard layers take. All copies
 # happen before the dependency install below.
 # Copy failures are collected, not ignored: a failed cp (unwritable dir, disk full) must never
 # reach the green done banner — that is a false-green scaffold, possibly missing the MUST-land

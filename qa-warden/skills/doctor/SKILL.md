@@ -169,7 +169,10 @@ does not fix anything — each finding names its repair:
   clean, stable, *skewed* set passes both. A missing site is reported, not failed — `package.json`
   is in `resync-set.txt`, so Check 9 owns the deleted-block case.
 - **Check 8/9 (canonical scripts / substrate drift):** `/qa-warden:init --resync` (backs up
-  drifted files to `*.qa-bak`). A missing stock var in `.env.example` → restore it from
+  drifted files to `*.qa-bak`). Check 8 compares `scripts/prod-guard-core.mjs` (the verdict
+  both prod-guard layers take) with the plugin's copy: a difference or a guard that predates
+  the core is a ⚠️; a guard that needs the core when it is missing is a ❌, because that guard
+  refuses every run until the resync. A missing stock var in `.env.example` → restore it from
   the shipped template, or park it commented (`# VAR=`) — the stock list is derived from
   the template, and the file itself is shared-ownership and never byte-compared. The
   drift baseline is the plugin this doctor ships in, so it never compares against a different
