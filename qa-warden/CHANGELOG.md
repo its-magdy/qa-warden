@@ -79,7 +79,7 @@ never carry the same number**, or the second one has no way to announce itself.
 - Doctor reads the script's answer from stdout only, so a shell warning on stderr (a setlocale
   warning under an `LC_ALL` naming a missing locale) cannot turn a reviewed pair into "could not be
   checked".
-- `bin/qa-scaffoldtest` gains 69 cases (293 → 362): the script is tested directly (each of the
+- `bin/qa-scaffoldtest` gains 69 cases (381 → 450): the script is tested directly (each of the
   four answers, the `sha256sum` fallbacks including one that prints junk, a backslash in a file name, and a table of every
   refusal in both write and check mode, each asserting exit 2, nothing on stdout and no file
   written or changed), and doctor through it (the FAILED warning apart from the changed one,
