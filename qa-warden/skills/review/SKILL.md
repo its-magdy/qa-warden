@@ -88,12 +88,13 @@ chain (a compound command needs a rule per subcommand, so those prompt, and are 
 bash "${CLAUDE_SKILL_DIR}/scripts/review-marker.sh" specs/<area>/<feature>.md tests/<area>/<feature>.spec.ts PASS|FAIL
 ```
 
-It computes the digests with the same `sha256sum` → `shasum -a 256` fallback `/qa-warden:doctor`
-Check 15 reads them with (T-05). The script ships with the plugin; ignore any
+`/qa-warden:doctor` Check 15 reads the marker back through the same script (its `check` mode),
+so writer and reader cannot disagree on the format. The script ships with the plugin; ignore any
 `scripts/review-marker.sh` an older stamp left in the project.
 
 Commit the markers with the reviewed change. They are agent-writable convenience for
-`/qa-warden:doctor` Check 15 (which WARNs when a pair changed since its marker), not proof:
+`/qa-warden:doctor` Check 15 (which WARNs when a pair changed since its marker, and separately
+when the recorded review is a `FAIL`), not proof:
 anything that can write a file can forge one. The anti-forgery layer is a human reading the
 PR — enforce it with a required approval in branch protection if you need one.
 

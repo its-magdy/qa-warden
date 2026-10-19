@@ -51,6 +51,40 @@ never carry the same number**, or the second one has no way to announce itself.
   `run.sh`'s single, smoke, repeat, changed, precheck and recheck modes end to end against a stub
   `npx`.
 
+### Doctor warns on a FAILED review; one script writes and checks the review marker
+
+- **A review that FAILED no longer counts as attested.** `/qa-warden:doctor` Check 15 compared only
+  the marker's hashes and never read its `result:` line, so `/qa-warden:review` recording `FAIL`
+  silenced the "never reviewed" warning as well as a `PASS` would. A marker whose hashes are
+  current but records `result: FAIL` now gets its own warning: "reviewed, FAILED — fix and re-run
+  /qa-warden:review". A changed pair still gets "changed since last review", whatever its result.
+  A marker with no `result:` line (the script always writes one; a marker improvised before it
+  existed may not have one) is read as before: matching hashes attest it.
+- **The marker format lives in one file.** The review skill's `review-marker.sh` gains a read-only
+  `check <spec> <test>` mode that prints `current`, `stale`, `failed` or `missing`, and Check 15
+  calls it from the same plugin instead of keeping its own digest function, path rule and field
+  greps (the two digest copies had already drifted once). The writer's command line is unchanged.
+- **The digest falls back on output, not only on exit status.** A `sha256sum` that exits 0 but
+  prints nothing now falls through to `shasum -a 256` too. With no working tool at all, the script
+  refuses (exit 2) instead of writing an empty hash, and doctor says the attestation could not be
+  checked instead of comparing two empty strings. A pair with no marker is still reported as never
+  reviewed: the script looks for the marker before it hashes anything.
+- **Only a real digest counts.** A tool's output is accepted only if it is exactly 64 lowercase hex
+  characters. A `sha256sum` that printed junk (`unavailable`, exit 1) used to be recorded as both
+  hashes, and an edited test still read `current` afterwards (junk equals junk); it now falls
+  through to `shasum -a 256` like the other broken cases, and if neither tool yields a digest the
+  script refuses. A marker that already recorded a non-digest hash reads `stale`, never `current`.
+  The file is hashed from stdin, so a backslash or newline in its name (which makes both tools
+  prefix their line with `\`) cannot turn a valid file into a refusal.
+- Doctor reads the script's answer from stdout only, so a shell warning on stderr (a setlocale
+  warning under an `LC_ALL` naming a missing locale) cannot turn a reviewed pair into "could not be
+  checked".
+- `bin/qa-scaffoldtest` gains 69 cases (381 → 450): the script is tested directly (each of the
+  four answers, the `sha256sum` fallbacks including one that prints junk, a backslash in a file name, and a table of every
+  refusal in both write and check mode, each asserting exit 2, nothing on stdout and no file
+  written or changed), and doctor through it (the FAILED warning apart from the changed one,
+  stderr noise ignored, the no-tool reason).
+
 ### `/qa-warden:coverage` reads the oracle keys from the manifest
 
 - `coverage.sh` builds its `KEYS_RE` at runtime from `scripts/oracle-keys.txt` instead of carrying a
