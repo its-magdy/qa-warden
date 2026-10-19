@@ -32,6 +32,7 @@
 # call the project's STAMPED helpers"), so it relies only on check-last-run.sh's long-stable CLI:
 # the one line, exit codes 0/3/4/5/6. Run from the PROJECT root, like run.sh. Bash 3.2 safe.
 
+# shellcheck disable=SC2034  # VERDICT/LR/TOTAL/FAILED are outputs, read by the caller that sources this
 run_verdict() {
   local pw_exit=$1 json=$2 max_age=$3 lr_rc
   LR=$(bash scripts/check-last-run.sh "$json" "$max_age" 2>/dev/null); lr_rc=$?

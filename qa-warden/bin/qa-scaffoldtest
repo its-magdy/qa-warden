@@ -1154,6 +1154,7 @@ cp "$FX/green.json" "$FX/old.json"; touch -t 202001010000 "$FX/old.json"
 
 echo "  -- run_verdict: <word> <total> <failed>"
 # verdict <exit> <json> [max_age] — sources the module in a subshell in the stamped project.
+# shellcheck disable=SC1090  # $VERDICT_SH is this checkout's skills/run/scripts/run-verdict.sh
 verdict() {
   (cd "$RP" && . "$VERDICT_SH" && run_verdict "$1" "$2" "${3:-900}" && echo "$VERDICT $TOTAL $FAILED")
 }
@@ -1166,6 +1167,7 @@ check_eq "unparseable file → corrupt"                          "corrupt -1 0" 
 check_eq "a JSON with no .stats → corrupt, never zero-test"    "corrupt -1 0"   "$(verdict 0 "$FX/statsless.json")"
 check_eq "0 resolved tests → zero-test, whatever the exit"     "zero-test 0 0"  "$(verdict 1 "$FX/zero.json")"
 check_eq "older than max_age → stale"                          "stale 3 0"      "$(verdict 0 "$FX/old.json" 900)"
+# shellcheck disable=SC1090  # same module as verdict() above
 check_eq "no stamped check-last-run.sh → unchecked" "unchecked -1 0" \
   "$(cd "$STUB" && . "$VERDICT_SH" && run_verdict 0 "$FX/green.json" 900 && echo "$VERDICT $TOTAL $FAILED")"
 
