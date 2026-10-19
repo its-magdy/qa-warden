@@ -20,6 +20,37 @@ never carry the same number**, or the second one has no way to announce itself.
 
 ## [Unreleased]
 
+### One prod-guard verdict: `scripts/prod-guard-core.mjs`, used by both guards
+
+- The shell guard and the `globalSetup` guard parsed hosts differently, and the shell one PASSED
+  three URLs a browser resolves to `prod.acme.com`: `https://prod.acme.com\@staging.acme.dev`,
+  `https://PROD%2Eacme.com` and a fullwidth `https://ｐｒｏｄ.acme.com`. A new stamped file,
+  `scripts/prod-guard-core.mjs` (plain ESM, no dependencies), now owns the whole verdict: the
+  screened var-name set, host extraction with WHATWG `new URL()` plus the scheme-less `host:port`
+  fallback, placeholder sentinels, the prod marker and `QA_ALLOW_PROD=1`. `prod-guard.ts` imports
+  it; `prod-guard.sh` runs it with `node` once per call and keeps its `.env` load,
+  `--list-targets`, `--probe`, credential masking and every line it prints.
+- Two intentional verdict changes beyond the WHATWG parse: a scheme-less host now gets the same
+  WHATWG host parse (so `PROD%2Eacme.com:8080` refuses), and `example.com.` (trailing dot) is a
+  placeholder like `example.com`.
+- `prod-guard.sh` now needs `node` on PATH. With none it refuses ("Node ≥22 required"); with the
+  core missing beside it (a partial stamp) it refuses and names `/qa-warden:init --resync`.
+- The nightly template runs `actions/setup-node` before the prod-guard step (still before `npm ci`).
+- `tsconfig.json` sets `allowJs`, so `prod-guard.ts` can import the `.mjs` under `npm run typecheck`.
+- `scripts/prod-guard-core.mjs` is edit-denied in `.claude/settings.json` and refreshed by
+  `/qa-warden:init --resync`.
+- Doctor Check 8: the four lockstep greps over `prod-guard.sh`/`.ts` are replaced by one compare
+  of the stamped core against the plugin's copy (a difference is a ⚠️). A project stamped before the
+  core keeps working and gets a resync ⚠️; a guard that needs the core when it is missing is a ❌.
+  Check 9 leaves the core to Check 8. The doctor still has 32 numbered checks.
+- `qa-scaffoldtest` gains section 9: a 33-row URL-to-verdict table that both guards must reproduce
+  (`prod-guard.sh` through node, `prod-guard.ts` imported under node type stripping), the shell
+  guard's fail-closed paths, `--list-targets`, and doctor on current, drifted, mixed, pre-core and
+  resynced stamps. It now needs `node` on PATH. 605 cases (606 under mawk).
+
+**Upgrade:** run `/qa-warden:init --resync`. Until then the old guards keep working and doctor
+warns.
+
 ### `/qa-warden:batch-fix` no longer reads a crashed precheck as "nothing to fix"
 
 - Step 1's precheck ignored Playwright's exit code (`|| true`), so a timeout or worker crash that

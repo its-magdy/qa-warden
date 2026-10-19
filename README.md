@@ -371,7 +371,7 @@ qa-warden/                        the plugin
 ├── bin/qa-scaffold      deterministic substrate installer (used by /qa-warden:init)
 ├── bin/qa-selfcheck     plugin consistency checks (not stamped into projects)
 ├── bin/qa-hooktest      hook regression tests (not stamped into projects)
-├── bin/qa-scaffoldtest  scaffold, --resync, doctor and prod-guard.sh tests (not stamped into projects)
+├── bin/qa-scaffoldtest  scaffold, --resync, doctor and prod-guard tests (not stamped into projects)
 └── evals/             behavioural evals for the reviewer (`claude plugin eval`)
 ```
 
@@ -384,7 +384,7 @@ Agents, skills, hooks and `reference/` update automatically with the plugin. Eve
 ```bash
 qa-warden/bin/qa-selfcheck                    # 14 consistency checks over the plugin's own source
 qa-warden/bin/qa-hooktest                     # 58 real payloads through the two PreToolUse hooks
-qa-warden/bin/qa-scaffoldtest                 # qa-scaffold stamp, settings merge, --resync and doctor in temp dirs, the prod-guard.sh URL table and run.sh's run verdicts
+qa-warden/bin/qa-scaffoldtest                 # qa-scaffold stamp, settings merge, --resync and doctor in temp dirs, one prod-guard URL table through both guards (needs node) and run.sh's run verdicts
 claude plugin validate --strict ./qa-warden   # mandatory after any frontmatter edit
 ```
 
@@ -393,12 +393,12 @@ Expected tail:
 ```
 qa-selfcheck: ✅ plugin is self-consistent — all 14 checks passed
 qa-hooktest: ✅ all 58 cases passed
-qa-scaffoldtest: ✅ all 511 cases passed
+qa-scaffoldtest: ✅ all 605 cases passed
 ```
 
 CI runs `qa-scaffoldtest` and `qa-hooktest` a second time on Linux with `mawk` first on `PATH`, the
 third awk dialect (BSD awk on macOS and gawk on the Linux runner cover the other two). That run sets
-`QA_EXPECT_AWK=mawk`, which adds one case, so its tail reads 512 rather than 511.
+`QA_EXPECT_AWK=mawk`, which adds one case, so its tail reads 606 rather than 605.
 
 When you change `qa-warden/agents/reviewer.md`, also run the behavioural evals. They make real model calls (on 2026-09-30, about $0.4 and 2 minutes per case; all five cost $1.97), so run them per change, not per commit. Details: [`qa-warden/evals/README.md`](qa-warden/evals/README.md).
 
