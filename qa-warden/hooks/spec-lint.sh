@@ -46,16 +46,9 @@ else
 fi
 [ -n "$payload" ] || exit 0
 
-# Strip comments before scanning. The generated specs are heavily commented and the comments
-# legitimately NAME the banned constructs ("web-first assertion instead of networkidle",
-# "// covers oracle: …"), so a raw grep would deny the generator for documenting the rule it
-# is following. Full-line comments become blank; a trailing `//` comment is cut, but only when
-# the slashes are not preceded by `:` so that `https://` inside a string survives intact.
-clean=$(printf '%s\n' "$payload" | awk '
-  { s = $0; sub(/^[ \t]+/, "", s)
-    if (s ~ /^(\/\/|\*|\/\*)/) { print ""; next }
-    if (match($0, /[^:]\/\/.*$/)) { print substr($0, 1, RSTART) } else { print $0 }
-  }') || exit 0
+# Strip comments before scanning: comments may name the banned constructs. Why, and what counts
+# as a comment: hook_strip_js_comments in hook-lib.sh.
+clean=$(printf '%s\n' "$payload" | hook_strip_js_comments) || exit 0
 
 # report <check> <fix> — prints the first offending line and denies.
 report() {

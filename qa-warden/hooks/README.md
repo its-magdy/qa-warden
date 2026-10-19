@@ -84,7 +84,8 @@ Every one of these is a deliberate constraint, not an accident of implementation
    would make this plugin lint every Playwright repository its owner opens.
 3. **Comments are stripped before scanning.** The generated specs name the banned
    constructs in their own comments ("settle on the post-condition, never `networkidle`").
-   A raw grep would deny the generator for documenting the rule it is obeying.
+   A raw grep would deny the generator for documenting the rule it is obeying. Both hooks
+   use the one stripper in `hook-lib.sh` (`hook_strip_js_comments`).
 4. **One escape hatch, `QA_HOOKS_OFF=1`**, disabling the whole layer for a session. One
    greppable variable rather than N per-check toggles. It is *not* fail-closed on a
    placeholder the way `prod-guard` is: this layer protects a review contract, not a

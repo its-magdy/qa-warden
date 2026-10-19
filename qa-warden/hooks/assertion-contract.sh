@@ -257,12 +257,8 @@ fi
 # a net addition is denied. Comments are stripped first for the same reason spec-lint strips
 # them - a spec may legitimately NAME the construct in a `// covers oracle:` narration.
 if [ "$agent" = "healer" ]; then
-  strip_comments() {
-    awk '{ s = $0; sub(/^[ \t]+/, "", s)
-           if (s ~ /^(\/\/|\*|\/\*)/) { print ""; next }
-           if (match($0, /[^:]\/\/.*$/)) { print substr($0, 1, RSTART) } else { print $0 } }'
-  }
-  n_occurrences() { printf '%s\n' "$1" | strip_comments | grep -cE "$2" || true; }
+  # hook_strip_js_comments (hook-lib.sh) is the same stripper spec-lint uses.
+  n_occurrences() { printf '%s\n' "$1" | hook_strip_js_comments | grep -cE "$2" || true; }
 
   # Keyed on the METHOD, not the receiver: page.route, context.route, page.context().route and
   # browserContext.route are one stub, and routeFromHAR / routeWebSocket are the same move by
