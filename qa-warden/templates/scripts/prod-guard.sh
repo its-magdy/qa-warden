@@ -60,11 +60,11 @@ fi
 # not POSIX-guaranteed.
 # A core that fails here would read as "no targets set" — refuse instead: a non-zero node exit,
 # or any line that is not a bare var name, is a refusal, never a shorter list.
-# `NODE_OPTIONS=` (empty, for this one command) on EVERY core call: an inherited
+# `NODE_OPTIONS=''` (empty, for this one command) on EVERY core call: an inherited
 # NODE_OPTIONS=--import=<file> / --require preload runs before the core and could print a
 # verdict-shaped line of its own. Clearing it means only the core's code writes the output.
 if [ "${1:-}" = "--list-targets" ] || [ "${1:-}" = "--probe" ]; then
-  TARGET_NAMES=$(NODE_OPTIONS= node "$CORE" names) \
+  TARGET_NAMES=$(NODE_OPTIONS='' node "$CORE" names) \
     || refuse_early "scripts/prod-guard-core.mjs failed to list the targets (its error, if any, is printed above) — is node ≥22? Run /qa-warden:init --resync if the core was edited."
   printf '%s\n' "$TARGET_NAMES" | awk '$0 != "" && $0 !~ /^[A-Z0-9_]+$/ { bad = 1 } END { exit bad }' \
     || refuse_early "scripts/prod-guard-core.mjs printed something that is not a var name — run /qa-warden:init --resync if the core was edited."
@@ -126,7 +126,7 @@ rc=0
 #     `argument` record; the LAST line is exactly `verdict PASS` or `verdict REFUSED`, once;
 #   • a PASS verdict next to a non-ok record or an empty primary is a contradiction → refuse.
 # NODE_OPTIONS is cleared for the call (see the `names` call above for why).
-CORE_OUT=$(NODE_OPTIONS= node "$CORE" screen "$@")
+CORE_OUT=$(NODE_OPTIONS='' node "$CORE" screen "$@")
 core_rc=$?
 TAB=$(printf '\t')
 if [ "$core_rc" -ne 0 ]; then
