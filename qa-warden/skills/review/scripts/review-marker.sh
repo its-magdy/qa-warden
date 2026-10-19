@@ -205,7 +205,12 @@ done
 # (a full disk or `ulimit -f` raises SIGXFSZ, whose default action would kill the shell before any
 # cleanup). The EXIT trap keeps the exit status it was called with.
 PRIV=''
-trap '_rc=$?; if [ -n "$PRIV" ]; then rm -rf -- "$PRIV"; fi; exit "$_rc"' EXIT
+cleanup_priv() {
+  _rc=$?
+  if [ -n "$PRIV" ]; then rm -rf -- "$PRIV"; fi
+  exit "$_rc"
+}
+trap cleanup_priv EXIT
 trap 'exit 2' HUP INT TERM XFSZ
 priv=".review-marker.$$.d"
 mkdir "./$priv" 2>/dev/null || { echo "review-marker: could not create a private temp dir for $out — refused" >&2; exit 2; }
