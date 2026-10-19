@@ -156,6 +156,9 @@ file list (`resync-set.txt`, in the plugin's `manifests/`).
 
 The only path by which `/qa-warden:retire` removes a spec/test pair, so deletion is
 scoped and auditable rather than an open-ended `rm` in an agent's hands.
+It refuses (exit 2) a path whose directory, once every symlink is resolved, leaves the
+project or the retire-able dirs, so `tests -> /tmp/outside` cannot turn into a delete
+outside the repo.
 
 ## `cli-fill-env.sh` — type a `.env` value into a field without exposing it
 

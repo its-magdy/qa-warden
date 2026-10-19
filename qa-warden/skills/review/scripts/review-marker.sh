@@ -37,7 +37,8 @@
 #     `stale` whatever its result: the review it records was of other code.
 #
 # Refuses (exit 2, writes nothing, prints nothing on stdout): wrong arg count, a verdict other than
-# PASS/FAIL, a spec not under specs/ or a test not under tests/, either file missing, or no working
+# PASS/FAIL, a spec not under specs/ or a test not under tests/, either file missing, a spec, test or
+# marker that is a symlink or sits under a symlinked dir resolving outside the project, or no working
 # sha256 tool (one whose output is a 64-hex digest). It records a verdict the CALLER confirmed — it
 # does not judge; never call it on a guessed or truncated review.
 set -u
@@ -61,6 +62,34 @@ case "$TEST" in tests/*.spec.ts) : ;; *) echo "review-marker: test must be a rel
 case "$SPEC$TEST" in *..*) echo "review-marker: '..' is not allowed in a path" >&2; exit 2 ;; esac
 [ -f "$SPEC" ] || { echo "review-marker: $SPEC not found" >&2; exit 2; }
 [ -f "$TEST" ] || { echo "review-marker: $TEST not found" >&2; exit 2; }
+
+# The case patterns above read only the string. With `reports -> /elsewhere` the marker would be
+# written outside the project, and with `specs -> /elsewhere` an outside file would be hashed. So
+# every path this script touches must resolve inside the project root: in_root resolves the path's
+# directory (every symlink, `cd -P`) and compares it with the cwd's `pwd -P`. A directory that does
+# not exist yet (the marker's, before its first write) is judged by its nearest existing ancestor,
+# and a dangling symlink on the way up is refused. A dir symlink that resolves inside the project is
+# allowed. in_root is duplicated in templates/scripts/retire-delete.sh, which is stamped into
+# projects and so cannot share it; qa-scaffoldtest section 9 runs one path table against both.
+ROOT=$(pwd -P) || exit 2
+in_root() {
+  _d=$(dirname "$1")
+  while [ ! -d "$_d" ]; do
+    if [ -L "$_d" ]; then return 1; fi
+    _d=$(dirname "$_d")
+  done
+  REAL=$(CDPATH='' cd -P "$_d" 2>/dev/null && pwd -P) || return 1
+  case "$REAL" in "$ROOT"|"$ROOT"/*) return 0 ;; esac
+  return 1
+}
+for _p in "$SPEC" "$TEST"; do
+  if [ -L "$_p" ]; then
+    echo "review-marker: $_p is a symlink — refused (it could point outside the project)" >&2; exit 2
+  fi
+  if ! in_root "$_p"; then
+    echo "review-marker: $_p resolves outside the project (a symlinked dir on its path) — refused" >&2; exit 2
+  fi
+done
 
 # sha256sum (coreutils; minimal Linux/CI) first, shasum -a 256 (macOS/BSD) as the fallback (T-05).
 # The digest is identical either way. Decided per call, not once by `command -v`: a sha256sum that
@@ -90,6 +119,15 @@ field() { grep -m1 "^$2:" "$1" | awk '{print $2}'; }
 
 rel="${SPEC#specs/}"; rel="${rel%.md}"
 out="reports/review/$rel.reviewed"
+# Checked in both modes, before anything is read or created: the marker itself must not be a
+# symlink, and its directory (or, before the first write, its nearest existing ancestor) must
+# resolve inside the project.
+if [ -L "$out" ]; then
+  echo "review-marker: $out is a symlink — refused (it could point outside the project)" >&2; exit 2
+fi
+if ! in_root "$out"; then
+  echo "review-marker: $out resolves outside the project (a symlinked dir on its path) — refused" >&2; exit 2
+fi
 
 # A pair with no marker is `missing` before any hashing, so a never-reviewed pair reads as that even
 # on a machine where no sha256 tool works.

@@ -27,6 +27,12 @@
 #     .claude/**, package.json, playwright.config.ts, or the scripts/ dir itself
 #   - exactly ONE path, no globs/wildcards, no shell metacharacters
 #   - the target must be an existing regular file (not a dir, not a symlink)
+#   - the target's directory, every symlink in it resolved (`cd -P`), must be inside the project
+#     root (the cwd, resolved with `pwd -P`) AND still under a retire-able dir. The checks above
+#     read only the string: with `tests -> /tmp/outside`, `tests/x.spec.ts` passes all of them and
+#     `rm` follows the link out of the repo. A dir symlink that resolves inside a retire-able dir
+#     (`tests/alias -> demo`) is allowed; one that resolves elsewhere in the project
+#     (`tests/src -> ../src`) is refused, because that is product source.
 DRY=0
 case "$1" in
   --dry-run) DRY=1; shift ;;
@@ -59,6 +65,35 @@ esac
 case "$TARGET" in
   specs/*|tests/*|page-objects/*|steps/*|bugs/*|fixtures/*|artifacts/*|reports/*) : ;;
   *) echo "retire-delete: '$TARGET' is outside the retire-able dirs (specs/ tests/ page-objects/ steps/ bugs/ fixtures/ artifacts/ reports/) — refused." >&2; exit 2 ;;
+esac
+
+# Resolve the target's directory and require it inside the project root. in_root is duplicated in
+# the plugin's skills/review/scripts/review-marker.sh (this file is stamped into projects, that one
+# runs from the plugin, so they cannot share it); qa-scaffoldtest section 9 runs one path table
+# against both. A path whose directory does not exist yet is judged by its nearest existing
+# ancestor, and a dangling symlink on the way up is refused.
+ROOT=$(pwd -P) || exit 2
+in_root() {
+  _d=$(dirname "$1")
+  while [ ! -d "$_d" ]; do
+    if [ -L "$_d" ]; then return 1; fi
+    _d=$(dirname "$_d")
+  done
+  REAL=$(CDPATH='' cd -P "$_d" 2>/dev/null && pwd -P) || return 1
+  case "$REAL" in "$ROOT"|"$ROOT"/*) return 0 ;; esac
+  return 1
+}
+if ! in_root "$TARGET"; then
+  echo "retire-delete: '$TARGET' resolves outside the project (a symlinked dir on its path) — refused." >&2
+  exit 2
+fi
+# Inside the project is not enough for a delete: `tests -> .` would make tests/package.json the
+# project's package.json. The resolved directory must still be under a retire-able dir.
+case "${REAL#"$ROOT"}/" in
+  /specs/*|/tests/*|/page-objects/*|/steps/*|/bugs/*|/fixtures/*|/artifacts/*|/reports/*) : ;;
+  *)
+    echo "retire-delete: '$TARGET' resolves outside the retire-able dirs (a symlinked dir on its path) — refused." >&2
+    exit 2 ;;
 esac
 
 # Must be an existing REGULAR file — not a directory (retire deletes files one at a

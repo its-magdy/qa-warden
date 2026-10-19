@@ -51,6 +51,11 @@
 #                      twin, a fanned spec and all three YAML smoke-tag forms plus a prose
 #                      mention; and that doctor, /qa-warden:coverage, /qa-warden:impact and
 #                      post-run-checks.sh read that one inventory (no `_` file reported anywhere)
+#   9. symlink         one path table run against templates/scripts/retire-delete.sh and the
+#      containment     review skill's review-marker.sh: a symlinked tests/, specs/ or reports/, an
+#                      intermediate dir or leaf symlink, a dangling one, a sibling-prefix dir
+#                      (proj vs proj2) are refused with nothing deleted or written; plain paths,
+#                      new marker dirs under a real reports/ and a dir symlink back inside pass
 #
 # The prod-guard.ts twin is not tested here: qa-hooktest only copies it as a project marker, and
 # running it needs node + Playwright's dependencies, which this test deliberately does not install.
@@ -1746,6 +1751,105 @@ IM_OUT=$(cd "$G" && "$BASH" "$IMPACT" route=/cart 2>&1)
 check "impact on an old stamp prints the resync hint" grep -qF -e "BLIND SPOTS below used the plugin's copy" <<<"$IM_OUT"
 check "  and its BLIND SPOTS name no _-prefixed test" test "$(grep -cE -e "$SCRATCH_RE" <<<"$IM_OUT")" = "0"
 mv "$SLG.keep" "$SLG"
+
+# ------------------------------------------------------------------------------------------
+echo "symlink containment — retire-delete.sh and review-marker.sh against one path table"
+# Both scripts checked their paths as strings only (specs/…, tests/…, no '..'), and a symlinked dir
+# on the path got past that: with `tests -> /tmp/outside`, retire-delete deleted
+# /tmp/outside/x.spec.ts, and a symlinked reports/ made review-marker write its marker outside the
+# project. Each now carries the same in_root function. One table, run against both. Every row
+# builds a fresh project at $X/proj beside $X/outside and a sibling-prefix $X/proj2, plants at most
+# one symlink, and names one path. retire-delete is asked to delete that path. review-marker gets it
+# as its spec (specs/…) or its test (tests/…); for reports/review/<rel>.reviewed it gets the spec
+# whose marker lands there.
+# Columns: label | retire-delete | review-marker | symlink to plant (- for none) | its target | path |
+# create the path first (yes/no). Targets: @OUT is $X/outside, @PROJ2 is $X/proj2, anything else is
+# a relative target used as written.
+# A dir symlink that resolves INSIDE the project is allowed (the alias row). retire-delete also
+# demands that the resolved dir is still a retire-able one (the tests/src row), because a delete
+# under tests/src -> ../src would remove product source; review-marker only hashes and writes a
+# marker, so for it inside the project is enough. "new nested dirs under a real reports/" is refused
+# by retire-delete only because there is no file to delete.
+CONTAIN_ROWS='plain test file|allow|allow|-|-|tests/demo/widget.spec.ts|yes
+plain spec file|allow|allow|-|-|specs/demo/widget.md|yes
+plain marker under a real reports/|allow|allow|-|-|reports/review/demo/widget.reviewed|yes
+new nested dirs under a real reports/|refuse|allow|-|-|reports/review/new/deep/w.reviewed|no
+tests/ is a symlink out of the project|refuse|refuse|tests|@OUT|tests/demo/widget.spec.ts|yes
+specs/ is a symlink out of the project|refuse|refuse|specs|@OUT|specs/demo/widget.md|yes
+reports/ is a symlink out of the project|refuse|refuse|reports|@OUT|reports/review/demo/widget.reviewed|yes
+new nested dirs under a symlinked reports/|refuse|refuse|reports|@OUT|reports/review/new/deep/w.reviewed|no
+reports/ is a dangling symlink|refuse|refuse|reports|@OUT/missing|reports/review/demo/widget.reviewed|no
+an intermediate dir is a symlink out (tests/a)|refuse|refuse|tests/a|@OUT|tests/a/x.spec.ts|yes
+the leaf test file is a symlink out|refuse|refuse|tests/demo/leaf.spec.ts|@OUT/leaf.spec.ts|tests/demo/leaf.spec.ts|yes
+the leaf marker is a symlink out|refuse|refuse|reports/review/demo/widget.reviewed|@OUT/m.reviewed|reports/review/demo/widget.reviewed|yes
+tests/ points at the sibling-prefix dir proj2|refuse|refuse|tests|@PROJ2|tests/demo/widget.spec.ts|yes
+a dir symlink back inside a retire-able dir (tests/alias -> demo)|allow|allow|tests/alias|demo|tests/alias/widget.spec.ts|yes
+a dir symlink inside the project but out of the retire-able dirs (tests/src -> ../src)|refuse|allow|tests/src|../src|tests/src/app.spec.ts|yes'
+RD="$TEMPLATES/scripts/retire-delete.sh"
+check "section 9: retire-delete.sh exists" test -f "$RD"
+check "section 9: review-marker.sh exists" test -f "$RMK"
+check_nonzero "section 9: the path table has rows" "$(grep -c '|' <<<"$CONTAIN_ROWS")"
+# contain_fixture <link> <target> <path> <create> — a fresh $X with the project at $P.
+contain_fixture() {
+  local link=$1 target=$2 path=$3 create=$4 tgt
+  new_dir; X=$DIR; P="$X/proj"
+  mkdir -p "$P/specs/demo" "$P/tests/demo" "$P/reports/review" "$P/src" "$X/outside" "$X/proj2/demo"
+  printf '# Widget\n' > "$P/specs/demo/widget.md"
+  printf "import { test } from '@playwright/test';\n" > "$P/tests/demo/widget.spec.ts"
+  if [ "$link" != "-" ]; then
+    case "$target" in
+      @OUT*)   tgt="$X/outside${target#@OUT}" ;;
+      @PROJ2*) tgt="$X/proj2${target#@PROJ2}" ;;
+      *)       tgt=$target ;;
+    esac
+    rm -rf "${P:?}/$link"
+    mkdir -p "$(dirname "$P/$link")"
+    ln -s "$tgt" "$P/$link"
+  fi
+  if [ "$create" = "yes" ]; then
+    mkdir -p "$(dirname "$P/$path")"
+    printf 'planted\n' > "$P/$path"
+  fi
+}
+# contain_expect <label> <expect> <rc> <effect-command...> — one script's verdict on one row: an
+# allowed path exits 0, leaves $X/outside and $X/proj2 as they were, and has its effect; a refused
+# one exits 2 and leaves everything under $X (project included) as it was.
+contain_expect() {
+  local label=$1 expect=$2 rc=$3; shift 3
+  if [ "$expect" = "allow" ]; then
+    check_eq "$label: allowed (exit 0)" "0" "$rc"
+    check_same "  and nothing outside the project changed" "$OUT_BEFORE" "$(snapshot "$X/outside"; snapshot "$X/proj2")"
+    check "  and it did its job" "$@"
+  else
+    check_eq "$label: refused (exit 2)" "2" "$rc"
+    check_same "  and nothing was deleted or written, inside the project or out" "$ALL_BEFORE" "$(snapshot "$X")"
+  fi
+}
+while IFS='|' read -r label rd_exp rm_exp link target path create; do
+  contain_fixture "$link" "$target" "$path" "$create"
+  ALL_BEFORE=$(snapshot "$X"); OUT_BEFORE=$(snapshot "$X/outside"; snapshot "$X/proj2")
+  (cd "$P" && "$BASH" "$RD" "$path") >/dev/null 2>&1
+  contain_expect "retire-delete, $label" "$rd_exp" "$?" test ! -e "$P/$path"
+
+  contain_fixture "$link" "$target" "$path" "$create"
+  spec=specs/demo/widget.md; tst=tests/demo/widget.spec.ts
+  case "$path" in
+    specs/*) spec=$path ;;
+    tests/*) tst=$path ;;
+    reports/review/*)
+      rel=${path#reports/review/}; spec="specs/${rel%.reviewed}.md"
+      mkdir -p "$(dirname "$P/$spec")"
+      printf '# Spec\n' > "$P/$spec" ;;
+  esac
+  marker="reports/review/${spec#specs/}"; marker="${marker%.md}.reviewed"
+  ALL_BEFORE=$(snapshot "$X"); OUT_BEFORE=$(snapshot "$X/outside"; snapshot "$X/proj2")
+  (cd "$P" && "$BASH" "$RMK" "$spec" "$tst" PASS) >/dev/null 2>&1
+  contain_expect "review-marker, $label" "$rm_exp" "$?" grep -qx 'result: PASS' "$P/$marker"
+done <<<"$CONTAIN_ROWS"
+# check mode reads the marker; a symlinked reports/ is refused there too, not read through.
+contain_fixture reports @OUT reports/review/demo/widget.reviewed yes
+CK_OUT=$(cd "$P" && "$BASH" "$RMK" check specs/demo/widget.md tests/demo/widget.spec.ts 2>/dev/null)
+check_eq "review-marker check through a symlinked reports/: exit 2, nothing on stdout" "2:" "$?:$CK_OUT"
 
 echo "---"
 if [ "$bad" -ne 0 ]; then echo "qa-scaffoldtest: ❌ $bad of $((pass+bad)) cases FAILED"; exit 1; fi

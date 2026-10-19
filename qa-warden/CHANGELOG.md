@@ -20,6 +20,31 @@ never carry the same number**, or the second one has no way to announce itself.
 
 ## [Unreleased]
 
+### A symlinked directory can no longer carry a delete or a review marker out of the project
+
+- **`scripts/retire-delete.sh` refused a symlinked file but not a symlinked directory.** It checked
+  the path as a string (relative, no `..`, under a retire-able dir) and refused a symlink only at
+  the leaf, so in a project with `tests -> /tmp/outside`, `bash scripts/retire-delete.sh
+  tests/x.spec.ts` deleted `/tmp/outside/x.spec.ts` and exited 0. It now resolves the target's
+  directory with every symlink followed (`cd -P … && pwd -P`) and refuses (exit 2, nothing deleted)
+  unless that directory is inside the project root and still under a retire-able dir. A dir symlink
+  that resolves inside one (`tests/alias -> demo`) still works; one that resolves elsewhere in the
+  project (`tests/src -> ../src`) is refused, because that is product source. This file is stamped:
+  run `/qa-warden:init --resync` to get the fix (doctor reports the old copy as substrate drift).
+- **The review skill's `review-marker.sh` wrote through a symlinked `reports/`.** It created the
+  marker's directory with `mkdir -p` and wrote the marker without checking where either resolved.
+  It now refuses (exit 2, nothing written) a marker that is itself a symlink, or whose directory
+  (before the first write, its nearest existing ancestor) resolves outside the project. The spec
+  and test it hashes get the same rule: a symlink at the leaf, or a symlinked dir under `specs/` or
+  `tests/` that resolves outside the project, is refused. `check` mode applies it too, so doctor
+  Check 15 says such a pair "could not be checked" instead of reading a marker from outside.
+- The resolving function is the same few lines in both files (one is stamped into projects, the
+  other runs from the plugin, so they cannot share it). `bin/qa-scaffoldtest` gains 74 cases
+  (511 → 585): a new section 9 runs one path table against both scripts, covering a symlinked
+  `tests/`, `specs/` and `reports/`, a symlinked intermediate dir, a leaf symlink, a dangling
+  symlink, new marker dirs under a real and under a symlinked `reports/`, a sibling-prefix dir
+  (`proj` vs `proj2`), dir symlinks back inside the project, and the plain paths.
+
 ### `/qa-warden:batch-fix` no longer reads a crashed precheck as "nothing to fix"
 
 - Step 1's precheck ignored Playwright's exit code (`|| true`), so a timeout or worker crash that
