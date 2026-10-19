@@ -58,9 +58,16 @@ fi
 # `names` prints only the names (never a value); `$v` is then a var NAME matched by that fixed
 # regex ([A-Z0-9_] only), so eval-ing it is safe. `eval "val=\$$v"`, NOT `printenv` — printenv is
 # not POSIX-guaranteed.
-# A core that fails here would read as "no targets set" — refuse instead.
+# A core that fails here would read as "no targets set" — refuse instead: a non-zero node exit,
+# or any line that is not a bare var name, is a refusal, never a shorter list.
+# `NODE_OPTIONS=` (empty, for this one command) on EVERY core call: an inherited
+# NODE_OPTIONS=--import=<file> / --require preload runs before the core and could print a
+# verdict-shaped line of its own. Clearing it means only the core's code writes the output.
 if [ "${1:-}" = "--list-targets" ] || [ "${1:-}" = "--probe" ]; then
-  TARGET_NAMES=$(node "$CORE" names) || refuse_early "scripts/prod-guard-core.mjs failed to list the targets (its error, if any, is printed above) — is node ≥22? Run /qa-warden:init --resync if the core was edited."
+  TARGET_NAMES=$(NODE_OPTIONS= node "$CORE" names) \
+    || refuse_early "scripts/prod-guard-core.mjs failed to list the targets (its error, if any, is printed above) — is node ≥22? Run /qa-warden:init --resync if the core was edited."
+  printf '%s\n' "$TARGET_NAMES" | awk '$0 != "" && $0 !~ /^[A-Z0-9_]+$/ { bad = 1 } END { exit bad }' \
+    || refuse_early "scripts/prod-guard-core.mjs printed something that is not a var name — run /qa-warden:init --resync if the core was edited."
 fi
 target_names() { printf '%s\n' "$TARGET_NAMES" | grep -E '^[A-Z0-9_]+$'; }
 if [ "${1:-}" = "--list-targets" ]; then
@@ -112,15 +119,33 @@ rc=0
 # TARGET comes from its arguments rather than from .env (`/qa-warden:review url=<url>`) passes it
 # here — `bash scripts/prod-guard.sh "$URL"` — and it gets the same screening as the env vars;
 # args are additive, the env sweep always runs too. The core prints one TAB-separated record per
-# line (see its CLI comment) and `verdict` LAST; no `verdict` line means it did not finish, which
-# is a refusal, never a pass.
-CORE_OUT=$(node "$CORE" screen "$@")
+# line (see its CLI comment) and `verdict` LAST. The output is accepted only WHOLE, or the run is
+# refused — never read leniently:
+#   • node must exit 0 (a crash after a verdict-shaped line is a crash);
+#   • line 1 is `primary set|empty`; every other line but the last is a well-formed `target` or
+#     `argument` record; the LAST line is exactly `verdict PASS` or `verdict REFUSED`, once;
+#   • a PASS verdict next to a non-ok record or an empty primary is a contradiction → refuse.
+# NODE_OPTIONS is cleared for the call (see the `names` call above for why).
+CORE_OUT=$(NODE_OPTIONS= node "$CORE" screen "$@")
 core_rc=$?
 TAB=$(printf '\t')
-case "$CORE_OUT" in
-  *"verdict${TAB}PASS"|*"verdict${TAB}REFUSED") ;;
-  *) refuse_early "scripts/prod-guard-core.mjs returned no verdict (node exit $core_rc; its error, if any, is printed above) — is node ≥22? Run /qa-warden:init --resync if the core was edited." ;;
-esac
+if [ "$core_rc" -ne 0 ]; then
+  refuse_early "scripts/prod-guard-core.mjs exited $core_rc (its error, if any, is printed above) — is node ≥22? Run /qa-warden:init --resync if the core was edited."
+fi
+printf '%s\n' "$CORE_OUT" | awk -F'\t' '
+  NR == 1 { if ($0 != "primary\tset" && $0 != "primary\tempty") bad = 1; if ($0 == "primary\tempty") refusing = 1; next }
+  ($1 == "target" && $2 ~ /^[A-Z0-9_]+$/) || ($1 == "argument" && $2 ~ /^[0-9]+$/) {
+    if (NF != 4 || $3 !~ /^(ok|placeholder|prod)$/) bad = 1
+    if ($3 != "ok") refusing = 1
+    next
+  }
+  $0 == "verdict\tPASS" || $0 == "verdict\tREFUSED" { verdicts++; last = NR; verdict = $2; next }
+  { bad = 1 }
+  END {
+    if (bad || NR < 2 || verdicts != 1 || last != NR) exit 1
+    if (verdict == "PASS" && refusing) exit 1
+  }' \
+  || refuse_early "scripts/prod-guard-core.mjs returned no well-formed verdict (its error, if any, is printed above) — is node ≥22? Run /qa-warden:init --resync if the core was edited."
 
 # Fail-CLOSED on an UNCONFIGURED target (F-08, per-var). The shipped `.env.example` uses a
 # `CHANGEME` sentinel; an empty or placeholder host means the user copied `.env` but never

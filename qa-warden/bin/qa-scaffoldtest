@@ -57,7 +57,8 @@
 #                      percent-encoding, IDN/punycode, QA_ALLOW_PROD, empty/unset) that BOTH
 #                      entry points must reproduce: prod-guard.sh via node, prod-guard.ts imported
 #                      under node type stripping with a stub dotenv (Node >=22.6). The shell guard
-#                      refuses with no node or no core; doctor Check 8 on current, drifted, mixed
+#                      refuses with no node, no core or any core output it cannot accept whole
+#                      (crash, malformed record, a NODE_OPTIONS preload); doctor Check 8 on current, drifted, mixed
 #                      and pre-core stamps
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TEMPLATES="$here/templates"
@@ -1769,6 +1770,11 @@ cat > "$TABLE" <<'EOF'
 REFUSED   | prod        | measured: backslash is a path separator in https   | BASE_URL_APP=https://prod.acme.com\@staging.acme.dev
 REFUSED   | prod        | measured: percent-encoded dot in the host          | BASE_URL_APP=https://PROD%2Eacme.com
 REFUSED   | prod        | measured: fullwidth letters fold to ASCII (IDNA)   | BASE_URL_APP=https://ｐｒｏｄ.acme.com
+REFUSED   | prod        | scheme-relative, backslash then @                  | BASE_URL_APP=//prod.acme.com\@staging.acme.dev
+REFUSED   | prod        | scheme-relative plain                              | BASE_URL_APP=//prod.acme.com
+REFUSED   | prod        | scheme-relative slash-backslash                    | BASE_URL_APP=/\prod.acme.com
+REFUSED   | prod        | scheme-relative double backslash                   | BASE_URL_APP=\\prod.acme.com
+REFUSED   | prod        | scheme-less, backslash then @                      | BASE_URL_APP=prod.acme.com\@staging.acme.dev
 PASS      | -           | staging host                                       | BASE_URL_APP=https://staging.acme.dev
 PASS      | -           | product is not the marker                          | BASE_URL_APP=https://product.acme.dev
 REFUSED   | prod        | scheme-less host:port                              | BASE_URL_APP=prod.acme.com:8080
@@ -1906,7 +1912,37 @@ has_out "  and the resync" "/qa-warden:init --resync"
 printf '// a core that never answers\n' > "$MIX/prod-guard-core.mjs"
 PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://staging.acme.dev /bin/sh "$MIX/prod-guard.sh" 2>&1)
 check_eq "a core that prints no verdict: refused (exit 1), never a pass" "1" "$?"
-has_out "  and says so" "returned no verdict"
+has_out "  and says so" "returned no well-formed verdict"
+# The core's output is accepted only whole: exit 0, line 1 `primary`, well-formed records, and
+# exactly one `verdict` as the LAST line. Each stand-in below breaks one of those and must refuse.
+printf 'console.log("primary\\tset\\nverdict\\tPASS");\nprocess.exit(1);\n' > "$MIX/prod-guard-core.mjs"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://prod.acme.com /bin/sh "$MIX/prod-guard.sh" 2>&1)
+check_eq "a core that prints a PASS verdict and then exits 1: refused" "1" "$?"
+has_out "  and names the exit code" "prod-guard-core.mjs exited 1"
+lacks_out "  no PASS line" "prod-guard: PASS"
+printf 'console.log("primary\\tset\\nbogus\\tBASE_URL_APP\\tok\\tx\\nverdict\\tPASS");\n' > "$MIX/prod-guard-core.mjs"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://prod.acme.com /bin/sh "$MIX/prod-guard.sh" 2>&1)
+check_eq "a core that prints an unknown record type: refused" "1" "$?"
+has_out "  as malformed" "returned no well-formed verdict"
+printf 'console.log("primary\\tset\\nnoiseverdict\\tPASS");\n' > "$MIX/prod-guard-core.mjs"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://prod.acme.com /bin/sh "$MIX/prod-guard.sh" 2>&1)
+check_eq "a last line that merely ENDS in verdict<TAB>PASS: refused" "1" "$?"
+printf 'console.log("primary\\tset\\ntarget\\tBASE_URL_APP\\tprod\\tprod.acme.com\\nverdict\\tPASS");\n' > "$MIX/prod-guard-core.mjs"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://prod.acme.com /bin/sh "$MIX/prod-guard.sh" 2>&1)
+check_eq "a PASS verdict beside a prod record: refused (the contradiction is not a pass)" "1" "$?"
+printf 'console.log("BASE_URL_APP\\nnot a name");\n' > "$MIX/prod-guard-core.mjs"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://staging.acme.dev /bin/sh "$MIX/prod-guard.sh" --list-targets 2>&1)
+check_eq "--list-targets: a names line that is not a var name is refused, not skipped" "1" "$?"
+# A NODE_OPTIONS preload runs before the core: it prints a verdict-shaped line and throws. The
+# guard clears NODE_OPTIONS for its node calls, so the real core still answers — prod refuses.
+printf 'process.stdout.write("primary\\tset\\nverdict\\tPASS\\n");\nthrow new Error("preload");\n' > "$PGT/preload.mjs"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" NODE_OPTIONS="--import=$PGT/preload.mjs" \
+  BASE_URL_APP=https://prod.acme.com /bin/sh "$PROD_GUARD" 2>&1)
+check_eq "NODE_OPTIONS with a preload that prints PASS: prod is still refused" "1" "$?"
+has_out "  by the real core's verdict" "'prod.acme.com' (BASE_URL_APP) looks like production"
+PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" NODE_OPTIONS="--import=$PGT/preload.mjs" \
+  BASE_URL_APP=https://staging.acme.dev /bin/sh "$PROD_GUARD" --list-targets 2>&1)
+check_eq "  and --list-targets ignores the preload too" "$(printf 'BASE_URL_APP\thttps://staging.acme.dev')" "$PG_OUT"
 
 echo "  -- --list-targets prints NAME<TAB>value for the core's var-name set"
 PG_OUT=$(env -i PATH="$PATH" CLAUDE_PROJECT_DIR="$EMPTY" BASE_URL_APP=https://staging.acme.dev \

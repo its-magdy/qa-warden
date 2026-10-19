@@ -21,9 +21,9 @@
 //     BASE_URL (nullish, not falsy) — empty primary → refusal.
 //   • host extraction: WHATWG `new URL().hostname` (scheme stripped case-insensitively, userinfo can
 //     never masquerade as the host, `\` is `/` for http(s), percent-encoding and IDNA/fullwidth
-//     forms are decoded the way a browser decodes them). Scheme-less `host[:port]` values fall back
-//     to the strip below — `prod.acme.com:8080` parses as scheme:path with an EMPTY hostname, which
-//     never matches the marker, so an empty hostname is a parse failure, not a verdict.
+//     forms are decoded the way a browser decodes them). Scheme-relative (`//host`) and scheme-less
+//     `host[:port]` values go through the same parser too (see hostOf) — nothing is hand-stripped
+//     ahead of it; a hand strip runs only when the parser rejects the value outright.
 //   • placeholder sentinels (F-08), per var: CHANGEME / `<` / `>` anywhere in the VALUE; the RFC
 //     2606/6761 reserved example domains LABEL-ANCHORED on the HOST (an unanchored substring falsely
 //     refused qa.example.company.com). No env escape: a placeholder is a config error.
@@ -52,34 +52,51 @@ export const PLACEHOLDER_HOST_RE = /(^|\.)example(\.(com|org|net))?\.?$/i;
  * @returns {string}
  */
 export function hostOf(value) {
+  // The WHATWG parser decides every host it can. Nothing is hand-stripped before it runs: a strip
+  // that cuts userinfo at `@` first reads `//prod.acme.com\@staging.acme.dev` as staging, while the
+  // parser (and a browser) treats `\` as `/` and resolves prod.acme.com.
+  // 1. An absolute URL. An EMPTY hostname is not a verdict: `prod.acme.com:8080` parses as
+  //    scheme `prod.acme.com:` + path, and an empty host never matches the marker.
   try {
     const host = new URL(value).hostname;
     if (host) return host;
   } catch {
-    // not an absolute URL — a bare `host[:port]`; fall through
+    // not absolute
   }
-  // The scheme-less fallback: strip any `scheme://` (the `//` is required, so a bare `host:port` is
-  // never eaten as a scheme), then a protocol-relative `//`, then userinfo GREEDILY to the last `@`
-  // before any `/ ? #` (a first-`@` cut leaves `ss@prod…` for `user:p@ss@prod…`), then cut
-  // port/path/query/fragment.
-  const raw = value
-    .trim()
-    .replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '')
-    .replace(/^\/\//, '')
-    .replace(/^[^/?#]*@/, '')
-    .replace(/[:/?#].*$/, '');
-  // Give the extracted host the same WHATWG host parse an absolute URL gets (lowercase, percent-
-  // decoding, IDNA), so `PROD%2Eacme.com:8080` is judged like `https://PROD%2Eacme.com`. A host the
-  // parser rejects is judged as written.
-  if (raw) {
+  // 2. Scheme-relative (`//host`, `/\host`, `\\host`): resolved against a special-scheme base,
+  //    exactly as a browser resolves it on an http(s) page. A value with no authority of its own
+  //    (`prod.acme.com`, a path) resolves to the base host — then it is not scheme-relative.
+  const BASE_HOST = 'prod-guard-base.invalid';
+  try {
+    const host = new URL(value, `http://${BASE_HOST}/`).hostname;
+    if (host && host !== BASE_HOST) return host;
+  } catch {
+    // not resolvable
+  }
+  // 3. A bare `host[:port]` with no scheme: the WHOLE value under `http://`, so the parser still
+  //    owns userinfo, `\`, percent-encoding and IDNA (`PROD%2Eacme.com:8080`,
+  //    `prod.acme.com\@staging.acme.dev` both resolve to prod.acme.com). Skipped for a value that
+  //    already names a `scheme://` — prefixing one would make the scheme the host.
+  const hasScheme = /^\s*[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(value);
+  if (!hasScheme) {
     try {
-      const host = new URL(`http://${raw}`).hostname;
+      const host = new URL(`http://${value.trim()}`).hostname;
       if (host) return host;
     } catch {
-      // keep the raw string
+      // not parseable
     }
   }
-  return raw;
+  // 4. The parser rejected the value outright (e.g. an invalid punycode label). Judge the host as
+  //    written: strip a `scheme://` or leading slashes, treat `\` as `/` (as the parser would for
+  //    http(s)), drop userinfo GREEDILY to the last `@` before any `/ ? #`, cut port/path/query.
+  return value
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '')
+    .replace(/^\/+/, '')
+    .replace(/^[^/?#]*@/, '')
+    .replace(/[:/?#].*$/, '')
+    .toLowerCase();
 }
 
 /**

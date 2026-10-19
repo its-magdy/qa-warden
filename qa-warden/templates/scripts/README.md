@@ -45,8 +45,8 @@ shell guard.
 
 Plain ESM, no dependencies. Owns everything both layers decide: the screened
 var-name set (`BASE_URL*`, `API_URL`, `*_API_URL`), host extraction (WHATWG
-`new URL()`, the way a browser resolves the host, with a fallback for scheme-less
-`host:port`), the placeholder sentinels, the word-boundary prod marker and the
+`new URL()`, the way a browser resolves the host, scheme-relative `//host` and
+scheme-less `host:port` values parsed whole too), the placeholder sentinels, the word-boundary prod marker and the
 `QA_ALLOW_PROD=1` override. `prod-guard.ts` imports it; `prod-guard.sh` runs
 `node scripts/prod-guard-core.mjs screen [url ...]` and prints the result.
 `/qa-warden:doctor` Check 8 compares it with the plugin's copy.
