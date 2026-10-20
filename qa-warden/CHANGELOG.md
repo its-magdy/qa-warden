@@ -32,11 +32,13 @@ never carry the same number**, or the second one has no way to announce itself.
   freshness anchor. With it, `stale` means "the file's mtime is before the anchor", one clock
   read, and the smoke arm passes `RUN_START` there. Missing, corrupt and zero-test reports still
   outrank `stale` in the same order, the `last-run:` line keeps its shape, and a previous run's
-  file left behind by an aborted run is still `stale`. The other modes are unchanged (they pass a
-  fixed 900 seconds). Plugin-side only: the stamped `check-last-run.sh` is unchanged, so no
+  file left behind by an aborted run is still `stale`. An anchor that is not a whole number of
+  seconds makes the verdict `unchecked` (never a pass), because it cannot judge freshness. The
+  other modes are unchanged (they pass a fixed 900 seconds). Plugin-side only: the stamped `check-last-run.sh` is unchanged, so no
   `--resync` is needed.
-- `bin/qa-scaffoldtest` gains 17 cases (794 → 811): `run_verdict` with an anchor (fresh, stale,
-  the JSON verdicts still first, stale before the exit code, the line's shape), and a smoke run
+- `bin/qa-scaffoldtest` gains 21 cases (794 → 815): `run_verdict` with an anchor (fresh, stale,
+  the JSON verdicts still first, stale before the exit code, the line's shape, a malformed anchor
+  such as `invalid`, `12x` or `-` unchecked), and a smoke run
   under a stub `date` that adds a second on every `date +%s`, which failed 2 cases before the
   fix, plus reports one second and years before RUN_START that must stay `stale`.
 

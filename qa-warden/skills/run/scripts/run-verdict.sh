@@ -33,7 +33,7 @@
 #                stale       the file is older than max_age, or its mtime is before fresh_since —
 #                            a previous run's report
 #                unchecked   check-last-run.sh itself failed (missing script on an old stamp, any
-#                            other exit) — never a pass
+#                            other exit), or fresh_since is not an integer — never a pass
 #                incomplete  the run did not complete: an exit other than 0 or 1 (interrupted,
 #                            killed by a signal, crashed) whatever the failure count, OR exit 1
 #                            with 0 failures recorded — timeout / --max-failures / worker crash
@@ -50,6 +50,14 @@
 # shellcheck disable=SC2034  # VERDICT/LR/TOTAL/FAILED are outputs, read by the caller that sources this
 run_verdict() {
   local pw_exit=$1 json=$2 max_age=$3 fresh_since=${4:-} lr_rc mtime
+  # A malformed anchor fails CLOSED, before it can switch the age test off: freshness was not
+  # checked, so the verdict is unchecked (never a pass), like a check-last-run.sh that failed.
+  case "$fresh_since" in
+    *[!0-9]*)
+      VERDICT=unchecked; TOTAL=-1; FAILED=0
+      LR="last-run: unchecked (run_verdict got a non-numeric freshness anchor '$fresh_since' — a run.sh bug, not a pass)"
+      return 0 ;;
+  esac
   # With an anchor, check-last-run.sh gets an age limit no file can exceed (~31,000 years), so
   # it still decides missing, corrupt and zero-test, in its order, and never stale; the anchor
   # test below decides that. check-last-run.sh is stamped into projects, so it stays as it is.

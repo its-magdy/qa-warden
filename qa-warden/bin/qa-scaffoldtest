@@ -1401,6 +1401,14 @@ check_eq "anchor + no file → still missing"                    "missing -1 0" 
 check_eq "anchor + unparseable file → still corrupt"           "corrupt -1 0"   "$(verdict_since 0 "$FX/corrupt.json" "$FUTURE")"
 check_eq "anchor + no .stats → still corrupt"                  "corrupt -1 0"   "$(verdict_since 0 "$FX/statsless.json" "$FUTURE")"
 check_eq "anchor + 0 resolved tests → still zero-test"         "zero-test 0 0"  "$(verdict_since 0 "$FX/zero.json" "$FUTURE")"
+# A malformed anchor fails closed: it cannot judge freshness, so even a passing report is
+# unchecked, never green (a years-old file would otherwise pass on the ignored max_age).
+check_eq "anchor 'invalid' + a years-old green report → unchecked" "unchecked -1 0" "$(verdict_since 0 "$FX/old.json" invalid)"
+check_eq "anchor '12x' → unchecked"                            "unchecked -1 0" "$(verdict_since 0 "$FX/green.json" 12x)"
+check_eq "anchor '-' → unchecked"                              "unchecked -1 0" "$(verdict_since 0 "$FX/green.json" -)"
+# shellcheck disable=SC1090  # same module as verdict() above
+check    "a malformed anchor's line names the anchor" grep -qF "freshness anchor 'invalid'" \
+  <<<"$(cd "$RP" && . "$VERDICT_SH" && run_verdict 0 "$FX/green.json" "" invalid 2>&1 && echo "$LR")"
 # shellcheck disable=SC1090  # same module as verdict() above
 check_eq "anchor-stale keeps check-last-run.sh's line shape" \
   "last-run: stale total=3 startTime=2026-01-01T00:00:00Z" \
