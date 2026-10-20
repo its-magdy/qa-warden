@@ -44,9 +44,11 @@
 #                      PATH, so a dialect gap in any of them fails here
 #   7. run verdict     skills/run/scripts/run-verdict.sh turns Playwright's exit code AND its JSON
 #                      into one word (green/red/incomplete/missing/corrupt/zero-test/stale/
-#                      unchecked), checked on fixture JSONs; then run.sh's single, smoke, repeat,
+#                      unchecked), checked on fixture JSONs, with and without a freshness anchor;
+#                      then run.sh's single, smoke, repeat,
 #                      changed and batch-fix precheck/recheck modes run end to end against a stub `npx` on
-#                      PATH that emits a chosen fixture with a chosen exit code (no Playwright)
+#                      PATH that emits a chosen fixture with a chosen exit code (no Playwright), and
+#                      smoke once more under a stub `date` that ticks a second on every read
 #   8. test inventory  scripts/spec-links.sh `tests` / `specs` / `smoke` / `unmanifested` on a
 #      + smoke tags    fixture with `_`-prefixed scratch specs (file and directory), a metamorphic
 #                      twin, a fanned spec and all three YAML smoke-tag forms plus a prose
@@ -1338,6 +1340,8 @@ done
 if [ -n "${STUB_JSON:-}" ]; then
   if [ -n "${STUB_SINK:-}" ]; then
     [ "$inline_reporter" -eq 1 ] || cp "$STUB_JSON" "$STUB_SINK"
+    # Pin the sink's mtime when asked (the clock cases below need it to equal a known second).
+    [ -z "${STUB_MTIME_REF:-}" ] || touch -r "$STUB_MTIME_REF" "$STUB_SINK"
   else
     cat "$STUB_JSON"
   fi
@@ -1380,6 +1384,45 @@ check_eq "older than max_age → stale"                          "stale 3 0"    
 # shellcheck disable=SC1090  # same module as verdict() above
 check_eq "no stamped check-last-run.sh → unchecked" "unchecked -1 0" \
   "$(cd "$STUB" && . "$VERDICT_SH" && run_verdict 0 "$FX/green.json" 900 && echo "$VERDICT $TOTAL $FAILED")"
+# A freshness anchor (run_verdict's 4th argument) replaces max_age: stale iff mtime < anchor.
+# The JSON verdicts still outrank it, and it outranks the exit code, as stale did before.
+FUTURE=4102444800   # 2100-01-01: every fixture's mtime is before it
+# shellcheck disable=SC1090  # same module as verdict() above
+verdict_since() {
+  (cd "$RP" && . "$VERDICT_SH" && run_verdict "$1" "$2" "" "$3" && echo "$VERDICT $TOTAL $FAILED")
+}
+check_eq "anchor before the mtime → green"                     "green 3 0"      "$(verdict_since 0 "$FX/green.json" 1)"
+check_eq "anchor before the mtime, years-old file → green (max_age ignored)" \
+                                                               "green 3 0"      "$(verdict_since 0 "$FX/old.json" 1)"
+check_eq "anchor after the mtime → stale"                      "stale 3 0"      "$(verdict_since 0 "$FX/green.json" "$FUTURE")"
+check_eq "anchor after the mtime + exit 130 → stale, not incomplete" \
+                                                               "stale 3 0"      "$(verdict_since 130 "$FX/red.json" "$FUTURE")"
+check_eq "anchor + no file → still missing"                    "missing -1 0"   "$(verdict_since 0 "$FX/absent.json" "$FUTURE")"
+check_eq "anchor + unparseable file → still corrupt"           "corrupt -1 0"   "$(verdict_since 0 "$FX/corrupt.json" "$FUTURE")"
+check_eq "anchor + no .stats → still corrupt"                  "corrupt -1 0"   "$(verdict_since 0 "$FX/statsless.json" "$FUTURE")"
+check_eq "anchor + 0 resolved tests → still zero-test"         "zero-test 0 0"  "$(verdict_since 0 "$FX/zero.json" "$FUTURE")"
+# A malformed anchor fails closed: it cannot judge freshness, so even a passing report is
+# unchecked, never green (a years-old file would otherwise pass on the ignored max_age).
+check_eq "anchor 'invalid' + a years-old green report → unchecked" "unchecked -1 0" "$(verdict_since 0 "$FX/old.json" invalid)"
+check_eq "anchor '12x' → unchecked"                            "unchecked -1 0" "$(verdict_since 0 "$FX/green.json" 12x)"
+check_eq "anchor '-' → unchecked"                              "unchecked -1 0" "$(verdict_since 0 "$FX/green.json" -)"
+# All digits but past a shell integer: the test that would compare it errors, and an error
+# must never read as fresh.
+check_eq "a 30-digit anchor + a years-old green report → unchecked" "unchecked -1 0" \
+  "$(verdict_since 0 "$FX/old.json" 999999999999999999999999999999)"
+check_eq "a 20-digit anchor + a years-old green report → unchecked" "unchecked -1 0" \
+  "$(verdict_since 0 "$FX/old.json" 99999999999999999999)"
+check_eq "an oversized anchor prints nothing on stderr" "" \
+  "$(verdict_since 0 "$FX/old.json" 999999999999999999999999999999 2>&1 >/dev/null)"
+check_eq "an 18-digit anchor (the largest accepted) is compared: stale" "stale 3 0" \
+  "$(verdict_since 0 "$FX/old.json" 999999999999999999)"
+# shellcheck disable=SC1090  # same module as verdict() above
+check    "a malformed anchor's line names the anchor" grep -qF "freshness anchor 'invalid'" \
+  <<<"$(cd "$RP" && . "$VERDICT_SH" && run_verdict 0 "$FX/green.json" "" invalid 2>&1 && echo "$LR")"
+# shellcheck disable=SC1090  # same module as verdict() above
+check_eq "anchor-stale keeps check-last-run.sh's line shape" \
+  "last-run: stale total=3 startTime=2026-01-01T00:00:00Z" \
+  "$(cd "$RP" && . "$VERDICT_SH" && run_verdict 0 "$FX/green.json" "" "$FUTURE" && echo "${LR% age=*}")"
 
 # runsh <exit> <fixture|""> <sink|""> <run.sh args...> — output in $ROUT, exit status in $RRC.
 runsh() {
@@ -1434,6 +1477,53 @@ out_has  "a previous run's last-run.json: stale, not summarized" "Do NOT summari
 runsh 0 "$FX/zero.json" "artifacts/last-run.json" mode=smoke
 check_eq "zero tests: exit 2" "2" "$RRC"
 out_has  "zero tests: --grep @smoke matched nothing" "resolved NO tests"
+
+echo "  -- mode=smoke freshness: a clock that ticks between reads"
+# The smoke arm must call a report stale iff its mtime is before RUN_START, with ONE clock
+# read. A stub `date` first on PATH answers each `date +%s` with T, T+1, T+2, … (T = the mtime
+# of $CLK/t0, a fixed second) and passes every other call (`date -r FILE +%s`) to the real one.
+# When run.sh read the clock again after the run and check-last-run.sh read it a third time, a
+# report written in the RUN_START second read as stale once a second boundary fell between
+# them; this stub makes that boundary fall every time.
+new_dir; CLK="$DIR"
+REAL_DATE=$(command -v date)
+touch -t 203001010000.00 "$CLK/t0"
+touch -t 202912312359.59 "$CLK/t0-1"
+cat > "$CLK/date" <<EOF
+#!/bin/sh
+if [ "\$*" = "+%s" ]; then
+  n=\$(cat "$CLK/n" 2>/dev/null || echo 0)
+  echo \$((n + 1)) > "$CLK/n"
+  echo \$(( \$("$REAL_DATE" -r "$CLK/t0" +%s) + n ))
+  exit 0
+fi
+exec "$REAL_DATE" "\$@"
+EOF
+chmod +x "$CLK/date"
+# clocksh <exit> <fixture|""> <mtime-ref|""> — runsh with the stub clock, its count reset.
+clocksh() {
+  rm -f "$CLK/n"
+  ROUT=$(cd "$RP" && PATH="$CLK:$STUB:$PATH" STUB_EXIT=$1 STUB_JSON=$2 STUB_SINK=${2:+artifacts/last-run.json} \
+    STUB_MTIME_REF=$3 "$BASH" "$RUNSH" mode=smoke 2>&1)
+  RRC=$?
+}
+rm -f "$CLK/n"
+check_eq "the stub clock starts at t0's mtime and ticks one second per read" \
+  "$("$REAL_DATE" -r "$CLK/t0" +%s) $(( $("$REAL_DATE" -r "$CLK/t0" +%s) + 1 ))" \
+  "$("$CLK/date" +%s) $("$CLK/date" +%s)"
+clocksh 0 "$FX/green.json" "$CLK/t0"
+check_eq "a report written in the RUN_START second, clock ticking: exit 0" "0" "$RRC"
+out_has  "a report written in the RUN_START second: fresh, not stale" "last-run: fresh total=3"
+rm -f "$RP/artifacts/last-run.json"
+cp "$FX/green.json" "$RP/artifacts/last-run.json"; touch -r "$CLK/t0-1" "$RP/artifacts/last-run.json"
+clocksh 1 "" ""
+check_eq "a previous run's report one second before RUN_START (aborted run): exit 2" "2" "$RRC"
+out_has  "a report one second before RUN_START: stale, same line shape" "last-run: stale total=3 startTime="
+out_has  "a report one second before RUN_START: not summarized" "Do NOT summarize the stale file"
+touch -t 202001010000 "$RP/artifacts/last-run.json"
+clocksh 1 "" ""
+check_eq "a years-old report under the stub clock (aborted run): exit 2" "2" "$RRC"
+out_has  "a years-old report under the stub clock: stale" "Do NOT summarize the stale file"
 
 echo "  -- mode=repeat"
 runsh 1 "$FX/red.json" "" mode=repeat auth/login 3
