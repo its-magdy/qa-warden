@@ -393,12 +393,12 @@ Expected tail:
 ```
 qa-selfcheck: ✅ plugin is self-consistent — all 15 checks passed
 qa-hooktest: ✅ all 62 cases passed
-qa-scaffoldtest: ✅ all 788 cases passed
+qa-scaffoldtest: ✅ all 794 cases passed
 ```
 
 CI runs `qa-scaffoldtest` and `qa-hooktest` a second time on Linux with `mawk` first on `PATH`, the
 third awk dialect (BSD awk on macOS and gawk on the Linux runner cover the other two). That run sets
-`QA_EXPECT_AWK=mawk`, which adds one case, so its tail reads 789 rather than 788.
+`QA_EXPECT_AWK=mawk`, which adds one case, so its tail reads 795 rather than 794.
 
 When you change `qa-warden/agents/reviewer.md`, also run the behavioural evals. They make real model calls (on 2026-09-30, about $0.4 and 2 minutes per case; all five cost $1.97), so run them per change, not per commit. Details: [`qa-warden/evals/README.md`](qa-warden/evals/README.md).
 

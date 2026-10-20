@@ -2243,6 +2243,17 @@ check_eq "  and resolve-spec-path.sh is named on exactly one line" "1" \
   "$(grep -cF -e 'scripts/resolve-spec-path.sh' <<<"$DR_OUT")"
 dr_has "  by Check 8's loop" "⚠️  scripts/resolve-spec-path.sh missing — "
 check_eq "  and so is oracle-keys.txt" "1" "$(grep -cF -e 'scripts/oracle-keys.txt missing — ' <<<"$DR_OUT")"
+# Checks 8 and 9 must agree on what "listed" means. A row with leading blanks or a `./` segment
+# still lists the file for Check 9, so Check 8 must stay quiet about it, and Check 9 names the
+# canonical path.
+for row in '  scripts/resolve-spec-path.sh' 'scripts/./resolve-spec-path.sh' './scripts/resolve-spec-path.sh'; do
+  grep -vxF -e 'scripts/resolve-spec-path.sh' "$here/manifests/resync-set.txt" > "$PART/qa-warden/manifests/resync-set.txt"
+  printf '%s\n' "$row" >> "$PART/qa-warden/manifests/resync-set.txt"
+  DR_OUT=$(cd "$MSP" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$PART/qa-warden/skills/doctor/scripts/doctor.sh" 2>&1)
+  check_eq "manifest row '$row': resolve-spec-path is named on exactly one line" "1" \
+    "$(grep -cF -e 'resolve-spec-path.sh' <<<"$DR_OUT")"
+  dr_has "  by Check 9, under its canonical path" "❌ substrate missing: scripts/resolve-spec-path.sh absent from project"
+done
 
 echo "  -- plugin-source findings: qa-selfcheck reports them, doctor does not"
 # A scratch COPY of the plugin, so the real tree is never edited. DOCUMENTATION.md sits beside the

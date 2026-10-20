@@ -411,15 +411,24 @@ TMPL="${TMPL:+$TMPL/templates}"
 if [ -n "$TMPL" ] && [ ! -d "$TMPL" ]; then
   TMPL=""
 fi
+# Each row is trimmed and its `./` segments dropped, so `  scripts/./x.sh` reads as scripts/x.sh
+# for both checks: Check 9 names the canonical path and this loop knows Check 9 named it.
 OWNED=""
 if [ -n "$TMPL" ]; then
   RESYNC_MANIFEST="$TMPL/../manifests/resync-set.txt"
-  OWNED=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$RESYNC_MANIFEST" 2>/dev/null | grep -v '^$')
+  OWNED=$(sed -e 's/#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+              -e 's#^\(\./\)*##' -e ':a' -e 's#/\./#/#' -e 'ta' \
+              "$RESYNC_MANIFEST" 2>/dev/null | grep -v '^$')
 fi
 for f in scripts/prod-guard.sh scripts/resolve-spec-path.sh scripts/spec-links.sh scripts/post-run-checks.sh scripts/oracle-keys.txt; do
   [ -f "$f" ] && continue
-  # Check 9 names this one ("substrate missing"): say nothing here.
-  if [ -n "$OWNED" ] && [ -f "$TMPL/$f" ] && printf '%s\n' "$OWNED" | grep -qxF -e "$f"; then
+  # Check 9 names this one ("substrate missing"): say nothing here. "Listed" is decided over
+  # the same word-split tokens Check 9 walks, so the two checks cannot disagree on a row.
+  listed=""
+  for rel in $OWNED; do
+    [ "$rel" = "$f" ] && listed=1
+  done
+  if [ -n "$listed" ] && [ -f "$TMPL/$f" ]; then
     continue
   fi
   echo "⚠️  $f missing — project scaffolded before it shipped, or the file was deleted; run /qa-warden:init --resync"; warn=$((warn+1))
