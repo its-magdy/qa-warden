@@ -390,11 +390,13 @@ fi
 #    Check 9 skips the core: this check owns its presence and its compare.
 #    The missing-file loop is Check 9's FALLBACK, not a second report. Every file it names is in
 #    manifests/resync-set.txt, so whenever Check 9's substrate compare runs it already reports a
-#    missing one ("substrate missing", a ❌ with the same repair), and running this loop as well
+#    missing one ("substrate missing", a ❌ with the same repair), and naming it here as well
 #    printed one deleted file twice (three times for oracle-keys.txt, which Check 2 also names).
-#    So the loop runs only when Check 9 is skipped: no $TMPL, i.e. this file was copied out of
-#    its plugin and the compare has no baseline. Then it is the only thing that names a missing
-#    canonical script, and it stays a ⚠️ beside Check 9's counted SKIPPED warning.
+#    So the loop skips exactly the files Check 9 WILL report: there is a $TMPL, its manifest is
+#    readable and lists the file, and the plugin ships its template. Any of those missing and
+#    Check 9 passes over the file without a word (no $TMPL: this doctor was copied out of its
+#    plugin; no manifest: Check 9 prints only a generic UNVERIFIED; no template: Check 9 skips
+#    that line), so this loop is the only thing that names it, as a ⚠️.
 # The baseline is the plugin this script ships in: <plugin>/skills/doctor/scripts/doctor.sh, so the
 # plugin root is three directories up. No lookup, no guess. Until this script moved into the plugin
 # it lived in the project and had to FIND a plugin: $CLAUDE_PLUGIN_ROOT, else the install recorded in
@@ -402,17 +404,26 @@ fi
 # version. Running from the plugin removed that whole question. $CLAUDE_PLUGIN_ROOT is not read: the
 # script's own location is the plugin it belongs to, and the stamped launcher (scripts/doctor.sh)
 # does any looking-up a hand run needs. Resolved here rather than in Check 9 because the loop
-# below has to know whether Check 9 will run.
+# below has to know which files Check 9 will report; so is OWNED, Check 9's toolkit-owned set
+# (see Check 9 for why it is read from the plugin's manifests/resync-set.txt).
 TMPL=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd)
 TMPL="${TMPL:+$TMPL/templates}"
 if [ -n "$TMPL" ] && [ ! -d "$TMPL" ]; then
   TMPL=""
 fi
-if [ -z "$TMPL" ]; then
-  for f in scripts/prod-guard.sh scripts/resolve-spec-path.sh scripts/spec-links.sh scripts/post-run-checks.sh scripts/oracle-keys.txt; do
-    [ -f "$f" ] || { echo "⚠️  $f missing — project scaffolded before it shipped, or the file was deleted; run /qa-warden:init --resync"; warn=$((warn+1)); }
-  done
+OWNED=""
+if [ -n "$TMPL" ]; then
+  RESYNC_MANIFEST="$TMPL/../manifests/resync-set.txt"
+  OWNED=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$RESYNC_MANIFEST" 2>/dev/null | grep -v '^$')
 fi
+for f in scripts/prod-guard.sh scripts/resolve-spec-path.sh scripts/spec-links.sh scripts/post-run-checks.sh scripts/oracle-keys.txt; do
+  [ -f "$f" ] && continue
+  # Check 9 names this one ("substrate missing"): say nothing here.
+  if [ -n "$OWNED" ] && [ -f "$TMPL/$f" ] && printf '%s\n' "$OWNED" | grep -qxF -e "$f"; then
+    continue
+  fi
+  echo "⚠️  $f missing — project scaffolded before it shipped, or the file was deleted; run /qa-warden:init --resync"; warn=$((warn+1))
+done
 PG_CORE=scripts/prod-guard-core.mjs
 PG_CORE_PLUGIN=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../templates/scripts" 2>/dev/null && pwd)
 PG_CORE_PLUGIN="${PG_CORE_PLUGIN:+$PG_CORE_PLUGIN/prod-guard-core.mjs}"
@@ -554,8 +565,9 @@ fi
 #    .env.example is SHARED-ownership — users must extend it for seed vars (Check 6 /
 #    test-data-seed) — excluded like CLAUDE.md; the stock-var containment sub-check below
 #    still catches a stock variable being DELETED from it.
-# $TMPL (the plugin's templates/, the baseline) is resolved above Check 8's missing-file loop,
-# which runs only when this check cannot.
+# $TMPL (the plugin's templates/, the baseline) and OWNED (the toolkit-owned set) are resolved
+# above Check 8's missing-file loop, which names a missing canonical script only where this check
+# will not.
 if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   # The toolkit-owned set is SINGLE-SOURCED in the plugin's manifests/resync-set.txt,
   # which qa-scaffold's --resync reads too — detection and repair MUST cover the SAME files,
@@ -567,8 +579,7 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   # qa-scaffold do, and both read the plugin's copy. A stamped copy was dead weight that fired
   # drift warnings when edited. No older-layout fallback: this script and the manifest ship in
   # the same plugin, so a missing manifest means an incomplete install.
-  RESYNC_MANIFEST="$TMPL/../manifests/resync-set.txt"
-  OWNED=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$RESYNC_MANIFEST" 2>/dev/null | grep -v '^$')
+  # OWNED is read from it above Check 8, whose missing-file loop needs the same set.
   [ -n "$OWNED" ] || { echo "⚠️  toolkit-owned manifest (manifests/resync-set.txt) not readable in the plugin at $TMPL/.. — substrate drift is UNVERIFIED (the plugin install is incomplete; reinstall it)"; warn=$((warn+1)); }
   for rel in $OWNED; do
     [ -f "$TMPL/$rel" ] || continue

@@ -25,8 +25,9 @@ never carry the same number**, or the second one has no way to announce itself.
 - A deleted canonical script (`prod-guard.sh`, `resolve-spec-path.sh`, `spec-links.sh`,
   `post-run-checks.sh`, `oracle-keys.txt`) was reported twice in a row: by Check 8's
   missing-file loop and by Check 9's "substrate missing" ❌ (three times for `oracle-keys.txt`,
-  which Check 2 also reads). Check 8's loop now runs only when Check 9 is skipped (a doctor copied
-  out of its plugin, with no `templates/` to compare against), and its repair is now
+  which Check 2 also reads). Check 8's loop now names only a file Check 9 will not report (a doctor
+  copied out of its plugin, with no `templates/` to compare against, or a plugin missing
+  `manifests/resync-set.txt` or that file's template), and its repair is now
   `/qa-warden:init --resync`. A doctor run from the plugin prints one fewer ⚠️ per missing file.
 - Two doctor arms compared plugin files with each other, so a consumer could do nothing when one
   fired. They moved to `bin/qa-selfcheck`: the warning that `manifests/claude-md-vocab.txt` lists

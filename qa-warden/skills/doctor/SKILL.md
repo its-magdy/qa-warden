@@ -178,8 +178,9 @@ does not fix anything — each finding names its repair:
   the core is a ⚠️; a guard that needs the core when it is missing is a ❌, because that guard
   refuses every run until the resync. A deleted canonical script (`prod-guard.sh`,
   `resolve-spec-path.sh`, `spec-links.sh`, `post-run-checks.sh`, `oracle-keys.txt`) is reported
-  once, by Check 9's "substrate missing" ❌; Check 8 names it (a ⚠️) only when Check 9 is skipped
-  because this doctor was copied out of its plugin. A missing stock var in `.env.example` → restore it from
+  once, by Check 9's "substrate missing" ❌; Check 8 names it (a ⚠️) only where Check 9 cannot:
+  this doctor was copied out of its plugin, or the plugin lacks `manifests/resync-set.txt` or
+  that file's template. A missing stock var in `.env.example` → restore it from
   the shipped template, or park it commented (`# VAR=`) — the stock list is derived from
   the template, and the file itself is shared-ownership and never byte-compared. The
   drift baseline is the plugin this doctor ships in, so it never compares against a different

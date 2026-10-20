@@ -68,8 +68,9 @@
 #                      a newline or tab in a path or the root is refused; and a stub rm /
 #                      sha256sum swaps the tree after the checks (narrowed, not race-proof); the
 #                      marker's temp dir refuses a planted symlink and leaves nothing on failure
-#  11. doctor vs      a deleted canonical script is reported once (Check 9, or Check 8's loop when a
-#      qa-selfcheck    doctor copied out of its plugin skips Check 9); on a scratch COPY of the plugin,
+#  11. doctor vs      a deleted canonical script is reported once (Check 9, or Check 8's loop where
+#      qa-selfcheck    Check 9 cannot: a doctor copied out of its plugin, or a plugin missing that
+#                      template or resync-set.txt); on a scratch COPY of the plugin,
 #                      a stale claude-md-vocab row and a plugin file re-deriving the unmanifested walk
 #                      fail qa-selfcheck (9b arm 4, 9k) and are invisible to doctor, which still
 #                      fails a stamped script that re-derives the walk
@@ -2198,7 +2199,7 @@ check "  and no temp dir or marker is left behind" \
 
 # ------------------------------------------------------------------------------------------
 echo "doctor vs qa-selfcheck — each finding reported once, by the side that can fix it"
-echo "  -- a deleted canonical script: Check 9 reports it; Check 8's loop only when Check 9 cannot run"
+echo "  -- a deleted canonical script: Check 9 reports it; Check 8's loop only where Check 9 cannot"
 new_dir; MSP=$DIR
 stamp "$MSP"
 rm "$MSP/scripts/resolve-spec-path.sh" "$MSP/scripts/oracle-keys.txt"
@@ -2222,6 +2223,26 @@ check_eq "  and resolve-spec-path.sh is named on exactly one line" "1" \
   "$(grep -cF -e 'scripts/resolve-spec-path.sh' <<<"$DR_OUT")"
 dr_has "  by Check 8's loop, with the resync as the repair" \
   "⚠️  scripts/resolve-spec-path.sh missing — project scaffolded before it shipped, or the file was deleted; run /qa-warden:init --resync"
+# A partial baseline: templates/ is there, but Check 9 still cannot report the file, because the
+# plugin lacks its template (Check 9 skips that line) or its resync-set.txt (Check 9 compares
+# nothing). Check 8's loop is then the only thing that can name it, so it must.
+new_dir; PART=$DIR
+cp -R "$here" "$PART/qa-warden"
+rm "$PART/qa-warden/templates/scripts/resolve-spec-path.sh"
+DR_OUT=$(cd "$MSP" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$PART/qa-warden/skills/doctor/scripts/doctor.sh" 2>&1)
+check_eq "plugin without that template: resolve-spec-path.sh is named on exactly one line" "1" \
+  "$(grep -cF -e 'scripts/resolve-spec-path.sh' <<<"$DR_OUT")"
+dr_has "  by Check 8's loop" "⚠️  scripts/resolve-spec-path.sh missing — "
+check_eq "  and oracle-keys.txt still once, by Check 9" "1" \
+  "$(grep -cE -e 'substrate missing: scripts/oracle-keys\.txt|scripts/oracle-keys\.txt missing —' <<<"$DR_OUT")"
+cp "$TEMPLATES/scripts/resolve-spec-path.sh" "$PART/qa-warden/templates/scripts/"
+rm "$PART/qa-warden/manifests/resync-set.txt"
+DR_OUT=$(cd "$MSP" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$PART/qa-warden/skills/doctor/scripts/doctor.sh" 2>&1)
+dr_has "plugin without resync-set.txt: Check 9 says the drift is unverified" "substrate drift is UNVERIFIED"
+check_eq "  and resolve-spec-path.sh is named on exactly one line" "1" \
+  "$(grep -cF -e 'scripts/resolve-spec-path.sh' <<<"$DR_OUT")"
+dr_has "  by Check 8's loop" "⚠️  scripts/resolve-spec-path.sh missing — "
+check_eq "  and so is oracle-keys.txt" "1" "$(grep -cF -e 'scripts/oracle-keys.txt missing — ' <<<"$DR_OUT")"
 
 echo "  -- plugin-source findings: qa-selfcheck reports them, doctor does not"
 # A scratch COPY of the plugin, so the real tree is never edited. DOCUMENTATION.md sits beside the
