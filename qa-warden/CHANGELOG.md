@@ -20,6 +20,24 @@ never carry the same number**, or the second one has no way to announce itself.
 
 ## [Unreleased]
 
+### Doctor reports a deleted script once and stops reporting plugin bugs to consumers
+
+- A deleted canonical script (`prod-guard.sh`, `resolve-spec-path.sh`, `spec-links.sh`,
+  `post-run-checks.sh`, `oracle-keys.txt`) was reported twice in a row: by Check 8's
+  missing-file loop and by Check 9's "substrate missing" ❌ (three times for `oracle-keys.txt`,
+  which Check 2 also reads). Check 8's loop now names only a file Check 9 will not report (a doctor
+  copied out of its plugin, with no `templates/` to compare against, or a plugin missing
+  `manifests/resync-set.txt` or that file's template), and its repair is now
+  `/qa-warden:init --resync`. A doctor run from the plugin prints one fewer ⚠️ per missing file.
+- Two doctor arms compared plugin files with each other, so a consumer could do nothing when one
+  fired. They moved to `bin/qa-selfcheck`: the warning that `manifests/claude-md-vocab.txt` lists
+  a symbol the shipped `templates/CLAUDE.md` no longer mentions (now selfcheck Check 9b arm 4; doctor
+  skips such a row silently), and Check 9k arm 3's scan of the plugin's own `*.sh` and `bin/`
+  files for a re-derived unmanifested walk (now selfcheck Check 9k, same id, as with 9f arm 1).
+  Doctor still scans the project's stamped `scripts/*.sh`.
+- Maintainers: selfcheck's stock-shell parse check moves from 9k to **9m**, so 9k means one check
+  in both files. qa-selfcheck now has 15 numbered checks (was 14); doctor still has 32.
+
 ### A symlinked directory can no longer carry a delete or a review marker out of the project
 
 - **`scripts/retire-delete.sh` refused a symlinked file but not a symlinked directory.** It checked

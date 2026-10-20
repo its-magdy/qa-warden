@@ -382,23 +382,23 @@ Agents, skills, hooks and `reference/` update automatically with the plugin. Eve
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs all of these except the evals, plus shellcheck, on every pull request and push to `main`, on Ubuntu and on macOS (the macOS job is the one that parses every script with bash 3.2). It makes no model calls and needs no secrets; the Claude Code CLI is installed only for `claude plugin validate`. Run them locally before every plugin commit anyway:
 
 ```bash
-qa-warden/bin/qa-selfcheck                    # 14 consistency checks over the plugin's own source
+qa-warden/bin/qa-selfcheck                    # 15 consistency checks over the plugin's own source
 qa-warden/bin/qa-hooktest                     # 62 real payloads through the two PreToolUse hooks
-qa-warden/bin/qa-scaffoldtest                 # qa-scaffold stamp, settings merge, --resync and doctor in temp dirs, one prod-guard URL table through both guards (needs node), run.sh's run verdicts and the symlink-containment table
+qa-warden/bin/qa-scaffoldtest                 # qa-scaffold stamp, settings merge, --resync and doctor in temp dirs, one prod-guard URL table through both guards (needs node), run.sh's run verdicts, the symlink-containment table, and doctor vs qa-selfcheck on a scratch copy of the plugin
 claude plugin validate --strict ./qa-warden   # mandatory after any frontmatter edit
 ```
 
 Expected tail:
 
 ```
-qa-selfcheck: ✅ plugin is self-consistent — all 14 checks passed
+qa-selfcheck: ✅ plugin is self-consistent — all 15 checks passed
 qa-hooktest: ✅ all 62 cases passed
-qa-scaffoldtest: ✅ all 764 cases passed
+qa-scaffoldtest: ✅ all 794 cases passed
 ```
 
 CI runs `qa-scaffoldtest` and `qa-hooktest` a second time on Linux with `mawk` first on `PATH`, the
 third awk dialect (BSD awk on macOS and gawk on the Linux runner cover the other two). That run sets
-`QA_EXPECT_AWK=mawk`, which adds one case, so its tail reads 765 rather than 764.
+`QA_EXPECT_AWK=mawk`, which adds one case, so its tail reads 795 rather than 794.
 
 When you change `qa-warden/agents/reviewer.md`, also run the behavioural evals. They make real model calls (on 2026-09-30, about $0.4 and 2 minutes per case; all five cost $1.97), so run them per change, not per commit. Details: [`qa-warden/evals/README.md`](qa-warden/evals/README.md).
 

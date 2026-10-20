@@ -68,6 +68,12 @@
 #                      a newline or tab in a path or the root is refused; and a stub rm /
 #                      sha256sum swaps the tree after the checks (narrowed, not race-proof); the
 #                      marker's temp dir refuses a planted symlink and leaves nothing on failure
+#  11. doctor vs      a deleted canonical script is reported once (Check 9, or Check 8's loop where
+#      qa-selfcheck    Check 9 cannot: a doctor copied out of its plugin, or a plugin missing that
+#                      template or resync-set.txt); on a scratch COPY of the plugin,
+#                      a stale claude-md-vocab row and a plugin file re-deriving the unmanifested walk
+#                      fail qa-selfcheck (9b arm 4, 9k) and are invisible to doctor, which still
+#                      fails a stamped script that re-derives the walk
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TEMPLATES="$here/templates"
 SCAFFOLD="$here/bin/qa-scaffold"
@@ -2190,6 +2196,101 @@ rc=$?
 check_eq "review-marker, the temp write fails (ulimit -f 0): exit 2" "2" "$rc"
 check "  and no temp dir or marker is left behind" \
   test -z "$(find "$P/reports" \( -name '.review-marker.*' -o -path '*/demo/widget.reviewed' \) -print)"
+
+# ------------------------------------------------------------------------------------------
+echo "doctor vs qa-selfcheck — each finding reported once, by the side that can fix it"
+echo "  -- a deleted canonical script: Check 9 reports it; Check 8's loop only where Check 9 cannot"
+new_dir; MSP=$DIR
+stamp "$MSP"
+rm "$MSP/scripts/resolve-spec-path.sh" "$MSP/scripts/oracle-keys.txt"
+run_doctor "$MSP"
+check_eq "with the plugin's templates/: resolve-spec-path.sh is named on exactly one line" "1" \
+  "$(grep -cF -e 'scripts/resolve-spec-path.sh' <<<"$DR_OUT")"
+dr_has "  Check 9's substrate-missing ❌" "❌ substrate missing: scripts/resolve-spec-path.sh absent from project"
+dr_lacks "  and not Check 8's loop as well" "scripts/resolve-spec-path.sh missing —"
+# oracle-keys.txt is also read by Check 2, which says the vocabulary is unverified: a different
+# finding. Only the two "this file is missing" lines may not both appear.
+check_eq "  oracle-keys.txt: one missing-file line from Checks 8 and 9 together" "1" \
+  "$(grep -cE -e 'substrate missing: scripts/oracle-keys\.txt|scripts/oracle-keys\.txt missing —' <<<"$DR_OUT")"
+# A doctor copied out of its plugin has no templates/ to compare against, so Check 9 is skipped
+# and Check 8's loop is the only thing that names the missing file.
+new_dir; LOOSE=$DIR
+mkdir -p "$LOOSE/a/b/c"
+cp "$DOCTOR" "$LOOSE/a/b/c/doctor.sh"
+DR_OUT=$(cd "$MSP" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$LOOSE/a/b/c/doctor.sh" 2>&1)
+dr_has "without templates/: Check 9 says it was skipped" "substrate-drift check SKIPPED"
+check_eq "  and resolve-spec-path.sh is named on exactly one line" "1" \
+  "$(grep -cF -e 'scripts/resolve-spec-path.sh' <<<"$DR_OUT")"
+dr_has "  by Check 8's loop, with the resync as the repair" \
+  "⚠️  scripts/resolve-spec-path.sh missing — project scaffolded before it shipped, or the file was deleted; run /qa-warden:init --resync"
+# A partial baseline: templates/ is there, but Check 9 still cannot report the file, because the
+# plugin lacks its template (Check 9 skips that line) or its resync-set.txt (Check 9 compares
+# nothing). Check 8's loop is then the only thing that can name it, so it must.
+new_dir; PART=$DIR
+cp -R "$here" "$PART/qa-warden"
+rm "$PART/qa-warden/templates/scripts/resolve-spec-path.sh"
+DR_OUT=$(cd "$MSP" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$PART/qa-warden/skills/doctor/scripts/doctor.sh" 2>&1)
+check_eq "plugin without that template: resolve-spec-path.sh is named on exactly one line" "1" \
+  "$(grep -cF -e 'scripts/resolve-spec-path.sh' <<<"$DR_OUT")"
+dr_has "  by Check 8's loop" "⚠️  scripts/resolve-spec-path.sh missing — "
+check_eq "  and oracle-keys.txt still once, by Check 9" "1" \
+  "$(grep -cE -e 'substrate missing: scripts/oracle-keys\.txt|scripts/oracle-keys\.txt missing —' <<<"$DR_OUT")"
+cp "$TEMPLATES/scripts/resolve-spec-path.sh" "$PART/qa-warden/templates/scripts/"
+rm "$PART/qa-warden/manifests/resync-set.txt"
+DR_OUT=$(cd "$MSP" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$PART/qa-warden/skills/doctor/scripts/doctor.sh" 2>&1)
+dr_has "plugin without resync-set.txt: Check 9 says the drift is unverified" "substrate drift is UNVERIFIED"
+check_eq "  and resolve-spec-path.sh is named on exactly one line" "1" \
+  "$(grep -cF -e 'scripts/resolve-spec-path.sh' <<<"$DR_OUT")"
+dr_has "  by Check 8's loop" "⚠️  scripts/resolve-spec-path.sh missing — "
+check_eq "  and so is oracle-keys.txt" "1" "$(grep -cF -e 'scripts/oracle-keys.txt missing — ' <<<"$DR_OUT")"
+# Checks 8 and 9 must agree on what "listed" means. A row with leading blanks or a `./` segment
+# still lists the file for Check 9, so Check 8 must stay quiet about it, and Check 9 names the
+# canonical path.
+for row in '  scripts/resolve-spec-path.sh' 'scripts/./resolve-spec-path.sh' './scripts/resolve-spec-path.sh'; do
+  grep -vxF -e 'scripts/resolve-spec-path.sh' "$here/manifests/resync-set.txt" > "$PART/qa-warden/manifests/resync-set.txt"
+  printf '%s\n' "$row" >> "$PART/qa-warden/manifests/resync-set.txt"
+  DR_OUT=$(cd "$MSP" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$PART/qa-warden/skills/doctor/scripts/doctor.sh" 2>&1)
+  check_eq "manifest row '$row': resolve-spec-path is named on exactly one line" "1" \
+    "$(grep -cF -e 'resolve-spec-path.sh' <<<"$DR_OUT")"
+  dr_has "  by Check 9, under its canonical path" "❌ substrate missing: scripts/resolve-spec-path.sh absent from project"
+done
+
+echo "  -- plugin-source findings: qa-selfcheck reports them, doctor does not"
+# A scratch COPY of the plugin, so the real tree is never edited. DOCUMENTATION.md sits beside the
+# plugin in the repo and qa-selfcheck reads it as an arg-shape mirror; copy it too when present.
+new_dir; PCP=$DIR
+cp -R "$here" "$PCP/qa-warden"
+if [ -f "$here/../DOCUMENTATION.md" ]; then cp "$here/../DOCUMENTATION.md" "$PCP/"; fi
+SC_OUT=$("$BASH" "$PCP/qa-warden/bin/qa-selfcheck" 2>&1)
+check "precondition: the pristine copy has no stale vocab row" \
+  test "$(grep -cF -e 'claude-md-vocab.txt requires' <<<"$SC_OUT")" = "0"
+check "precondition: no plugin file in the pristine copy re-derives the unmanifested walk" \
+  test "$(grep -cF -e 'builds a route-manifest path from a variable' <<<"$SC_OUT")" = "0"
+printf 'zz_retired_symbol|a feature the template no longer documents\n' >> "$PCP/qa-warden/manifests/claude-md-vocab.txt"
+# The construct is assembled by printf so that this file does not contain it on a code line:
+# qa-selfcheck Check 9k scans bin/ too, and would fail the real tree on this test.
+walk_sh() { printf '#!/bin/sh\nf=x\n[ -f "%s/${f}.json" ] && echo y\n' "artifacts/route-manifests" > "$1"; }
+walk_sh "$PCP/qa-warden/skills/coverage/scripts/rewalk.sh"
+SC_OUT=$("$BASH" "$PCP/qa-warden/bin/qa-selfcheck" 2>&1)
+SC_RC=$?
+check_eq "qa-selfcheck fails on the mutated copy" "1" "$SC_RC"
+check "  Check 9b arm 4 names the stale claude-md-vocab row" grep -qF -e \
+  '❌ manifests/claude-md-vocab.txt requires `zz_retired_symbol` but templates/CLAUDE.md no longer mentions it' <<<"$SC_OUT"
+check "  Check 9k names the plugin file that builds a route-manifest path from a variable" grep -qF -e \
+  '❌ skills/coverage/scripts/rewalk.sh builds a route-manifest path from a variable' <<<"$SC_OUT"
+new_dir; PCD=$DIR
+stamp "$PCD"
+DR_OUT=$(cd "$PCD" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$PCP/qa-warden/skills/doctor/scripts/doctor.sh" 2>&1)
+DR_RC=$?
+dr_lacks "doctor from the mutated copy: no stale-manifest line" "claude-md-vocab.txt requires"
+dr_lacks "  and no scan of the plugin's files for the walk" "rewalk.sh"
+check_eq "  and a fresh stamp still exits 0" "0" "$DR_RC"
+walk_sh "$PCD/scripts/rewalk.sh"
+DR_OUT=$(cd "$PCD" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$PCP/qa-warden/skills/doctor/scripts/doctor.sh" 2>&1)
+DR_RC=$?
+dr_has "doctor still fails a stamped script that re-derives the walk (9k arm 3, project half)" \
+  "❌ scripts/rewalk.sh builds a route-manifest path from a variable"
+check_eq "  and exits 1" "1" "$DR_RC"
 
 echo "---"
 if [ "$bad" -ne 0 ]; then echo "qa-scaffoldtest: ❌ $bad of $((pass+bad)) cases FAILED"; exit 1; fi
