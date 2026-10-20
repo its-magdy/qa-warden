@@ -71,7 +71,7 @@ case "${1:-}" in
 esac
 set -- ${_rest[@]+"${_rest[@]}"}
 
-# run_verdict <pw_exit> <json> <max_age> → $VERDICT $LR $TOTAL $FAILED (see that file's header).
+# run_verdict <pw_exit> <json> <max_age> [fresh_since] → $VERDICT $LR $TOTAL $FAILED (see that file's header).
 . "$(dirname "${BASH_SOURCE[0]}")/run-verdict.sh"
 
 # The `incomplete` message, shared by every mode. $1 = mode label, $2 = what to inspect.
@@ -123,11 +123,13 @@ case "$MODE" in
     PW_EXIT=$?   # F-04: CAPTURE the exit code NOW — see header note.
 
     # Freshness + zero-test + corrupt-JSON gate (check-last-run.sh, via run_verdict — the same gate
-    # /qa-warden:report and doctor Check 1 call). Passing `now - RUN_START` as max_age makes the
-    # staleness predicate exactly "mtime < RUN_START": an ABORTED run (prod-guard throw in
-    # globalSetup, config syntax error) leaves the PREVIOUS run's file on disk and lands in the
-    # `stale` arm below.
-    run_verdict "$PW_EXIT" artifacts/last-run.json "$(( $(date +%s) - RUN_START ))"
+    # /qa-warden:report and doctor Check 1 call). RUN_START as run_verdict's freshness anchor
+    # makes the staleness predicate "mtime < RUN_START", judged by one clock read (the file's
+    # mtime), so no max_age is passed. An ABORTED run (prod-guard throw in globalSetup, config
+    # syntax error) leaves the PREVIOUS run's file on disk and lands in the `stale` arm below.
+    # (Passing `now - RUN_START` as max_age read the clock twice, here and in check-last-run.sh,
+    # and a second boundary between the two reads turned this run's report stale.)
+    run_verdict "$PW_EXIT" artifacts/last-run.json "" "$RUN_START"
     echo "$LR"
     case "$VERDICT" in
       green|red) : ;;

@@ -16,7 +16,13 @@
 # crash guard, and batch-fix's inline precheck ignored the exit code entirely). Now each mode
 # calls run_verdict and only words its own message per verdict.
 #
-# run_verdict <pw_exit> <json> <max_age_seconds>
+# run_verdict <pw_exit> <json> <max_age_seconds> [fresh_since]
+#   fresh_since  optional epoch second (the caller's `date +%s` from before the run). When given,
+#                `stale` means "mtime < fresh_since", read with ONE clock read (the file's mtime)
+#                and max_age is ignored. An age test can't express that: the caller's
+#                `now - start` and check-last-run.sh's `now - mtime` read the clock twice, so a
+#                second boundary between the two reads turned a report written in the start
+#                second into `stale`.
 #   Always returns 0. Sets:
 #     VERDICT  one word, decided in this order (the JSON first: a missing or zero-test report
 #              outranks the exit code, which is what every mode did before; then the exit code,
@@ -24,7 +30,8 @@
 #                missing     no JSON file — the run aborted before Playwright wrote it
 #                corrupt     the file is not a usable report (bad JSON, no .stats)
 #                zero-test   the report resolved no tests
-#                stale       the file is older than max_age — a previous run's report
+#                stale       the file is older than max_age, or its mtime is before fresh_since —
+#                            a previous run's report
 #                unchecked   check-last-run.sh itself failed (missing script on an old stamp, any
 #                            other exit) — never a pass
 #                incomplete  the run did not complete: an exit other than 0 or 1 (interrupted,
@@ -42,7 +49,11 @@
 
 # shellcheck disable=SC2034  # VERDICT/LR/TOTAL/FAILED are outputs, read by the caller that sources this
 run_verdict() {
-  local pw_exit=$1 json=$2 max_age=$3 lr_rc
+  local pw_exit=$1 json=$2 max_age=$3 fresh_since=${4:-} lr_rc mtime
+  # With an anchor, check-last-run.sh gets an age limit no file can exceed (~31,000 years), so
+  # it still decides missing, corrupt and zero-test, in its order, and never stale; the anchor
+  # test below decides that. check-last-run.sh is stamped into projects, so it stays as it is.
+  [ -z "$fresh_since" ] || max_age=999999999999
   LR=$(bash scripts/check-last-run.sh "$json" "$max_age" 2>/dev/null); lr_rc=$?
   TOTAL=${LR##*total=}; TOTAL=${TOTAL%% *}
   case "$TOTAL" in ''|*[!0-9-]*) TOTAL=-1 ;; esac
@@ -57,6 +68,18 @@ run_verdict() {
        LR="last-run: unchecked (scripts/check-last-run.sh exited $lr_rc — missing script? re-run /qa-warden:init --resync)"
        return 0 ;;
   esac
+  # The anchor test: one clock read, the file's mtime (`date -r` works on BSD and GNU). A file
+  # written in the anchor second is fresh. An unreadable mtime is stale, never a pass. The
+  # rewritten line keeps check-last-run.sh's shape, so callers echo it unchanged.
+  if [ -n "$fresh_since" ]; then
+    mtime=$(date -r "$json" +%s 2>/dev/null)
+    case "$mtime" in ''|*[!0-9]*) mtime=-1 ;; esac
+    if [ "$mtime" -lt "$fresh_since" ]; then
+      VERDICT=stale
+      LR="last-run: stale ${LR#last-run: fresh }"
+      return 0
+    fi
+  fi
   # rc 0 means .stats parsed, so `// 0` only covers a stats block without the key.
   FAILED=$(jq '.stats.unexpected // 0' "$json" 2>/dev/null)
   case "$FAILED" in ''|*[!0-9]*) FAILED=0 ;; esac
