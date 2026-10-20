@@ -1406,6 +1406,16 @@ check_eq "anchor + 0 resolved tests → still zero-test"         "zero-test 0 0"
 check_eq "anchor 'invalid' + a years-old green report → unchecked" "unchecked -1 0" "$(verdict_since 0 "$FX/old.json" invalid)"
 check_eq "anchor '12x' → unchecked"                            "unchecked -1 0" "$(verdict_since 0 "$FX/green.json" 12x)"
 check_eq "anchor '-' → unchecked"                              "unchecked -1 0" "$(verdict_since 0 "$FX/green.json" -)"
+# All digits but past a shell integer: the test that would compare it errors, and an error
+# must never read as fresh.
+check_eq "a 30-digit anchor + a years-old green report → unchecked" "unchecked -1 0" \
+  "$(verdict_since 0 "$FX/old.json" 999999999999999999999999999999)"
+check_eq "a 20-digit anchor + a years-old green report → unchecked" "unchecked -1 0" \
+  "$(verdict_since 0 "$FX/old.json" 99999999999999999999)"
+check_eq "an oversized anchor prints nothing on stderr" "" \
+  "$(verdict_since 0 "$FX/old.json" 999999999999999999999999999999 2>&1 >/dev/null)"
+check_eq "an 18-digit anchor (the largest accepted) is compared: stale" "stale 3 0" \
+  "$(verdict_since 0 "$FX/old.json" 999999999999999999)"
 # shellcheck disable=SC1090  # same module as verdict() above
 check    "a malformed anchor's line names the anchor" grep -qF "freshness anchor 'invalid'" \
   <<<"$(cd "$RP" && . "$VERDICT_SH" && run_verdict 0 "$FX/green.json" "" invalid 2>&1 && echo "$LR")"

@@ -33,7 +33,7 @@
 #                stale       the file is older than max_age, or its mtime is before fresh_since —
 #                            a previous run's report
 #                unchecked   check-last-run.sh itself failed (missing script on an old stamp, any
-#                            other exit), or fresh_since is not an integer — never a pass
+#                            other exit), or fresh_since is malformed (not 1-18 digits) — never a pass
 #                incomplete  the run did not complete: an exit other than 0 or 1 (interrupted,
 #                            killed by a signal, crashed) whatever the failure count, OR exit 1
 #                            with 0 failures recorded — timeout / --max-failures / worker crash
@@ -52,10 +52,12 @@ run_verdict() {
   local pw_exit=$1 json=$2 max_age=$3 fresh_since=${4:-} lr_rc mtime
   # A malformed anchor fails CLOSED, before it can switch the age test off: freshness was not
   # checked, so the verdict is unchecked (never a pass), like a check-last-run.sh that failed.
+  # Malformed = anything but digits, or more than 18 of them (past a shell integer, so `[`
+  # could not compare it; an epoch second has 10).
   case "$fresh_since" in
-    *[!0-9]*)
+    *[!0-9]*|???????????????????*)
       VERDICT=unchecked; TOTAL=-1; FAILED=0
-      LR="last-run: unchecked (run_verdict got a non-numeric freshness anchor '$fresh_since' — a run.sh bug, not a pass)"
+      LR="last-run: unchecked (run_verdict got a malformed freshness anchor '$fresh_since' — a run.sh bug, not a pass)"
       return 0 ;;
   esac
   # With an anchor, check-last-run.sh gets an age limit no file can exceed (~31,000 years), so
@@ -77,12 +79,13 @@ run_verdict() {
        return 0 ;;
   esac
   # The anchor test: one clock read, the file's mtime (`date -r` works on BSD and GNU). A file
-  # written in the anchor second is fresh. An unreadable mtime is stale, never a pass. The
-  # rewritten line keeps check-last-run.sh's shape, so callers echo it unchanged.
+  # written in the anchor second is fresh. Freshness must be PROVEN: only a comparison that
+  # succeeds passes, so an unreadable mtime or any `[` error (silenced) is stale, never a pass.
+  # The rewritten line keeps check-last-run.sh's shape, so callers echo it unchanged.
   if [ -n "$fresh_since" ]; then
     mtime=$(date -r "$json" +%s 2>/dev/null)
     case "$mtime" in ''|*[!0-9]*) mtime=-1 ;; esac
-    if [ "$mtime" -lt "$fresh_since" ]; then
+    if ! [ "$mtime" -ge "$fresh_since" ] 2>/dev/null; then
       VERDICT=stale
       LR="last-run: stale ${LR#last-run: fresh }"
       return 0
