@@ -63,7 +63,7 @@ Run these inside Claude Code, from the project that will hold the tests:
 To stay on one release, pin the marketplace to its tag with `#<tag>` (tags are `qa-warden--v<version>`):
 
 ```bash
-/plugin marketplace add its-magdy/qa-warden#qa-warden--v0.5.6
+/plugin marketplace add its-magdy/qa-warden#qa-warden--v0.6.0
 ```
 
 Updates are manual by default (see [Versioning and releasing](#versioning-and-releasing)). To get them automatically, run `/plugin`, open the **Marketplaces** tab, select `qa-warden` and choose **Enable auto-update**.
@@ -330,6 +330,18 @@ Why it matters: a 2026 study of autonomous test repair documented "assertion wea
 
 ---
 
+## Known issues
+
+Found by a full end-to-end run of the plugin against a small app with planted bugs (it caught all of them). 0.6.0 fixes what that run found, except these:
+
+- **Many permission prompts.** A full run (explore, both lanes, gen, review) in the default permission mode raised about 300 allow-once prompts, mostly for compound shell commands the agents write themselves (`VAR=…; … $VAR`, `cd … &&`, heredoc scripts). 0.6.0 tells them to use one plain command per call, which cuts some of them, not all. Answer "Yes" once per prompt, or switch modes for long `gen` and `review` steps.
+- **Parallel tests that share one account.** With `fullyParallel: true` and a single test account, specs that change shared state (a cart, say) collide, and `/qa-warden:review` Check 13 FAILs them. The plugin has no built-in answer yet: give each worker its own account, or run that area serially. `playwright.config.ts` is toolkit-owned, so that change is yours to make and `/qa-warden:doctor` will report it as drift.
+- **Coverage only knows the features you specced.** `/qa-warden:coverage` measures specs, cases and routes you already have. A feature your requirements describe but nobody has specced yet is not listed as a gap. List your features yourself and spec the risky ones, access rules especially.
+- **Agents may read your product's source.** QA Warden is grey-box by design: when the live app is ambiguous, agents may read the product source to settle a route, field name or API shape, though locators and expected values must still come from the live app and your requirements. If your app's repo sits next to the QA repo and you want black-box only, answer "No" to those reads, or add a deny rule such as `Read(//absolute/path/to/app/**)` to `.claude/settings.json`.
+- **Fake time doesn't reach the server.** A `clock:` step moves the browser's clock only. Rules the server enforces on time (holds, sessions, token expiry) need real-wait tests, which are slow, or a test hook in your app.
+
+---
+
 ## Scope and limits
 
 - **Covers:** E2E and integration tests against a real browser.
@@ -414,7 +426,7 @@ claude --plugin-dir ./qa-warden
 
 ### Versioning and releasing
 
-The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.5.6`. Users receive an update only when that string changes.
+The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.6.0`. Users receive an update only when that string changes.
 
 > **Bump `version` in the same commit as every user-visible change.** If you push without a bump, nothing ships, and `/plugin update` tells users they are already current. No error warns you.
 
