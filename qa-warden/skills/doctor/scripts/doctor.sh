@@ -1159,7 +1159,7 @@ if [ -d bugs ]; then
   # templates/gitignore ignores `bugs/**/*.zip` (until 0.6.0 only `bugs/**/trace.zip`), but
   # .gitignore is outside the resync set, so a project scaffolded before that rule shipped only
   # hears about it here. Read-only: git ls-files / check-ignore write nothing.
-  if [ -n "$(find bugs -mindepth 2 -name '*.zip' -type f 2>/dev/null | head -1)" ] \
+  if [ -n "$(find bugs -name '*.zip' -type f 2>/dev/null | head -1)" ] \
      && command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
     # A plain pathspec's * also matches /, so this lists a .zip at any depth under bugs/.
     tracked_traces=$(git ls-files -- 'bugs/*.zip' 2>/dev/null | tr '\n' ' ')
