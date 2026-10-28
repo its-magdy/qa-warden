@@ -9,7 +9,7 @@ the rename on top of it, and that one IS breaking (see its section). **`0.4.1`**
 documentation fixes only; **`0.5.0`** fixes what a fresh-install test and a re-check of the
 2026-09-26 end-to-end run found; **`0.5.1`** is a one-line wording fix on top, **`0.5.2`** fixes what a full end-to-end run
 of the README walkthrough found, **`0.5.3`** fixes what a whole-plugin code review found, **`0.5.4`** fixes what a
-security review found, **`0.5.5`** hardens one step of it, and **`0.5.6`** brings the nightly in line with GitHub's and Playwright's CI guidance. `.claude-plugin/plugin.json` reads `0.5.6`; tag the build with `claude plugin tag ./qa-warden`.
+security review found, **`0.5.5`** hardens one step of it, **`0.5.6`** brings the nightly in line with GitHub's and Playwright's CI guidance, and **`0.6.0`** is an architecture pass plus the fixes from a full end-to-end run. `.claude-plugin/plugin.json` reads `0.6.0`; tag the build with `claude plugin tag ./qa-warden`.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/). Versions are the
 number in `plugin.json`, which is also the key the installer caches under
@@ -18,7 +18,13 @@ never carry the same number**, or the second one has no way to announce itself.
 
 ---
 
-## [Unreleased]
+## 0.6.0 — one verdict per gate, prod-guard on WHATWG URLs, fixes from an end-to-end run (2026-10-28)
+
+**Upgrading:** run `/qa-warden:init --resync` (prod-guard now needs `node` on PATH and the stamped
+`scripts/prod-guard-core.mjs`; until you resync, the old guards keep working and doctor warns). Two
+user-owned files are never resynced: add `bugs/**/*.zip` to `.gitignore` (doctor warns until you
+do), and optionally copy the two new paragraphs under §Subagent roster into your `CLAUDE.md`. The
+README's new "Known issues" section lists what this release does not fix yet.
 
 ### Fixes from the 2026-10-20 end-to-end run
 
