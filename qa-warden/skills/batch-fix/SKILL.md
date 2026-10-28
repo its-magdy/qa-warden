@@ -58,16 +58,21 @@ Workflow:
 
    The filter is a path prefix or substring Playwright matches, NOT a shell glob — prefer a
    directory (`/qa-warden:batch-fix tests/checkout`).
-2. **Delegate to the `healer` subagent** to triage ONE representative failure
+2. **Delegate to the `healer` subagent** (in the foreground, `run_in_background: false`, so
+   steps 3–5 stay in this turn) to triage ONE representative failure
    end-to-end (trace, MCP replay, root cause) and extract the minimal
    selector/wait patch — do NOT triage inline; the bounded healer sandbox/turn-budget is the point. **If the healer returns a
    sentinel instead of a patch** (`artifacts/.healer-needs-*` — the representative
    failure classified as stale-context / auth-stale / data-drift / contract-change),
    close the loop per the sentinel→action table in `${CLAUDE_PLUGIN_ROOT}/reference/sentinel-actions.md` before
    re-invoking — never leave the sentinel orphaned (`/qa-warden:doctor` check 4 flags it).
-3. Propose the pattern (before/after snippet) to the user IN CHAT and wait
-   for explicit confirmation before editing N files — batch fixes are
-   high-blast-radius.
+3. Propose the pattern (before/after snippet) to the user and get explicit confirmation
+   before editing N files — batch fixes are high-blast-radius. **Ask with `AskUserQuestion`**
+   (show the snippet and both lists below in the question), not as a chat message you then wait
+   on: step 5's `run.sh recheck` is pre-approved by this skill's `allowed-tools`, and that grant
+   ends when the user sends their next message, so a typed chat reply makes the recheck prompt.
+   An `AskUserQuestion` answer keeps the turn going. If `AskUserQuestion` is unavailable, ask in
+   chat and expect the recheck to prompt once.
    **When the pattern re-points a LOCATOR, split the N specs first.** The healer ran its
    lookalike guard (`agents/healer.md` §HEAL02) on the ONE representative only, and step 5's
    green proves the new locator *matched something*, not the *right* thing — so the guard
