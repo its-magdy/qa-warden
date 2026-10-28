@@ -205,6 +205,13 @@ produces a green test that proves nothing):
    it after load and the page can hang on timers that never fire. Set it slightly *before* the
    instant the case cares about, then `advance:` to the instant.
 
+What `clock:` cannot reach: **the server's clock**. It moves the browser's time only, so a rule the
+server enforces on time (a hold or session expiry, "the server refuses checkout after expiry") needs a
+real-wait scenario or a declared test-support hook; when neither exists, record it as an uncovered gap
+(`test-case-contract` §"Situation steps"). Never plan a `clock:` scenario as the only coverage for a
+server-enforced rule, and never treat a `clock:` red that shows the server contradicting the documented
+rule as a test-design artifact: it is a defect signal.
+
 What you still cannot express: **the request side**. There is no key for "the POST carried
 `coupon=QA20`" — see `test-case-contract` §"Situation steps" → Honest limit. Record it as an open question;
 do not invent a key.

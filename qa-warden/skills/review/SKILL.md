@@ -37,6 +37,12 @@ a single spec/test or an explicit path:
 Tell the reviewer explicitly: *"Use the `reviewer` subagent to review
 `${TARGET:-the working diff}` and its imported page objects."*
 
+**Run the reviewer in the FOREGROUND and wait for it in this turn** (Agent tool
+`run_in_background: false`). The marker call below is pre-approved only by this skill's
+`allowed-tools`, and that grant lasts for the turn that invoked the skill. A background
+reviewer ends the turn, its result arrives as a new message, and the marker call then
+prompts (an e2e run saw that prompt on every review).
+
 **What it enforces** (full list + rationale in `agents/reviewer.md`): failable
 `expect` (Check 1), YAML-step→assertion coverage (2), `must_fail_when`/`fail_if`
 reified-or-waived (2b), oracle discriminating-power (2c, WARN + 2 mechanical FAIL sub-cases), oracle value

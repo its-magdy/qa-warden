@@ -20,6 +20,46 @@ never carry the same number**, or the second one has no way to announce itself.
 
 ## [Unreleased]
 
+### Fixes from the 2026-10-20 end-to-end run
+
+An end-to-end run of the whole plugin against a small app with 4 planted bugs caught all 4, but
+found these problems on the way.
+
+- **Bug traces with credentials could still be committed.** A Playwright trace holds the
+  basic-auth password, extra headers, every typed value and the cookies in plain text. The
+  template ignored only `bugs/**/trace.zip`, but the generator names its copies per scenario
+  (`R3b-trace.zip`, `ui-trace.zip`), and the run left 11 of them unignored. `templates/gitignore`
+  now ignores `bugs/**/*.zip`. `/qa-warden:doctor` Check 11b looks at every `.zip` under `bugs/`,
+  and it warns on a project still on the older `trace.zip`-only rule. `.gitignore` is not in the
+  resync set: add `bugs/**/*.zip` to an existing project's `.gitignore` by hand.
+- **`clock:` steps were described as testing the whole stack, and a real bug was nearly waived.**
+  The `test-case-contract` skill said "fake time still exercises the real stack", but `page.clock`
+  moves only the browser's clock. When a fake-clock scenario went red because the server
+  restarted a hold, the run concluded the red was a tool artifact and recommended waiving it. The
+  contract, the planner and the healer now say that `clock:` cannot age a server-side timer (plan a
+  real wait or a declared test hook, or record the gap), and that a `clock:` red showing the server
+  contradicting the documented rule is a defect signal, never a test-design artifact.
+- **`/qa-warden:review` asked permission to write its own marker.** A skill's `allowed-tools`
+  grant lasts only for the turn that invoked the skill. The reviewer ran in the background, so the
+  marker call came in a later turn and prompted on every review. The review skill now runs the
+  reviewer in the foreground. `/qa-warden:batch-fix` asks for its confirmation with
+  `AskUserQuestion` and runs the healer in the foreground for the same reason, so its recheck stays
+  pre-approved.
+- **`/qa-warden:init` asked permission to run its own scaffold script.** The skill now pre-approves
+  that one call.
+- **The session ran the generator and verifier itself when asked in a plain message** to resume a
+  human-only `/qa-warden:gen`. The stamped `CLAUDE.md` now says to answer with the command to type
+  instead. It also asks for one plain command per Bash call, since variables, `cd`, chains and
+  heredoc scripts made up most of the run's ~300 permission prompts. This changes new projects
+  only: `CLAUDE.md` is yours and `--resync` does not touch it, so copy the two paragraphs (under
+  §Subagent roster) into an existing project's `CLAUDE.md` by hand if you want them.
+- **The generator left a probe spec in `tests/` that it could not delete.** It now gets the
+  verifier's rule: probe inside the spec, or use `tests/probe.<slug>.spec.ts` and delete it with
+  `scripts/retire-delete.sh`.
+- **A jq that cannot run read as a corrupt report.** An x86-only `jq` on an arm64 Mac passes
+  `command -v`, and every `last-run.json` then read as `corrupt total=-1`. `/qa-warden:doctor`
+  Check 0 now runs `jq` once and names that problem.
+
 ### `/qa-warden:run mode=smoke` no longer calls its own fresh report stale
 
 - **A smoke run could exit 2 with "produced NO report" after writing a good report.** The smoke

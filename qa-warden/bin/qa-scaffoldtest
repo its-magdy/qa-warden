@@ -76,6 +76,10 @@
 #                      a stale claude-md-vocab row and a plugin file re-deriving the unmanifested walk
 #                      fail qa-selfcheck (9b arm 4, 9k) and are invisible to doctor, which still
 #                      fails a stamped script that re-derives the walk
+#  12. bug traces +   a trace copied into bugs/<slug>/ under any .zip name is ignored by a fresh
+#      a broken jq     stamp's .gitignore and doctor stays quiet; on the older trace.zip-only rule
+#                      doctor warns, and it names a committed one; a jq on PATH that cannot run
+#                      gets its own Check 0 line
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TEMPLATES="$here/templates"
 SCAFFOLD="$here/bin/qa-scaffold"
@@ -2380,6 +2384,41 @@ DR_OUT=$(cd "$PCD" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$
 DR_RC=$?
 dr_has "doctor still fails a stamped script that re-derives the walk (9k arm 3, project half)" \
   "❌ scripts/rewalk.sh builds a route-manifest path from a variable"
+check_eq "  and exits 1" "1" "$DR_RC"
+
+echo "== 12. bug trace zips under any name, and a jq that cannot run"
+# The generator copies a trace per scenario under its own name (R3b-trace.zip, ui-trace.zip), and
+# a trace holds credentials in plain text. An e2e run left 11 of them unignored under the older
+# `bugs/**/trace.zip` rule.
+new_dir; TZ=$DIR
+stamp "$TZ"
+check_eq "section 12: the stamp this fixture is built on exits 0" "0" "$RC"
+mkdir -p "$TZ/bugs/2026-10-20-checkout-fee"
+printf 'PK\003\004 not a real trace\n' > "$TZ/bugs/2026-10-20-checkout-fee/R3b-trace.zip"
+check "a fresh stamp's .gitignore ignores a trace copy that is not named trace.zip" \
+  git -C "$TZ" check-ignore -q bugs/2026-10-20-checkout-fee/R3b-trace.zip
+run_doctor "$TZ"
+dr_lacks "doctor is quiet about an ignored R3b-trace.zip" "is not gitignored"
+dr_lacks "  and reports no committed trace" "bug trace committed to git"
+# A project stamped before 0.6.0 keeps the older rule: .gitignore is outside the resync set.
+grep -vF 'bugs/**/*.zip' "$TZ/.gitignore" > "$TZ/.gitignore.new"
+printf 'bugs/**/trace.zip\n' >> "$TZ/.gitignore.new"
+mv "$TZ/.gitignore.new" "$TZ/.gitignore"
+run_doctor "$TZ"
+dr_has "doctor warns when only trace.zip is ignored" \
+  "⚠️  a .zip under bugs/<slug>/ is not gitignored"
+git -C "$TZ" add -f bugs/2026-10-20-checkout-fee/R3b-trace.zip
+run_doctor "$TZ"
+dr_has "doctor names a trace zip that is in the index" \
+  "⚠️  bug trace committed to git: bugs/2026-10-20-checkout-fee/R3b-trace.zip"
+# A jq that is found but cannot run (an x86-only binary on an arm64 Mac): exit 126, no output.
+mkdir -p "$TZ/fakebin"
+printf '#!/bin/sh\necho "jq: Bad CPU type in executable" >&2\nexit 126\n' > "$TZ/fakebin/jq"
+chmod +x "$TZ/fakebin/jq"
+run_doctor "$TZ" PATH="$TZ/fakebin:$PATH"
+dr_has "doctor names a jq that is installed but does not run" \
+  "❌ jq at $TZ/fakebin/jq is installed but does not run"
+dr_lacks "  and does not call it missing" "❌ jq not installed"
 check_eq "  and exits 1" "1" "$DR_RC"
 
 echo "---"

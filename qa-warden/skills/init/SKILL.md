@@ -2,6 +2,7 @@
 description: Bootstrap the QA runtime substrate into the current project (configs, scripts, fixtures, CLAUDE.md, permissions) and install dependencies. Run once per project after installing the QA Warden plugin.
 argument-hint: "[--no-install] (skip npm/playwright install) | [--resync] (force-refresh toolkit-owned substrate in an already-scaffolded project)"
 disable-model-invocation: true
+allowed-tools: Bash("${CLAUDE_SKILL_DIR}/../../bin/qa-scaffold" *)
 ---
 
 You are bootstrapping this project to use the **QA Warden** plugin. The plugin ships
@@ -14,8 +15,12 @@ substrate) that a plugin cannot carry on its own.
    current project root:
 
    ```bash
-   "${CLAUDE_PLUGIN_ROOT}/bin/qa-scaffold" "${CLAUDE_PROJECT_DIR}" $ARGUMENTS
+   "${CLAUDE_SKILL_DIR}/../../bin/qa-scaffold" "${CLAUDE_PROJECT_DIR}" $ARGUMENTS
    ```
+
+   Run it exactly as written, as its own Bash call: this skill's `allowed-tools` pre-approves
+   that exact path (the `${CLAUDE_SKILL_DIR}/../..` form, not `${CLAUDE_PLUGIN_ROOT}`, because
+   the rule and the command must spell the path the same way), so a rewritten call prompts.
 
    The script is idempotent and **never clobbers** an existing file — re-running
    it only fills in what's missing.

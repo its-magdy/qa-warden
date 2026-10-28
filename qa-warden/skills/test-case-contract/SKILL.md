@@ -117,7 +117,18 @@ fired-proof as an **orphan step** and FAILs it.
 **A scenario with a `fault:` step may not be tagged `smoke`.** The smoke lane is the nightly
 "does this feature actually work" gate; a scenario whose dependency is fabricated cannot answer that,
 and a green smoke run standing on a stub is reassurance without evidence. Author fault scenarios as
-`regression`. `clock:` carries no such restriction — fake time still exercises the real stack.
+`regression`. `clock:` carries no such restriction: the requests still reach the real server.
+
+**`clock:` moves the browser's clock, never the server's.** Playwright's `page.clock` replaces `Date`,
+the timers and `performance` inside the page only. A rule the SERVER enforces on time (a hold or
+session that expires, a token TTL, "checkout is refused after expiry") cannot be aged by a `clock:`
+step: author it as a real wait, or through a test-support hook the app context declares, and when
+neither is possible record it as an uncovered gap, not as covered. **A red under `clock:` is evidence,
+not a tool artifact.** When the red shows what the SERVER says (its remaining time, its expiry, its
+response) contradicting the documented rule, that is a defect signal: file the bug and keep the
+documented value. Never close it, or recommend waiving the scenario, on the grounds that fake time
+cannot reach the server. That reasoning explains why the clock did not move the server; it does not
+explain why the server disagrees with the rule.
 
 **HAR replay is BANNED.** `page.routeFromHAR(...)` / `browserContext.routeFromHAR(...)` anywhere under
 `tests/**` or `page-objects/**` is a reviewer **Check 11** FAIL and a write-time hook deny. Recording

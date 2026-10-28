@@ -41,7 +41,14 @@ fail=0; warn=0
 # 0. jq is load-bearing for check 1 — without this precheck a missing jq (or corrupt
 #    JSON) leaves the freshness gate blind, and the rollup prints "✅ healthy" over a
 #    broken run-of-record — a false-green inside the anti-false-green tool.
-command -v jq >/dev/null || { echo "❌ jq not installed — cannot validate last-run.json"; fail=$((fail+1)); }
+#    A jq that is on PATH but cannot run (an x86-only binary on an arm64 Mac: "Bad CPU type") passes
+#    `command -v` and then makes check-last-run.sh read every run as "corrupt total=-1", which names
+#    the wrong problem. Run it once so that case gets its own line.
+if ! command -v jq >/dev/null; then
+  echo "❌ jq not installed — cannot validate last-run.json"; fail=$((fail+1))
+elif ! jq -n 1 >/dev/null 2>&1; then
+  echo "❌ jq at $(command -v jq) is installed but does not run (wrong CPU architecture?) — every last-run.json reads as corrupt until a working jq is first on PATH"; fail=$((fail+1))
+fi
 
 # 0b. ripgrep (rg) is an undeclared but plugin-wide dependency — /qa-warden:retire's consumer-checks
 #     and the healer/reviewer/planner greps all use it. A MISSING rg makes /qa-warden:retire's "is this
@@ -1145,19 +1152,24 @@ if [ -d bugs ]; then
       fi
     done < <(grep -oE 'artifacts/test-results/[^ )`"'"'"']+\.(png|zip|md)' "$bf" 2>/dev/null | sort -u)
   done < <(find bugs -maxdepth 1 -name '*.md' -type f 2>/dev/null)
-  # The copied bugs/<slug>/trace.zip is LOCAL evidence only. A Playwright trace stores the
+  # A trace copied under bugs/<slug>/ is LOCAL evidence only. A Playwright trace stores the
   # browser context options (the httpCredentials password, the extraHTTPHeaders values), every
-  # fill() value and the Cookie/Authorization headers in plain text. templates/gitignore ignores
-  # `bugs/**/trace.zip`, but .gitignore is outside the resync set, so a project scaffolded before
-  # that rule shipped only hears about it here. Read-only: git ls-files / check-ignore write nothing.
-  if [ -n "$(find bugs -mindepth 2 -name trace.zip -type f 2>/dev/null | head -1)" ] \
+  # fill() value and the Cookie/Authorization headers in plain text. Agents name the copies
+  # freely (trace.zip, R3b-trace.zip, ui-trace.zip), so this looks at every .zip under bugs/.
+  # templates/gitignore ignores `bugs/**/*.zip` (until 0.6.0 only `bugs/**/trace.zip`), but
+  # .gitignore is outside the resync set, so a project scaffolded before that rule shipped only
+  # hears about it here. Read-only: git ls-files / check-ignore write nothing.
+  if [ -n "$(find bugs -name '*.zip' -type f 2>/dev/null | head -1)" ] \
      && command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
-    tracked_traces=$(git ls-files -- 'bugs/*/trace.zip' 2>/dev/null | tr '\n' ' ')
+    # A plain pathspec's * also matches /, so this lists a .zip at any depth under bugs/.
+    tracked_traces=$(git ls-files -- 'bugs/*.zip' 2>/dev/null | tr '\n' ' ')
     if [ -n "$tracked_traces" ]; then
-      echo "⚠️  bug trace committed to git: ${tracked_traces% } — a trace holds credentials in plain text (basic-auth password, extra headers, typed values, cookies). Run: git rm --cached <each path>, add 'bugs/**/trace.zip' to .gitignore, and rotate any QA credential that was pushed"; warn=$((warn+1))
+      echo "⚠️  bug trace committed to git: ${tracked_traces% } — a trace holds credentials in plain text (basic-auth password, extra headers, typed values, cookies). Run: git rm --cached <each path>, add 'bugs/**/*.zip' to .gitignore, and rotate any QA credential that was pushed"; warn=$((warn+1))
     fi
-    if ! git check-ignore -q "bugs/qa-probe/trace.zip" 2>/dev/null; then
-      echo "⚠️  bugs/<slug>/trace.zip is not gitignored — the next 'git add bugs/' commits credentials in plain text. Add 'bugs/**/trace.zip' to .gitignore (it ships in the template since 0.5.4)"; warn=$((warn+1))
+    # Probe a name that is NOT trace.zip: a project still on the older trace.zip-only rule
+    # ignores that one name and nothing else.
+    if ! git check-ignore -q "bugs/qa-probe/qa-probe-trace.zip" 2>/dev/null; then
+      echo "⚠️  a .zip under bugs/<slug>/ is not gitignored — the next 'git add bugs/' commits credentials in plain text. Add 'bugs/**/*.zip' to .gitignore (the template ships it since 0.6.0; an older 'bugs/**/trace.zip' line misses a copy named R3b-trace.zip or ui-trace.zip)"; warn=$((warn+1))
     fi
   fi
 fi
