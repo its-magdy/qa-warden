@@ -163,13 +163,26 @@ fi
 # a vacuous smoke gate, and Check 13 reports compiled tests as missing), so doctor runs the PLUGIN's
 # copy of the script instead. It only reads the project tree, so the answers are the ones the
 # resynced stamp will give; Check 9's substrate-drift ⚠️ already names the file and the resync.
-SPEC_LINKS=scripts/spec-links.sh
-SPEC_LINKS_PLUGIN=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../templates/scripts" 2>/dev/null && pwd)
-SPEC_LINKS_PLUGIN="${SPEC_LINKS_PLUGIN:+$SPEC_LINKS_PLUGIN/spec-links.sh}"
-if ! TEST_INV=$(bash "$SPEC_LINKS" tests 2>/dev/null) && [ -f "$SPEC_LINKS_PLUGIN" ]; then
-  SPEC_LINKS=$SPEC_LINKS_PLUGIN
-  TEST_INV=$(bash "$SPEC_LINKS" tests 2>/dev/null)
+# The choice is lib/stamped-helper.sh's, shared with /qa-warden:impact, /qa-warden:coverage and
+# /qa-warden:run: the project's copy when it is byte-identical to the plugin's, else the plugin's.
+# Its WARN line goes to /dev/null here because Check 9 reports the same file (missing ❌ or
+# drift ⚠️) with the same resync. bug-status.sh and post-run-checks.sh (Checks 4/14, 11b, 11c)
+# are resolved the same way, so a stamp that predates them, or an older copy, still gets answers
+# (post-run-checks.sh only while the project's bug-status.sh is current: see the lib's header).
+# A doctor copied out of its plugin has no lib/ beside it (and no templates/ to fall back on), so it
+# runs the project's copies, as it did before the resolver existed.
+# Chosen on presence alone: a lib that is there but fails to parse must fail loudly, not fall
+# to the stub.
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../../lib/stamped-helper.sh" ]; then
+  # shellcheck disable=SC1091  # resolved at run time, relative to this file
+  . "$(dirname "${BASH_SOURCE[0]}")/../../../lib/stamped-helper.sh"
+else
+  stamped_helper() { STAMPED_HELPER="scripts/$1"; }
 fi
+stamped_helper spec-links.sh >/dev/null;      SPEC_LINKS=$STAMPED_HELPER
+stamped_helper bug-status.sh >/dev/null;      BUG_STATUS=$STAMPED_HELPER
+stamped_helper post-run-checks.sh >/dev/null; POST_RUN_CHECKS=$STAMPED_HELPER
+TEST_INV=$(bash "$SPEC_LINKS" tests 2>/dev/null)
 SPEC_INV=$(bash "$SPEC_LINKS" specs 2>/dev/null)
 TEST_FILES=$(printf '%s\n' "$TEST_INV" | cut -f1 | grep -v '^$')
 # specs/_context/ is the tree with the MOST consumers — Checks 5, 5b, 13, 18 and 19 each used to
@@ -228,7 +241,7 @@ echo "smoke-tagged spec files: $SMOKE_SPECS / $TOTAL_SPECS (smoke-or-regression:
 #    count line, which is what feeds $warn — no re-derivation of either scan here.
 #    QA_SPEC_LINKS hands it the copy SPEC_LINKS settled on above, so an old stamp's Check 14 reads
 #    the plugin's inventory like every other check (the script warns, counted, when it has none).
-prc=$(QA_SPEC_LINKS=$SPEC_LINKS bash scripts/post-run-checks.sh --prefix '⚠️ ' --only sentinels,stray 2>/dev/null)
+prc=$(QA_SPEC_LINKS=$SPEC_LINKS bash "$POST_RUN_CHECKS" --prefix '⚠️ ' --only sentinels,stray 2>/dev/null)
 printf '%s\n' "$prc" | grep -v '^post-run:' | grep -v '^$'
 prc_n=$(printf '%s\n' "$prc" | sed -nE 's/^post-run: sentinels=([0-9]+) stray=([0-9]+).*/\1 \2/p')
 for n in $prc_n; do warn=$((warn+n)); done
@@ -961,18 +974,19 @@ if [ -f scripts/spec-links.sh ]; then
   sl_arm=$(awk '/^[[:space:]]*unmanifested\)/{f=1} f{print} f&&/^[[:space:]]*;;/{exit}' scripts/spec-links.sh | sed '/^[[:space:]]*#/d')
   sl_walk=$(awk '/^collected_tests\(\)/{f=1} f{print} f&&/^}/{exit}' scripts/spec-links.sh | sed '/^[[:space:]]*#/d')
   if [ -z "$sl_arm" ]; then
-    echo "❌ scripts/spec-links.sh has no \`unmanifested)\` arm — /qa-warden:impact's ### BLIND SPOTS and /qa-warden:coverage dim 0 both call it; without it impact reports a zero-match as if it were exhaustive and coverage re-labels every unmanifested test's routes as 'planned, untested'"
+    echo "❌ scripts/spec-links.sh has no \`unmanifested)\` arm — /qa-warden:impact's ### BLIND SPOTS and /qa-warden:coverage dim 0 both call it; they run the plugin's copy while this stamp differs from it, but a direct \`bash scripts/spec-links.sh unmanifested\` is now a usage error (exit 2). Run /qa-warden:init --resync"
     fail=$((fail+1))
   elif [ -z "$sl_walk" ]; then
-    # An OLDER STAMP, not a defect: doctor and /qa-warden:coverage already read the plugin's copy
-    # (SPEC_LINKS, above), and Check 9's drift ⚠️ carries the resync. Say which copy answered;
+    # An OLDER STAMP, not a defect: doctor, /qa-warden:coverage, /qa-warden:impact and
+    # /qa-warden:run already read the plugin's copy (lib/stamped-helper.sh; SPEC_LINKS, above),
+    # and Check 9's drift ⚠️ carries the resync. Say which copy answered;
     # do not count it, so an upgrade alone never turns doctor red.
     echo "ℹ️  scripts/spec-links.sh predates the shared test inventory (no collected_tests()) — doctor used the plugin's copy for its test/spec checks; /qa-warden:init --resync updates the stamp"
   elif ! printf '%s\n' "$sl_walk" | grep -qF -e '(*.metamorphic)' || ! printf '%s\n' "$sl_arm" | grep -q '= twin'; then
-    echo "❌ scripts/spec-links.sh \`unmanifested\` no longer excludes *.metamorphic.spec.ts — a twin never carries a manifest by design (verifier V4 emits one per SPEC), so every twin now reports as a blind spot in /qa-warden:impact and as an UNMANIFESTED warning in /qa-warden:coverage dim 0"
+    echo "❌ scripts/spec-links.sh \`unmanifested\` no longer excludes *.metamorphic.spec.ts — a twin never carries a manifest by design (verifier V4 emits one per SPEC), so every twin reports as a blind spot wherever this stamped copy runs (a direct \`bash scripts/spec-links.sh unmanifested\`; /qa-warden:impact and /qa-warden:coverage run the plugin's copy while the stamp differs). Run /qa-warden:init --resync"
     fail=$((fail+1))
   elif ! printf '%s\n' "$sl_walk" | grep -qF -e "! -name '_*'" || ! printf '%s\n' "$sl_walk" | grep -qF -e "! -path '*/_*/*'"; then
-    echo "❌ scripts/spec-links.sh collected_tests() no longer excludes \`_\`-prefixed scratch specs in both forms (\`! -name '_*'\` and \`! -path '*/_*/*'\`, playwright.config.ts's testIgnore) — /qa-warden:impact, /qa-warden:coverage, post-run-checks.sh and doctor now count tests Playwright never runs"
+    echo "❌ scripts/spec-links.sh collected_tests() no longer excludes \`_\`-prefixed scratch specs in both forms (\`! -name '_*'\` and \`! -path '*/_*/*'\`, playwright.config.ts's testIgnore) — the stamped post-run-checks.sh that /qa-warden:report runs now counts tests Playwright never runs (doctor, /qa-warden:impact, /qa-warden:coverage and /qa-warden:run use the plugin's copy while the stamp differs). Run /qa-warden:init --resync"
     fail=$((fail+1))
   fi
 fi
@@ -1151,14 +1165,14 @@ if [ -d bugs ]; then
     # bug-status.sh was extracted to end it; a hand-mirrored sixth copy in the file that POLICES
     # the others means a newly-accepted authored form makes doctor warn "missing Status marker"
     # on files the canonical parser then classifies fine.
-    [ -n "$(bash scripts/bug-status.sh "$bf" 2>/dev/null)" ] \
+    [ -n "$(bash "$BUG_STATUS" "$bf" 2>/dev/null)" ] \
       || { echo "⚠️  bug file missing Status marker: $bf (reads as a live defect — add '## Status: open|fixed|reverted')"; warn=$((warn+1)); }
     # lifecycle CLASS (canonical parser + canonical resolved-keyword set, both in
     # scripts/bug-status.sh): resolved bugs need no evidence reconciliation. Deliberately a SECOND
     # invocation rather than re-typing the `fixed*|reverted*|resolved*|closed*` alternation against
     # the value above — that alternation is exactly what --class exists to single-source (M-4), and
     # bugs/ holds a handful of small files, so the extra fork is not worth re-opening that gap.
-    [ "$(bash scripts/bug-status.sh --class "$bf" 2>/dev/null)" = resolved ] && continue
+    [ "$(bash "$BUG_STATUS" --class "$bf" 2>/dev/null)" = resolved ] && continue
     # this bug reads as a LIVE red — reconcile its evidence durability
     while read -r ev; do
       [ -z "$ev" ] && continue
@@ -1205,8 +1219,8 @@ if [ -d bugs ] && [ -d tests ]; then
     [ -n "$bug" ] || continue
     [ -f "$bug" ] || { echo "⚠️  parked marker in $t links $bug which does NOT exist — file the bug or remove the marker (reviewer Check 3 FAILs this)"; warn=$((warn+1)); continue; }
     # canonical parser AND canonical resolved-keyword set — scripts/bug-status.sh --class
-    if [ "$(bash scripts/bug-status.sh --class "$bug" 2>/dev/null)" = resolved ]; then
-      sv=$(bash scripts/bug-status.sh "$bug" 2>/dev/null)   # raw value, for the message only
+    if [ "$(bash "$BUG_STATUS" --class "$bug" 2>/dev/null)" = resolved ]; then
+      sv=$(bash "$BUG_STATUS" "$bug" 2>/dev/null)   # raw value, for the message only
       echo "⚠️  stale parked marker: $t parks against $bug but its Status is '${sv%% *}' — the defect is resolved; remove the test.fail/test.fixme marker (or reopen the bug). A live marker on a fixed bug launders it green (P-14)."; warn=$((warn+1))
     fi
   done < <(grep -rnE 'test\.(fail|fixme)' tests/ 2>/dev/null | grep 'bugs/')

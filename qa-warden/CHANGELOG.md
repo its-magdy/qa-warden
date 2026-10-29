@@ -20,6 +20,32 @@ never carry the same number**, or the second one has no way to announce itself.
 
 ## [Unreleased]
 
+### One rule for which copy of a stamped helper runs
+
+- **A plugin script now runs the plugin's own copy of a read-only helper whenever the project's
+  copy is missing or older.** The plugin's scripts call helpers stamped into the project's
+  `scripts/`, and those change only on `/qa-warden:init --resync`. Before this, only
+  `spec-links.sh` had a fallback, written out three times (doctor, `/qa-warden:impact`,
+  `/qa-warden:coverage`) with different warnings, and it fired only when the old copy failed the
+  call. `/qa-warden:run` had no fallback for `resolve-spec-path.sh`, `post-run-checks.sh` or
+  `check-last-run.sh`, and doctor had none for `bug-status.sh` or `post-run-checks.sh`. A missing
+  one broke the command (in doctor, it reported every bug file as having no Status), and an old
+  one could answer wrongly with a normal exit. One sourced
+  function, `lib/stamped-helper.sh`, now decides for all five read-only helpers (`spec-links.sh`,
+  `resolve-spec-path.sh`, `post-run-checks.sh`, `check-last-run.sh`, `bug-status.sh`). It runs the
+  project's copy when it is byte-identical to the plugin's template, and otherwise the plugin's
+  copy, with one line: `WARN: scripts/<helper> is missing|differs from this plugin's copy — used the
+  plugin's copy. Run /qa-warden:init --resync to update the stamp.` Doctor keeps that line out of
+  its output, because Check 9 already names the file. `prod-guard*`, `retire-delete.sh` and every
+  other helper that writes always run the project's copy. `post-run-checks.sh` falls back only
+  while the project's `bug-status.sh` is current, because it calls the project's copy of that one.
+- `/qa-warden:run mode=smoke` hands `post-run-checks.sh` the resolved `spec-links.sh`, as doctor
+  already did. On an older stamp the unmanaged-test scan now runs, where it used to report "could
+  NOT run".
+- `/qa-warden:impact` and `/qa-warden:coverage` now print the warning above in place of their own
+  wording. A missing `scripts/spec-links.sh` still stops both with exit 2, as before.
+- No stamped file changed, so this needs no `--resync`.
+
 ### One manifest reader; each resync-set row declares its protection tier
 
 - **New `lib/manifest.sh`, the plugin's one reader of its data lists.** Doctor, `/qa-warden:coverage`,

@@ -42,7 +42,8 @@ Workflow:
    The `precheck` mode of `/qa-warden:run`'s script runs the filter (`--retries=0`, JSON to
    `artifacts/batch-fix-precheck.json`, stderr to `.log`, never touching `last-run.json`), reads
    Playwright's exit code AND the JSON as one verdict, and prints a `run(precheck): … (verdict=<word>)`
-   line plus what to do. Act on its exit code:
+   line plus what to do. A `WARN: scripts/<helper> … used the plugin's copy` line does not change
+   the verdict; relay its `/qa-warden:init --resync` hint. Act on its exit code:
    - **`0` — verdict `red`:** `filter matched N test(s); M failing — proceed to step 2`, followed by
      the top heal-log signatures (`artifacts/heal-log.jsonl`) when that log exists — the pattern
      this batch likely shares. Only this proceeds.
