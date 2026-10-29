@@ -2570,8 +2570,12 @@ tier_run '.permissions.allow += ["Write(scripts/runtime-dirs.txt)"]'
 sc_has "a Write allow counts as an allow glob" 'marks scripts/runtime-dirs.txt `prompt` but it sits under the allow rule Write(scripts/runtime-dirs.txt)'
 tier_run '.permissions.allow += ["Edit"]'
 sc_has "a bare Edit allow covers every path and is named as itself" 'marks scripts/oracle-keys.txt `prompt` but it sits under the allow rule Edit in'
-tier_run '.permissions.deny += ["Edit(scripts[!x]init.sh)"]'
-check_eq "a class never matches /: Edit(scripts[!x]init.sh) does not deny scripts/init.sh" "0" "$(tier_lines scripts/init.sh)"
+tier_run '.permissions.deny += ["Edit(scripts[!x]init.sh)", "Edit(scripts[^x]init.sh)"]'
+check_eq "a class never matches /: Edit(scripts[!x]init.sh) and [^x] do not deny scripts/init.sh" "0" "$(tier_lines scripts/init.sh)"
+tier_run '.permissions.deny -= ["Edit(scripts/doctor.sh)"] | .permissions.deny += ["Edit(scripts[+-0]doctor.sh)"]'
+sc_has "  nor does a range that spans / (Edit(scripts[+-0]doctor.sh) is reported as unreadable)" \
+  '❌ templates/settings.json rule Edit(scripts[+-0]doctor.sh) cannot be read as a path pattern'
+sc_has "  and scripts/doctor.sh is left uncovered" 'marks scripts/doctor.sh `deny` but no Edit(...) deny'
 tier_run '.permissions.allow += ["Edit(scripts/[z-a]nit.sh)"]'
 sc_has "an allow rule whose class does not compile is reported, not read as covering nothing" \
   '❌ templates/settings.json rule Edit(scripts/[z-a]nit.sh) cannot be read as a path pattern'

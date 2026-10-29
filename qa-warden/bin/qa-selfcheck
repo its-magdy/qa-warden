@@ -679,11 +679,12 @@ fi
 # read the gitignore way: a leading `/` or `./` anchors the rule at the project root, a rule with no
 # other `/` (outside a class) matches the name at any depth, `**` spans directories only as a whole
 # segment (`**/`, `/**/`, a trailing `/**`; anywhere else it is a `*`), `*`, `?` and `[...]` stay
-# inside one segment (`[!…]` negates, a leading `]` is literal), `\x` is a literal x, a rule that
+# inside one segment (`[!…]` or `[^…]` negates, a leading `]` is literal), `\x` is a literal x, a rule that
 # matches a directory covers everything under it, and a trailing `/` matches directories only.
 # A rule naming the root itself (`/`, `.`, `./`) covers every path. `//abs` and `~/…` name paths
-# outside the project and print nothing. A class this reader cannot translate (`[/]`, no
-# closing `]`) prints `!`, as rule_res does for a TAB or an ERE that does not compile.
+# outside the project and print nothing. A class this reader cannot translate (no closing `]`,
+# a `\` or a POSIX `[:…:]` inside it, a positive class that can match `/`, e.g. `[/]` or the
+# range `[+-0]`) prints `!`, as rule_res does for a TAB or an ERE that does not compile.
 perm_glob_re() {
   local g=$1 out="" lit="" anchored="" seg=1 dironly="" c cls neg first rest
   case "$g" in
@@ -691,12 +692,13 @@ perm_glob_re() {
     ('./'*) g=${g#./}; anchored=1 ;;
     ('/'*) g=${g#/}; anchored=1 ;;
   esac
+  g=$(printf '%s' "$g" | sed -e 's#//*#/#g')
   case "$g" in
-    (''|.|./) printf '^.*$\n'; return 0 ;;
+    (''|.|./|/) printf '^.*$\n'; return 0 ;;
     (*/) g=${g%/}; dironly=1 ;;
   esac
   if [ -z "$anchored" ]; then
-    case "$(printf '%s' "$g" | sed -e 's/\[[^]]*\]//g')" in
+    case "$(printf '%s' "$g" | sed -e 's/\\.//g' -e 's/\[[^]]*\]//g')" in
       (*/*) : ;;
       (*) out="(.*/)?" ;;
     esac
@@ -719,7 +721,7 @@ perm_glob_re() {
       ('['*)
         rest=${g#'['}; neg=""; first=""
         case "$rest" in
-          ('!'*) neg=1; rest=${rest#'!'} ;;
+          ('!'*|'^'*) neg=1; rest=${rest#?} ;;
         esac
         case "$rest" in
           (']'*) first="]"; rest=${rest#']'} ;;
@@ -730,11 +732,13 @@ perm_glob_re() {
         esac
         cls=${rest%%']'*}; g=${rest#*']'}
         case "$cls" in
-          (*/*) printf '!\n'; return 0 ;;
+          (*/*|*'\'*|*'[:'*|*'[.'*|*'[='*) printf '!\n'; return 0 ;;
         esac
         if [ -n "$neg" ]; then
           out="$out$(ere_quote "$lit")[^$first/$cls]"
         else
+          # A range can span `/` (0x2F, e.g. `[+-0]`) and an ERE cannot take it back out.
+          if [[ / =~ ^[$first$cls]$ ]] 2>/dev/null; then printf '!\n'; return 0; fi
           out="$out$(ere_quote "$lit")[$first$cls]"
         fi
         lit=""; seg="" ;;
@@ -771,7 +775,7 @@ rule_res() {
     re=$(perm_glob_re "$rp")
     [ -n "$re" ] || continue
     if [ "$re" != "!" ]; then
-      [[ "" =~ $re ]]
+      [[ "" =~ $re ]] 2>/dev/null
       [ $? -eq 2 ] && re="!"
     fi
     printf '%s\t%s\n' "$re" "$r"
