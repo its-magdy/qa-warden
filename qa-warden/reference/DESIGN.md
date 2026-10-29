@@ -503,10 +503,20 @@ delete them to make the toolkit sound more complete than it is.
   receipt makes the report possible even where the obedience is not granted, which is the half of
   "neither warned nor obeyed" that costs nothing to fix.
 - **Plugin scripts call the project's STAMPED helpers, so a helper change must stay compatible with
-  older stamps.** The plugin doctor runs the project's `check-last-run.sh`, `spec-links.sh`,
-  `post-run-checks.sh`, `bug-status.sh` and `prod-guard.sh`, as `coverage.sh` and `impact.sh` already
-  do with `spec-links.sh` and `run.sh` with three others; those copies change only on `/qa-warden:init --resync`, so a new plugin
-  can meet an old helper until the user resyncs. `prod-guard-core.mjs` is the case where a stamp can
+  older stamps.** The plugin doctor calls the project's `check-last-run.sh`, `spec-links.sh`,
+  `post-run-checks.sh`, `bug-status.sh` and `prod-guard.sh`, as `coverage.sh` and `impact.sh` do
+  with `spec-links.sh` and `run.sh` with four others; those copies change only on `/qa-warden:init --resync`, so a new plugin
+  can meet an old helper until the user resyncs. For the five READ-ONLY helpers (`spec-links.sh`,
+  `resolve-spec-path.sh`, `post-run-checks.sh`, `check-last-run.sh`, `bug-status.sh`) the plugin
+  scripts ask `lib/stamped-helper.sh` which copy to run: the project's when it is byte-identical to
+  the plugin's template, else the plugin's own, with one `WARN` naming the resync. Byte equality,
+  not "the call failed": every other helper's exit code is an answer, so an old copy cannot be told
+  from a correct "no" by running it. The fallback is safe only because those helpers write nothing;
+  `prod-guard*` and anything that writes always run the project's copy, and doctor Check 1 still
+  runs the project's `check-last-run.sh` directly. Compatibility still matters where a stamped
+  helper calls another (`post-run-checks.sh` → `bug-status.sh`, so `post-run-checks.sh` falls back
+  only while the project's `bug-status.sh` is current) and where a skill calls one directly
+  (`/qa-warden:report`). `prod-guard-core.mjs` is the case where a stamp can
   be old, current or MIXED: doctor Check 8 warns on guards that predate the core (they still work)
   and fails only on a guard that needs a core the project lacks, which refuses every run itself.
 - **Mobile is deliberately out of scope, and the successor is a sibling plugin, not a mode here.**
