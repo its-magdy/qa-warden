@@ -32,8 +32,8 @@
 #                zero-test   the report resolved no tests
 #                stale       the file is older than max_age, or its mtime is before fresh_since —
 #                            a previous run's report
-#                unchecked   check-last-run.sh itself failed (missing script on an old stamp, any
-#                            other exit), or fresh_since is malformed (not 1-18 digits) — never a pass
+#                unchecked   check-last-run.sh itself failed (no copy in the project OR the plugin,
+#                            any other exit), or fresh_since is malformed (not 1-18 digits) — never a pass
 #                incomplete  the run did not complete: an exit other than 0 or 1 (interrupted,
 #                            killed by a signal, crashed) whatever the failure count, OR exit 1
 #                            with 0 failures recorded — timeout / --max-failures / worker crash
@@ -45,7 +45,18 @@
 #
 # Like every plugin script, this calls the STAMPED helper (reference/DESIGN.md: "Plugin scripts
 # call the project's STAMPED helpers"), so it relies only on check-last-run.sh's long-stable CLI:
-# the one line, exit codes 0/3/4/5/6. Run from the PROJECT root, like run.sh. Bash 3.2 safe.
+# the one line, exit codes 0/3/4/5/6. Which copy runs is lib/stamped-helper.sh's choice: the
+# project's when it is byte-identical to the plugin's, else the plugin's, with one WARN line on
+# stdout naming the resync. Run from the PROJECT root, like run.sh. Bash 3.2 safe.
+
+# Sourced here as well as by run.sh, so the module stands alone when sourced on its own.
+# lib/ missing (incomplete install): the project's copy. A lib that is there but fails to parse
+# must fail loudly, not fall to the stub, so the stub is chosen on presence alone.
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../../lib/stamped-helper.sh" ]; then
+  . "$(dirname "${BASH_SOURCE[0]}")/../../../lib/stamped-helper.sh"
+else
+  stamped_helper() { STAMPED_HELPER="scripts/$1"; }
+fi
 
 # shellcheck disable=SC2034  # VERDICT/LR/TOTAL/FAILED are outputs, read by the caller that sources this
 run_verdict() {
@@ -64,7 +75,8 @@ run_verdict() {
   # it still decides missing, corrupt and zero-test, in its order, and never stale; the anchor
   # test below decides that. check-last-run.sh is stamped into projects, so it stays as it is.
   [ -z "$fresh_since" ] || max_age=999999999999
-  LR=$(bash scripts/check-last-run.sh "$json" "$max_age" 2>/dev/null); lr_rc=$?
+  stamped_helper check-last-run.sh
+  LR=$(bash "$STAMPED_HELPER" "$json" "$max_age" 2>/dev/null); lr_rc=$?
   TOTAL=${LR##*total=}; TOTAL=${TOTAL%% *}
   case "$TOTAL" in ''|*[!0-9-]*) TOTAL=-1 ;; esac
   FAILED=0

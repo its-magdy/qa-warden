@@ -47,12 +47,17 @@ fi
 # `tests` mode) still has `unmanifested`, but its walk ignores playwright.config.ts's testIgnore
 # and lists `_`-prefixed scratch tests Playwright never runs. Run the PLUGIN's copy instead (it
 # only reads the project tree) and say so — same fallback as doctor and /qa-warden:coverage.
-SPEC_LINKS=scripts/spec-links.sh
-SPEC_LINKS_PLUGIN="$(dirname "${BASH_SOURCE[0]}")/../../../templates/scripts/spec-links.sh"
-if ! bash "$SPEC_LINKS" tests >/dev/null 2>&1 && [ -f "$SPEC_LINKS_PLUGIN" ]; then
-  echo "WARN: scripts/spec-links.sh predates the shared test inventory — BLIND SPOTS below used the plugin's copy. Run /qa-warden:init --resync to update the stamp."
-  SPEC_LINKS=$SPEC_LINKS_PLUGIN
+# lib/stamped-helper.sh makes the choice (any copy that is not byte-identical to the plugin's) and
+# prints the one WARN line, naming the resync.
+# lib/ missing (incomplete install): the project's copy. A lib that is there but fails to parse
+# must fail loudly, not fall to the stub, so the stub is chosen on presence alone.
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../../lib/stamped-helper.sh" ]; then
+  . "$(dirname "${BASH_SOURCE[0]}")/../../../lib/stamped-helper.sh"
+else
+  stamped_helper() { STAMPED_HELPER="scripts/$1"; }
 fi
+stamped_helper spec-links.sh
+SPEC_LINKS=$STAMPED_HELPER
 
 # ---------------------------------------------------------------------------
 # source= is the ODD ONE OUT: it queries the intake-authored [grounded: …] stamps in

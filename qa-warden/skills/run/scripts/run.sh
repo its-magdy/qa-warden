@@ -73,6 +73,17 @@ set -- ${_rest[@]+"${_rest[@]}"}
 
 # run_verdict <pw_exit> <json> <max_age> [fresh_since] → $VERDICT $LR $TOTAL $FAILED (see that file's header).
 . "$(dirname "${BASH_SOURCE[0]}")/run-verdict.sh"
+# stamped_helper <name> → $STAMPED_HELPER: which copy of a stamped read-only helper to run — the
+# project's scripts/<name> when it is byte-identical to the plugin's, else the plugin's copy, with
+# one WARN line naming /qa-warden:init --resync (see that file's header). Called outside `$( … )`
+# so the line reaches this script's output and prints once per helper.
+# lib/ missing (incomplete install): the project's copy. A lib that is there but fails to parse
+# must fail loudly, not fall to the stub, so the stub is chosen on presence alone.
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../../lib/stamped-helper.sh" ]; then
+  . "$(dirname "${BASH_SOURCE[0]}")/../../../lib/stamped-helper.sh"
+else
+  stamped_helper() { STAMPED_HELPER="scripts/$1"; }
+fi
 
 # The `incomplete` message, shared by every mode. $1 = mode label, $2 = what to inspect.
 incomplete_exit() {
@@ -90,12 +101,13 @@ case "$MODE" in
     # This runs the COMPILED TEST. Map every accepted form (bare <area>/<feature>, .md
     # spec, test path) to it AND verify it exists via the canonical resolver — a raw .md
     # path matches ZERO tests (testDir is ./tests) and the report would be a phantom
-    # 0-test "run". Missing script → re-run /qa-warden:init to stamp it.
-    TEST=$(bash scripts/resolve-spec-path.sh test "$ARG") || exit 2
+    # 0-test "run". A missing or older stamp runs the plugin's copy (stamped_helper, above).
+    stamped_helper resolve-spec-path.sh; RESOLVE_SPEC_PATH=$STAMPED_HELPER
+    TEST=$(bash "$RESOLVE_SPEC_PATH" test "$ARG") || exit 2
     # Report slug from the SAME canonical resolver (`reportname` mode) — area-qualified
     # (auth/login → auth-login) so two areas' same-named specs can't clobber each other's
     # report files.
-    name=$(bash scripts/resolve-spec-path.sh reportname "$ARG") || exit 2
+    name=$(bash "$RESOLVE_SPEC_PATH" reportname "$ARG") || exit 2
     npx playwright test "$TEST" \
       --reporter=json \
       > "reports/headless-$name.json" 2> "reports/headless-$name.log"
@@ -111,7 +123,8 @@ case "$MODE" in
       *)          echo "run(single): $VERDICT report — NOT a pass."; exit 2 ;;
     esac
     echo "run(single): report at reports/headless-$name.json (log: reports/headless-$name.log)"
-    bash scripts/post-run-checks.sh --only bugs
+    stamped_helper post-run-checks.sh
+    bash "$STAMPED_HELPER" --only bugs
     exit 0
     ;;
 
@@ -152,7 +165,11 @@ case "$MODE" in
         exit 2 ;;
     esac
 
-    if ! bash scripts/post-run-checks.sh; then
+    # The stray scan reads spec-links.sh's inventory: hand it the copy stamped_helper settles on,
+    # as doctor does, so an older stamp's scan still runs instead of reporting "could NOT run".
+    stamped_helper spec-links.sh;      SPEC_LINKS=$STAMPED_HELPER
+    stamped_helper post-run-checks.sh
+    if ! QA_SPEC_LINKS=$SPEC_LINKS bash "$STAMPED_HELPER"; then
       echo "run(smoke): scripts/post-run-checks.sh failed to run (missing script? wrong cwd?) —"
       echo "sentinel/stray/open-bug scans did NOT run. Do not report a pass without them."
       exit 2
@@ -170,11 +187,12 @@ case "$MODE" in
     # the compiled test AND verify it exists, via the canonical resolver — a raw .md
     # path matches ZERO tests (testDir is ./tests) and would otherwise be counted as a
     # 100%-stable pass on nothing (the false-green this toolkit exists to prevent).
-    TEST=$(bash scripts/resolve-spec-path.sh test "$ARG") || exit 2
+    stamped_helper resolve-spec-path.sh; RESOLVE_SPEC_PATH=$STAMPED_HELPER
+    TEST=$(bash "$RESOLVE_SPEC_PATH" test "$ARG") || exit 2
     mkdir -p artifacts   # guard: redirect target must exist
     # Report slug from the SAME canonical resolver (`reportname` mode) — area-qualified
     # so two areas' same-named specs can't clobber each other's report files.
-    name=$(bash scripts/resolve-spec-path.sh reportname "$ARG") || exit 2
+    name=$(bash "$RESOLVE_SPEC_PATH" reportname "$ARG") || exit 2
     # ONE invocation with --repeat-each, not N separate runs: every extra invocation
     # pays full Playwright startup. --workers=1 keeps the repeats back-to-back serial
     # (what a repeatability probe wants); --retries=0 so a flake can't hide behind a retry.
@@ -273,7 +291,8 @@ case "$MODE" in
       *)          echo "run(changed): $VERDICT JSON — do NOT report a pass."; exit 2 ;;
     esac
     echo "run(changed): report at reports/changed.json (log: reports/changed.log)"
-    bash scripts/post-run-checks.sh --only bugs
+    stamped_helper post-run-checks.sh
+    bash "$STAMPED_HELPER" --only bugs
     exit 0
     ;;
 

@@ -55,14 +55,18 @@ fi
 # SPEC_LINKS is the copy every call below runs. A stamp older than the inventory exits 2 on
 # `specs`; reading nothing would print EMPTY dims 1b and 2 (a false clean), so run the PLUGIN's
 # copy instead — it only reads the project tree — and say so, with the resync that fixes it.
-# (Same fallback as doctor's.)
-SPEC_LINKS=scripts/spec-links.sh
-SPEC_LINKS_PLUGIN="$(dirname "${BASH_SOURCE[0]}")/../../../templates/scripts/spec-links.sh"
-if ! SPEC_INV=$(bash "$SPEC_LINKS" specs 2>/dev/null) && [ -f "$SPEC_LINKS_PLUGIN" ]; then
-  echo "WARN: scripts/spec-links.sh predates the shared test inventory — this report used the plugin's copy. Run /qa-warden:init --resync to update the stamp."
-  SPEC_LINKS=$SPEC_LINKS_PLUGIN
-  SPEC_INV=$(bash "$SPEC_LINKS" specs 2>/dev/null)
+# (Same fallback as doctor's: lib/stamped-helper.sh makes the choice — any copy that is not
+# byte-identical to the plugin's — and prints the one WARN line, naming the resync.)
+# lib/ missing (incomplete install): the project's copy. A lib that is there but fails to parse
+# must fail loudly, not fall to the stub, so the stub is chosen on presence alone.
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../../lib/stamped-helper.sh" ]; then
+  . "$(dirname "${BASH_SOURCE[0]}")/../../../lib/stamped-helper.sh"
+else
+  stamped_helper() { STAMPED_HELPER="scripts/$1"; }
 fi
+stamped_helper spec-links.sh
+SPEC_LINKS=$STAMPED_HELPER
+SPEC_INV=$(bash "$SPEC_LINKS" specs 2>/dev/null)
 AUTHORED_SPECS=$(printf '%s\n' "$SPEC_INV" | cut -f1 | grep -v '^$')
 BASIS_FILES=$(find specs/_context -name '*.basis.md' 2>/dev/null)
 if [ -n "$AREA" ]; then

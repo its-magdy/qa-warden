@@ -43,6 +43,8 @@ already printed why (missing/stale/corrupt/zero-test JSON, a non-zero
 Playwright exit masked by a 0-failure JSON — F-04 — a run interrupted or killed
 before it finished, or bad args). Stop and
 relay that message rather than summarizing.
+A `WARN: scripts/<helper> … used the plugin's copy` line (a stamped helper that is missing
+or older than the plugin) does not change the result; relay its `/qa-warden:init --resync` hint.
 
 ## mode=single
 

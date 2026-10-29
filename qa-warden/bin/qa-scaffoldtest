@@ -80,6 +80,13 @@
 #      a broken jq     stamp's .gitignore and doctor stays quiet; on the older trace.zip-only rule
 #                      doctor warns, and it names a committed one; a jq on PATH that cannot run
 #                      gets its own Check 0 line
+#  13. stamped        lib/stamped-helper.sh driven directly: a current stamp runs the project's
+#      helpers      copy; a stale one (failing the call, or still answering it), a missing one,
+#                      run the plugin's copy with one WARN per helper; no plugin copy runs the
+#                      project's; prod-guard*, retire-delete, cli-fill-env and init never fall back;
+#                      post-run-checks.sh does not fall back unless the project's bug-status.sh is current.
+#                      Then run(single) with no resolve-spec-path.sh, run(smoke)'s stray scan on an
+#                      old spec-links.sh and doctor Check 11b with no bug-status.sh
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TEMPLATES="$here/templates"
 SCAFFOLD="$here/bin/qa-scaffold"
@@ -1386,7 +1393,9 @@ check_eq "a JSON with no .stats → corrupt, never zero-test"    "corrupt -1 0" 
 check_eq "0 resolved tests → zero-test, whatever the exit"     "zero-test 0 0"  "$(verdict 1 "$FX/zero.json")"
 check_eq "older than max_age → stale"                          "stale 3 0"      "$(verdict 0 "$FX/old.json" 900)"
 # shellcheck disable=SC1090  # same module as verdict() above
-check_eq "no stamped check-last-run.sh → unchecked" "unchecked -1 0" \
+check_eq "no stamped check-last-run.sh → the plugin's copy answers, with the resync WARN" \
+  "WARN: scripts/check-last-run.sh is missing — used the plugin's copy. Run /qa-warden:init --resync to update the stamp.
+green 3 0" \
   "$(cd "$STUB" && . "$VERDICT_SH" && run_verdict 0 "$FX/green.json" 900 && echo "$VERDICT $TOTAL $FAILED")"
 # A freshness anchor (run_verdict's 4th argument) replaces max_age: stale iff mtime < anchor.
 # The JSON verdicts still outrank it, and it outranks the exit code, as stale did before.
@@ -1849,12 +1858,13 @@ check "post-run-checks on an old stamp says the stray scan could NOT run, and na
   grep -qF -e "WARN: unmanaged-spec scan could NOT run — scripts/spec-links.sh has no \`tests\` inventory" <<<"$PR_OUT"
 check "  (the resync hint)" grep -qF -e "Run /qa-warden:init --resync" <<<"$PR_OUT"
 check_eq "  and counts it" "post-run: sentinels=0 stray=1 open-bugs=0 test-gaps=0" "$(grep '^post-run:' <<<"$PR_OUT")"
+SL_DRIFT_WARN="WARN: scripts/spec-links.sh differs from this plugin's copy — used the plugin's copy. Run /qa-warden:init --resync to update the stamp."
 CV_OUT=$(cd "$G" && "$BASH" "$COVERAGE" "" 2>&1); CV_RC=$?
 check_eq "coverage runs on an old stamp (exit 0)" "0" "$CV_RC"
-check "  and prints the resync hint" grep -qF -e "predates the shared test inventory — this report used the plugin's copy. Run /qa-warden:init --resync" <<<"$CV_OUT"
+check "  and prints the resync hint" grep -qxF -e "$SL_DRIFT_WARN" <<<"$CV_OUT"
 check "  and names no _-prefixed test or spec" test "$(grep -cE -e "$SCRATCH_RE" <<<"$CV_OUT")" = "0"
 IM_OUT=$(cd "$G" && "$BASH" "$IMPACT" route=/cart 2>&1)
-check "impact on an old stamp prints the resync hint" grep -qF -e "BLIND SPOTS below used the plugin's copy" <<<"$IM_OUT"
+check "impact on an old stamp prints the resync hint" grep -qxF -e "$SL_DRIFT_WARN" <<<"$IM_OUT"
 check "  and its BLIND SPOTS name no _-prefixed test" test "$(grep -cE -e "$SCRATCH_RE" <<<"$IM_OUT")" = "0"
 mv "$SLG.keep" "$SLG"
 
@@ -2420,6 +2430,161 @@ dr_has "doctor names a jq that is installed but does not run" \
   "❌ jq at $TZ/fakebin/jq is installed but does not run"
 dr_lacks "  and does not call it missing" "❌ jq not installed"
 check_eq "  and exits 1" "1" "$DR_RC"
+
+echo "== 13. stamped_helper: which copy of a read-only helper a plugin script runs"
+# lib/stamped-helper.sh is the one place a plugin script decides between the project's stamped
+# helper and the plugin's own templates/scripts copy. The project's copy runs only when it is
+# byte-identical to the plugin's; a missing or different one runs the plugin's copy, with one WARN
+# naming the resync. Only the five read-only helpers may ever fall back.
+LIB="$here/lib/stamped-helper.sh"
+new_dir; SHP=$DIR
+stamp "$SHP"
+check_eq "section 13: the stamp this fixture is built on exits 0" "0" "$RC"
+# pick <project> <lib> <name>... — sources <lib> in <project>, resolves each name in turn; prints
+# each resolved path as `path=<p>`, with the resolver's stdout and stderr interleaved.
+pick() {
+  local dir=$1 lib=$2; shift 2
+  # shellcheck disable=SC1090  # $lib is this checkout's lib/stamped-helper.sh or a scratch copy of it
+  (cd "$dir" && . "$lib" && for n in "$@"; do stamped_helper "$n"; printf 'path=%s\n' "$STAMPED_HELPER"; done) 2>&1
+}
+WARN_TAIL="— used the plugin's copy. Run /qa-warden:init --resync to update the stamp."
+check_eq "current stamp: the project's copy, nothing printed" "path=scripts/spec-links.sh" \
+  "$(pick "$SHP" "$LIB" spec-links.sh)"
+for h in resolve-spec-path.sh post-run-checks.sh check-last-run.sh bug-status.sh; do
+  check_eq "  and the same for $h" "path=scripts/$h" "$(pick "$SHP" "$LIB" "$h")"
+done
+# Stale and failing the call: the spec-links precedent (a stamp with no `tests` mode exits 2).
+SLS="$SHP/scripts/spec-links.sh"
+cp "$SLS" "$SLS.keep"
+sed 's/^  tests)/  tests-gone)/' "$SLS.keep" > "$SLS"
+check "precondition: the stale copy fails the call" \
+  test "$(cd "$SHP" && "$BASH" scripts/spec-links.sh tests >/dev/null 2>&1; echo $?)" = "2"
+check_eq "stale copy that fails the call: the plugin's copy, one WARN" \
+  "WARN: scripts/spec-links.sh differs from this plugin's copy $WARN_TAIL
+path=$TEMPLATES/scripts/spec-links.sh" "$(pick "$SHP" "$LIB" spec-links.sh)"
+check "  and the plugin's copy answers the call there" \
+  test "$(cd "$SHP" && "$BASH" "$TEMPLATES/scripts/spec-links.sh" tests >/dev/null 2>&1; echo $?)" = "0"
+# Stale but still answering: an old check-last-run.sh or post-run-checks.sh gives a wrong answer
+# with a normal exit, so running it cannot tell it apart. Byte equality can.
+printf '# an older stamp\n' | cat - "$SLS.keep" > "$SLS"
+check "precondition: this stale copy still answers the call" \
+  test "$(cd "$SHP" && "$BASH" scripts/spec-links.sh tests >/dev/null 2>&1; echo $?)" = "0"
+check_eq "stale copy that still answers: the plugin's copy too, one WARN" \
+  "WARN: scripts/spec-links.sh differs from this plugin's copy $WARN_TAIL
+path=$TEMPLATES/scripts/spec-links.sh" "$(pick "$SHP" "$LIB" spec-links.sh)"
+check_eq "  the WARN prints once per helper, however many calls" \
+  "1" "$(pick "$SHP" "$LIB" spec-links.sh spec-links.sh spec-links.sh | grep -c '^WARN:')"
+mv "$SLS.keep" "$SLS"
+# Missing: a stamp that predates the helper, or a deleted file.
+mv "$SHP/scripts/resolve-spec-path.sh" "$SHP/resolve-spec-path.sh.keep"
+check_eq "missing project copy: the plugin's copy, one WARN" \
+  "WARN: scripts/resolve-spec-path.sh is missing $WARN_TAIL
+path=$TEMPLATES/scripts/resolve-spec-path.sh" "$(pick "$SHP" "$LIB" resolve-spec-path.sh)"
+# Plugin copy missing (an incomplete install): nothing to compare against, so the project's copy
+# runs, silently, as it did before the resolver; with neither copy, the call fails as it did then.
+new_dir; FP=$DIR
+mkdir -p "$FP/lib" "$FP/templates/scripts" "$FP/skills/run/scripts"
+cp "$LIB" "$FP/lib/"
+cp "$here/skills/run/scripts/run-verdict.sh" "$FP/skills/run/scripts/"
+printf '# an older stamp\n' >> "$SHP/scripts/bug-status.sh"
+check_eq "no plugin copy: the project's copy, even a stale one, nothing printed" "path=scripts/bug-status.sh" \
+  "$(pick "$SHP" "$FP/lib/stamped-helper.sh" bug-status.sh)"
+check_eq "  and with no copy anywhere, the project's path (the call fails as before)" "path=scripts/resolve-spec-path.sh" \
+  "$(pick "$SHP" "$FP/lib/stamped-helper.sh" resolve-spec-path.sh)"
+new_dir; FP2=$DIR
+mkdir -p "$FP2/lib" && cp "$LIB" "$FP2/lib/"
+check_eq "  no templates/ dir at all: the project's copy, nothing printed" "path=scripts/bug-status.sh" \
+  "$(pick "$SHP" "$FP2/lib/stamped-helper.sh" bug-status.sh)"
+cp "$TEMPLATES/scripts/bug-status.sh" "$SHP/scripts/bug-status.sh"
+mv "$SHP/scripts/check-last-run.sh" "$SHP/check-last-run.sh.keep"
+# shellcheck disable=SC1091  # the scratch plugin's copy of run-verdict.sh
+check_eq "  run_verdict with check-last-run.sh in neither copy → unchecked, never a pass" "unchecked -1 0" \
+  "$(cd "$SHP" && . "$FP/skills/run/scripts/run-verdict.sh" && run_verdict 0 "$FX/green.json" 900 && echo "$VERDICT $TOTAL $FAILED")"
+mv "$SHP/check-last-run.sh.keep" "$SHP/scripts/check-last-run.sh"
+# Never the plugin's copy for anything that is not a read-only helper — prod-guard above all: the
+# guard must be the project's own, so a broken or missing one refuses every run.
+for h in prod-guard.sh prod-guard.ts prod-guard-core.mjs retire-delete.sh cli-fill-env.sh init.sh; do
+  check "precondition: the plugin ships a copy of $h" test -f "$TEMPLATES/scripts/$h"
+done
+mv "$SHP/scripts/prod-guard.sh" "$SHP/prod-guard.sh.keep"
+printf '# an older stamp\n' >> "$SHP/scripts/retire-delete.sh"
+# A name that is a path is not on the list either, so it cannot reach a plugin file by traversal.
+for h in prod-guard.sh prod-guard.ts prod-guard-core.mjs retire-delete.sh cli-fill-env.sh init.sh \
+         ../templates/scripts/spec-links.sh spec-links.sh/../prod-guard.sh; do
+  check_eq "not read-only: $h is always the project's copy" \
+    "stamped_helper: '$h' is not a read-only helper — running the project's copy only
+path=scripts/$h" "$(pick "$SHP" "$LIB" "$h")"
+done
+mv "$SHP/prod-guard.sh.keep" "$SHP/scripts/prod-guard.sh"
+cp "$TEMPLATES/scripts/retire-delete.sh" "$SHP/scripts/retire-delete.sh"
+# post-run-checks.sh calls the PROJECT's bug-status.sh whichever copy of it runs. With that one
+# missing, the plugin's post-run-checks.sh would print open-bugs=0 for a bug scan that never ran,
+# so it does not fall back: the caller fails as it did before the resolver.
+mv "$SHP/scripts/bug-status.sh" "$SHP/bug-status.sh.keep"
+mv "$SHP/scripts/post-run-checks.sh" "$SHP/post-run-checks.sh.keep"
+check_eq "post-run-checks.sh missing AND bug-status.sh missing: no fallback, nothing printed" \
+  "path=scripts/post-run-checks.sh" "$(pick "$SHP" "$LIB" post-run-checks.sh)"
+mv "$SHP/bug-status.sh.keep" "$SHP/scripts/bug-status.sh"
+for broken in stale empty unreadable; do
+  case "$broken" in
+    stale)      printf '# an older stamp\n' | cat - "$TEMPLATES/scripts/bug-status.sh" > "$SHP/scripts/bug-status.sh" ;;
+    empty)      : > "$SHP/scripts/bug-status.sh" ;;
+    unreadable) chmod 000 "$SHP/scripts/bug-status.sh" ;;
+  esac
+  # root reads a mode-000 file, so that case means nothing there
+  [ "$broken" != unreadable ] || [ ! -r "$SHP/scripts/bug-status.sh" ] || { chmod 644 "$SHP/scripts/bug-status.sh"; echo "  skip  a mode-000 bug-status.sh (running as root reads it)"; continue; }
+  check_eq "  a $broken bug-status.sh: no fallback either" \
+    "path=scripts/post-run-checks.sh" "$(pick "$SHP" "$LIB" post-run-checks.sh)"
+  chmod 644 "$SHP/scripts/bug-status.sh"
+  cp "$TEMPLATES/scripts/bug-status.sh" "$SHP/scripts/bug-status.sh"
+done
+check_eq "  with bug-status.sh back, it falls back" \
+  "WARN: scripts/post-run-checks.sh is missing $WARN_TAIL
+path=$TEMPLATES/scripts/post-run-checks.sh" "$(pick "$SHP" "$LIB" post-run-checks.sh)"
+mv "$SHP/post-run-checks.sh.keep" "$SHP/scripts/post-run-checks.sh"
+# The list itself is pinned: adding a helper means reading it end to end for writes first.
+check_eq "the fallback list is exactly the five read-only helpers" \
+  "spec-links.sh|resolve-spec-path.sh|post-run-checks.sh|check-last-run.sh|bug-status.sh" \
+  "$(sed -n 's/^[[:space:]]*\([a-z|.-]*\.sh\)) : ;;$/\1/p' "$LIB")"
+
+echo "  -- the callers"
+# /qa-warden:run mode=single with no stamped resolve-spec-path.sh (still moved away above): the
+# plugin's copy maps the argument, and the run completes.
+mkdir -p "$SHP/tests/auth" && : > "$SHP/tests/auth/login.spec.ts"
+ROUT=$(cd "$SHP" && PATH="$STUB:$PATH" STUB_EXIT=0 STUB_JSON="$FX/green.json" STUB_SINK="" "$BASH" "$RUNSH" mode=single auth/login 2>&1); RRC=$?
+check_eq "run(single) with no stamped resolve-spec-path.sh: exit 0" "0" "$RRC"
+check "  the WARN names the missing helper" grep -qxF -e "WARN: scripts/resolve-spec-path.sh is missing $WARN_TAIL" <<<"$ROUT"
+check "  and the test it resolved is the one that ran" grep -qF -e "tests/auth/login.spec.ts" "$STUB/args"
+mv "$SHP/resolve-spec-path.sh.keep" "$SHP/scripts/resolve-spec-path.sh"
+# mode=smoke on a spec-links.sh with no `tests` mode: the stray scan used to report "could NOT
+# run"; it now reads the plugin's inventory and finds the one unpaired test.
+sed 's/^  tests)/  tests-gone)/' "$SLS" > "$SLS.old" && mv "$SLS.old" "$SLS"
+ROUT=$(cd "$SHP" && PATH="$STUB:$PATH" STUB_EXIT=0 STUB_JSON="$FX/green.json" STUB_SINK=artifacts/last-run.json "$BASH" "$RUNSH" mode=smoke 2>&1); RRC=$?
+check_eq "run(smoke) on an old spec-links.sh stamp: exit 0" "0" "$RRC"
+check "  the WARN names spec-links.sh" grep -qxF -e "WARN: scripts/spec-links.sh differs from this plugin's copy $WARN_TAIL" <<<"$ROUT"
+check "  the stray scan ran (no 'could NOT run')" test "$(grep -c 'could NOT run' <<<"$ROUT")" = "0"
+check "  and found the unpaired test" grep -qF -e "unmanaged spec tests/auth/login.spec.ts" <<<"$ROUT"
+cp "$TEMPLATES/scripts/spec-links.sh" "$SLS"
+# Both post-run-checks.sh and bug-status.sh missing, with an open bug on file: run(smoke) must not
+# report open-bugs=0 from a scan that never ran. It refuses, as it did before the resolver.
+mkdir -p "$SHP/bugs"
+printf '## Status: open\n\n## Summary\nthe fee is wrong\n' > "$SHP/bugs/2026-10-29-fee.md"
+mv "$SHP/scripts/bug-status.sh" "$SHP/bug-status.sh.keep"
+mv "$SHP/scripts/post-run-checks.sh" "$SHP/post-run-checks.sh.keep"
+ROUT=$(cd "$SHP" && PATH="$STUB:$PATH" STUB_EXIT=0 STUB_JSON="$FX/green.json" STUB_SINK=artifacts/last-run.json "$BASH" "$RUNSH" mode=smoke 2>&1); RRC=$?
+check_eq "run(smoke) with neither post-run-checks.sh nor bug-status.sh: exit 2" "2" "$RRC"
+check "  the scans did NOT run, and it says so" grep -qF -e "scans did NOT run" <<<"$ROUT"
+check "  and no open-bugs=0 trailer" test "$(grep -c 'open-bugs=0' <<<"$ROUT")" = "0"
+mv "$SHP/bug-status.sh.keep" "$SHP/scripts/bug-status.sh"
+mv "$SHP/post-run-checks.sh.keep" "$SHP/scripts/post-run-checks.sh"
+# doctor with no stamped bug-status.sh: Check 11b reads the bug's Status through the plugin's copy
+# (an empty read would call a well-formed bug "missing Status marker"), and Check 9 alone names
+# the missing file — the resolver's own WARN is not printed a second time.
+rm "$SHP/scripts/bug-status.sh"
+run_doctor "$SHP"
+dr_lacks "doctor with no stamped bug-status.sh: no false 'missing Status marker'" "missing Status marker"
+dr_has "  Check 9 names the missing file" "❌ substrate missing: scripts/bug-status.sh absent from project"
+check "  and the resolver's WARN stays out of doctor's output" test "$(grep -c '^WARN: scripts/' <<<"$DR_OUT")" = "0"
 
 echo "---"
 if [ "$bad" -ne 0 ]; then echo "qa-scaffoldtest: ❌ $bad of $((pass+bad)) cases FAILED"; exit 1; fi
