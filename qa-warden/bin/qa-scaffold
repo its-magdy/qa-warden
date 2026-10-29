@@ -22,6 +22,11 @@ set -uo pipefail
 # --- locate plugin templates (this script lives in <plugin>/bin) -------------
 PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TEMPLATES="$PLUGIN_ROOT/templates"
+# The plugin's one manifest reader. doctor.sh reads manifests/resync-set.txt through the same
+# functions, so --resync below and doctor's drift check parse it identically (M-8).
+[ -f "$PLUGIN_ROOT/lib/manifest.sh" ] || { echo "[qa-scaffold] plugin library missing at $PLUGIN_ROOT/lib/manifest.sh — reinstall the plugin" >&2; exit 1; }
+# shellcheck source=qa-warden/lib/manifest.sh
+. "$PLUGIN_ROOT/lib/manifest.sh"
 
 # --- args --------------------------------------------------------------------
 TARGET="${1:-$PWD}"
@@ -176,7 +181,8 @@ if [ "$RESYNC" = "1" ]; then
   # line there, not two hand-kept lists here and in doctor.
   MANIFEST="$PLUGIN_ROOT/manifests/resync-set.txt"
   [ -f "$MANIFEST" ] || { echo "[qa-scaffold] resync manifest missing at $MANIFEST — cannot determine the toolkit-owned file set; reinstall the plugin" >&2; exit 1; }
-  RESYNC_SET="$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$MANIFEST" | grep -v '^$')"
+  # Path column only: the second column is the row's protection tier, which only qa-selfcheck reads.
+  RESYNC_SET="$(manifest_paths "$MANIFEST")"
   # Copy failures are collected, not ignored — same fail-loud contract as the normal stamp
   # below. `cp X && msg` reports success but DISCARDS the failure, and `set -uo pipefail` has
   # no `-e`, so the unchecked form let 10 denied copies still reach the green "24 file(s)
@@ -288,7 +294,7 @@ chmod +x "$TARGET"/scripts/*.sh 2>/dev/null || true
 # a pair of "keep this brace list IDENTICAL" comments no code enforced.
 DIRS_MANIFEST="$TEMPLATES/scripts/runtime-dirs.txt"
 if [ -f "$DIRS_MANIFEST" ]; then
-  RUNTIME_DIRS="$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$DIRS_MANIFEST" | grep -v '^$')"
+  RUNTIME_DIRS="$(manifest_rows "$DIRS_MANIFEST")"
   for d in $RUNTIME_DIRS; do mkdir -p "$TARGET/$d"; done
   info "ensured runtime dirs"
 else

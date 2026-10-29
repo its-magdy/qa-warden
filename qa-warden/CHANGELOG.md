@@ -46,6 +46,30 @@ never carry the same number**, or the second one has no way to announce itself.
   wording. A missing `scripts/spec-links.sh` still stops both with exit 2, as before.
 - No stamped file changed, so this needs no `--resync`.
 
+### One manifest reader; each resync-set row declares its protection tier
+
+- **New `lib/manifest.sh`, the plugin's one reader of its data lists.** Doctor, `/qa-warden:coverage`,
+  `qa-scaffold`, `qa-selfcheck` and `qa-scaffoldtest` source it instead of carrying their own copy
+  of the comment strip (13 copies before; the stamped `scripts/init.sh` keeps its own, because it
+  runs without the plugin). Three things change with it:
+  - `qa-scaffold --resync` now reads `manifests/resync-set.txt` exactly as doctor's drift check
+    does (blanks trimmed, `./` segments dropped). The two used to parse it differently, though
+    both must cover the same set (M-8).
+  - The `CLAUDE.md` vocabulary check matches each symbol literally: the `.` in `cli-fill-env.sh`
+    used to match any character.
+  - A doctor or `coverage.sh` that cannot find `lib/manifest.sh` beside it (an incomplete plugin
+    install, or a copy taken out of the plugin) says so in one line and stops, instead of
+    reporting `scripts/oracle-keys.txt` as missing.
+- **Each `resync-set.txt` row declares its protection tier** in a second column: `deny` (an
+  `Edit(...)` deny in `templates/settings.json` covers it) or `prompt` (deliberately not denied,
+  so every edit is approved at the prompt). `bin/qa-selfcheck` Check 9f arm 4 fails a `deny` row
+  no deny covers, a `prompt` row that is denied or sits under an allow glob, and a row without a
+  tier. Before, the tiers were listed only in a doctor comment, and a new entry under
+  `specs/**` or `fixtures/**` stayed auto-writable until someone remembered to deny it.
+  Nothing changes in a project; no `--resync` needed.
+
+---
+
 ## 0.6.0 — one verdict per gate, prod-guard on WHATWG URLs, fixes from an end-to-end run (2026-10-28)
 
 **Upgrading:** run `/qa-warden:init --resync` (prod-guard now needs `node` on PATH and the stamped

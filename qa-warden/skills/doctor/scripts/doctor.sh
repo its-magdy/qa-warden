@@ -26,6 +26,20 @@ if [ ! -e playwright.config.ts ] && [ ! -e CLAUDE.md ] && [ ! -d scripts ]; then
   exit 1
 fi
 
+# The plugin's manifest reader (lib/manifest.sh, three directories up, beside templates/ and
+# manifests/). Every manifest this doctor reads goes through it, and so does qa-scaffold --resync,
+# which is what keeps detection and repair on one parse of resync-set.txt (M-8). Without it the
+# reads below would fail one by one and each would name the wrong cause (an oracle-keys.txt
+# "missing or empty" that is neither), so a doctor separated from its plugin says that once and
+# stops. Not a numbered check, like the project gate above.
+MANIFEST_LIB="$(dirname "${BASH_SOURCE[0]}")/../../../lib/manifest.sh"
+if [ ! -f "$MANIFEST_LIB" ]; then
+  echo "❌ doctor's plugin library is missing ($MANIFEST_LIB) — run doctor from an installed plugin (/qa-warden:doctor, or bash scripts/doctor.sh), or reinstall the plugin"
+  exit 1
+fi
+# shellcheck source=qa-warden/lib/manifest.sh
+. "$MANIFEST_LIB"
+
 # Load the project's .env the way the stamped scripts do (prod-guard.sh, cli-fill-env.sh): inside
 # this process, so Check 10 sees the BASE_URL_<SITE> values. One statement per line on purpose:
 # qa-selfcheck Check 20 fails any line under agents/ or skills/ that chains the export toggle and
@@ -93,13 +107,13 @@ fi
 #    more unpoliced mirror, which is why it also needed a cardinality self-check on that copy
 #    (a co-drifted list would silently bless a wrong vocab everywhere, at the right count).
 #    Same manifest pattern as resync-set.txt / runtime-dirs.txt: one source, N consumers.
-KEYS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' scripts/oracle-keys.txt 2>/dev/null | grep -v '^$')
+KEYS=$(manifest_rows scripts/oracle-keys.txt)
 if [ -z "$KEYS" ]; then
   echo "❌ scripts/oracle-keys.txt missing or empty — the oracle vocabulary is UNVERIFIED (run /qa-warden:init --resync)"; fail=$((fail+1))
 fi
 # The skill ships beside this script: <plugin>/skills/doctor/scripts/doctor.sh -> <plugin>/skills/.
 # Its key SET is read from the arg-shape table rows, with the same extractor bin/qa-selfcheck
-# Check 9bb uses (a row is "| `key` | `shape` |"; the `fault:`/`clock:` rows keep their trailing
+# Check 9bb uses (arg_shape_rows in lib/manifest.sh; a row is "| `key` | `shape` |"; the `fault:`/`clock:` rows keep their trailing
 # colon precisely so this pattern skips them). The sets are compared EXACTLY. A substring scan
 # (grep -oF of each key over the file) used to be enough for CLAUDE.md, but it passes a manifest
 # that gains `value`, `url` or `lock`, because those words occur inside the skill's prose.
@@ -108,7 +122,7 @@ if [ -n "$KEYS" ]; then
   if [ ! -f "$TCC" ]; then
     echo "⚠️  the plugin's test-case-contract skill was not found at $TCC — the vocabulary the agents load is UNVERIFIED (run doctor from the plugin: /qa-warden:doctor)"; warn=$((warn+1))
   else
-    SKILL_KEYS=$(sed -nE 's/^\| `([a-z0-9_]+)` \| `.*/\1/p' "$TCC" | sort -u)
+    SKILL_KEYS=$(arg_shape_rows "$TCC" | cut -f1 | sort -u)
     PROJ_KEYS=$(printf '%s\n' "$KEYS" | sort -u)
     if [ -z "$SKILL_KEYS" ]; then
       echo "⚠️  the arg-shape table in $TCC did not parse — the project's oracle keys are UNVERIFIED against the vocabulary the agents load"; warn=$((warn+1))
@@ -415,7 +429,7 @@ fi
 #    So the loop skips exactly the files Check 9 WILL report: there is a $TMPL, its manifest is
 #    readable and lists the file, and the plugin ships its template. Any of those missing and
 #    Check 9 passes over the file without a word (no $TMPL: this doctor was copied out of its
-#    plugin; no manifest: Check 9 prints only a generic UNVERIFIED; no template: Check 9 skips
+#    plugin together with lib/manifest.sh, without which it stops at the top; no manifest: Check 9 prints only a generic UNVERIFIED; no template: Check 9 skips
 #    that line), so this loop is the only thing that names it, as a ⚠️.
 # The baseline is the plugin this script ships in: <plugin>/skills/doctor/scripts/doctor.sh, so the
 # plugin root is three directories up. No lookup, no guess. Until this script moved into the plugin
@@ -433,12 +447,12 @@ if [ -n "$TMPL" ] && [ ! -d "$TMPL" ]; then
 fi
 # Each row is trimmed and its `./` segments dropped, so `  scripts/./x.sh` reads as scripts/x.sh
 # for both checks: Check 9 names the canonical path and this loop knows Check 9 named it.
+# manifest_paths does that, and drops each row's protection tier (the second column); qa-scaffold
+# --resync reads the file through the same function, so repair sees the rows exactly as this does.
 OWNED=""
 if [ -n "$TMPL" ]; then
   RESYNC_MANIFEST="$TMPL/../manifests/resync-set.txt"
-  OWNED=$(sed -e 's/#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
-              -e 's#^\(\./\)*##' -e ':a' -e 's#/\./#/#' -e 'ta' \
-              "$RESYNC_MANIFEST" 2>/dev/null | grep -v '^$')
+  OWNED=$(manifest_paths "$RESYNC_MANIFEST")
 fi
 for f in scripts/prod-guard.sh scripts/resolve-spec-path.sh scripts/spec-links.sh scripts/post-run-checks.sh scripts/oracle-keys.txt; do
   [ -f "$f" ] && continue
@@ -564,21 +578,22 @@ if [ -f package.json ] && [ -f .mcp.explore.json ]; then
 fi
 
 # 9. Substrate drift — toolkit-OWNED config/scripts agents cannot repair in place. Three
-#    protection tiers, and this check is the only thing that covers all three:
-#      (a) HARD-DENIED in settings.json deny[] — package.json, package-lock.json,
-#          playwright.config.ts, tsconfig.json, .mcp.json, .mcp.explore.json, prod-guard.sh/.ts,
-#          prod-guard-core.mjs and every scripts/*.sh EXCEPT init.sh. Blocked outright.
-#      (b) Write-allowlist-EXCLUDED — scripts/init.sh, scripts/README.md, and the two stamped
-#          scripts/*.txt manifests (runtime-dirs.txt, oracle-keys.txt), .github/**, .env. Not in
-#          deny[], so per-prompt-approved. The manifests nothing in a project reads
-#          (resync-set.txt, claude-md-vocab.txt, prod-guard-rails.txt) live in the plugin's
+#    protection tiers, and this check is the only thing that covers all three. Each row of the
+#    plugin's manifests/resync-set.txt now DECLARES its tier in a second column (`deny` or
+#    `prompt`; that file's header defines them), and bin/qa-selfcheck Check 9f arm 4 holds the
+#    column against templates/settings.json, so the per-file lists that used to sit here are gone:
+#      (a) HARD-DENIED in settings.json deny[] — the `deny` rows. Blocked outright.
+#      (b) Write-allowlist-EXCLUDED — the `prompt` rows (plus .env, which is not toolkit-owned).
+#          Not in deny[], so per-prompt-approved, on purpose. The manifests nothing in a project
+#          reads (resync-set.txt, claude-md-vocab.txt, prod-guard-rails.txt) live in the plugin's
 #          manifests/ and are never stamped.
-#      (c) Inside a Write/Edit ALLOW glob — the resync-set members under specs/** and
-#          fixtures/**. These were once silently auto-writable (no deny, no prompt): an agent
-#          could clobber specs/_context/_templates/basis.md with a real feature's basis and
-#          every later /qa-warden:intake would read the corrupted file as its template. Now denied by
-#          path, but keep this tier in mind when ADDING a resync-set entry under an allowed
-#          tree — the deny is per-path and does not follow automatically.
+#      (c) Inside a Write/Edit ALLOW glob — `deny` rows under specs/** and fixtures/**. These
+#          were once silently auto-writable (no deny, no prompt): an agent could clobber
+#          specs/_context/_templates/basis.md with a real feature's basis and every later
+#          /qa-warden:intake would read the corrupted file as its template. Now denied by path.
+#          The deny is per-path and does not follow automatically when a resync-set entry is
+#          ADDED under an allowed tree; Check 9f arm 4 is what now fails that row, where this
+#          comment once only asked the editor to remember.
 #    /qa-warden:init is skip-if-exists, so a plugin fix to any of these does NOT reach a project
 #    scaffolded before the fix — a shipped fix silently strands every existing project
 #    (F-015/F-016). Detect the drift here (read-only) against the shipped templates and name
@@ -650,7 +665,8 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
 else
   # A skipped drift check must be VISIBLE (WARN, counted), not a silent green INFO — this check
   # guards the highest-value propagation class (F-015/F-027); a quiet skip hides exactly that drift.
-  # Reachable only when this file was copied out of its plugin.
+  # Reachable only when this file was copied out of its plugin (with lib/manifest.sh beside
+  # it, three directories up; without that library the doctor stops before any check).
   echo "⚠️  substrate-drift check SKIPPED — no plugin templates/ three directories above this script; it was copied out of the plugin. Run it as /qa-warden:doctor, or as bash <plugin>/skills/doctor/scripts/doctor.sh; drift to the shipped substrate is UNVERIFIED"; warn=$((warn+1))
 fi
 # Stock-var containment — .env.example is shared-ownership (excluded from the byte-compare
@@ -715,7 +731,7 @@ if [ -n "$TMPL" ] && [ -f "$TMPL/CLAUDE.md" ] && [ -f CLAUDE.md ]; then
     echo "⚠️  manifests/claude-md-vocab.txt not found in the plugin at $TMPL/.. — CLAUDE.md vocabulary DELIVERY is UNVERIFIED (the plugin install is incomplete; reinstall it)"; warn=$((warn+1))
   else
     # Strip FULL-LINE comments only — unlike the sibling manifests, a row here carries prose in
-    # its why-field, so the usual `s/#.*$//` would truncate it mid-sentence.
+    # its why-field, so the usual `s/#.*$//` would truncate it mid-sentence (manifest_prose_rows).
     while IFS='|' read -r sym swhy; do
       [ -n "$sym" ] || continue
       # Anchored exactly as Check 9i (bin/qa-selfcheck) anchors the step symbols, so `lock:` cannot match `unlock:`.
@@ -725,10 +741,11 @@ if [ -n "$TMPL" ] && [ -f "$TMPL/CLAUDE.md" ] && [ -f CLAUDE.md ]; then
       # itself is a plugin-source bug that only a maintainer can fix, so it is reported by
       # bin/qa-selfcheck Check 9b (it compares these two plugin files) and not here, where it
       # used to warn every consumer about the toolkit's own manifest.
-      grep -qE "(^|[^a-zA-Z_])$sym" "$TMPL/CLAUDE.md" || continue
-      grep -qE "(^|[^a-zA-Z_])$sym" CLAUDE.md \
+      # symbol_present quotes the symbol first, so the `.` in `cli-fill-env.sh` is a dot.
+      symbol_present "$sym" "$TMPL/CLAUDE.md" || continue
+      symbol_present "$sym" CLAUDE.md \
         || { echo "⚠️  CLAUDE.md never mentions \`$sym\` — $swhy. /qa-warden:init --resync does NOT refresh CLAUDE.md (shared ownership), so this is a HAND-MERGE, not a command: diff yours against $TMPL/CLAUDE.md and copy the missing prose across."; warn=$((warn+1)); }
-    done < <(grep -v '^[[:space:]]*#' "$VOCAB" | sed 's/[[:space:]]*$//' | grep -v '^$')
+    done < <(manifest_prose_rows "$VOCAB")
   fi
 fi
 
@@ -983,13 +1000,13 @@ fi
 # read as permanently clean. A check that cannot fail is the false-green this toolkit exists to
 # catch; it was wearing a passing baseline at the time. (Reproduced on ugrep, which names the
 # option in its error; GNU/BSD grep swallow it the same way.)
-umw_re='-f[[:space:]]*"artifacts/route-manifests/\$\{'
+# The pattern, the comment strip and the spec-links.sh exemption now live in one place,
+# rederives_manifest_walk (lib/manifest.sh), which qa-selfcheck 9k calls for the plugin's files.
 # File list, not `grep -rl`: each candidate is filtered through `sed` first.
 umw_files=$(find scripts -name '*.sh' -type f 2>/dev/null | sort -u)
 umw_bad=0
 for f in $umw_files; do
-  case "$f" in */spec-links.sh) continue ;; esac
-  sed '/^[[:space:]]*#/d' "$f" 2>/dev/null | grep -qE -e "$umw_re" || continue
+  rederives_manifest_walk "$f" || continue
   echo "❌ $f builds a route-manifest path from a variable — the unmanifested walk is owned by \`scripts/spec-links.sh unmanifested\` (see its header rule 3). A second copy drifts silently: the twin exclusion is the half that is invisible when it is wrong, and /qa-warden:impact and /qa-warden:coverage must report the SAME invisible-spec set or one of them is quietly claiming a complete answer"
   umw_bad=$((umw_bad+1))
 done

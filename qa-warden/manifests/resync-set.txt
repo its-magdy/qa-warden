@@ -27,7 +27,10 @@
 #   fixtures/test.ts     — users wire their own fixtures
 #   page-objects/README.md — user-authored notes land here
 #
-# Blank lines and `#` comments are ignored. Paths are relative to the project root and to
+# Blank lines and `#` comments are ignored; blanks around a row and `./` segments in it are too.
+# Both consumers read this file through ONE function, manifest_paths in the plugin's
+# lib/manifest.sh, so they cannot parse a row differently (they once did: doctor trimmed and
+# normalised rows that --resync took verbatim). Paths are relative to the project root and to
 # templates/. Every line must name a file under templates/ — both consumers silently skip a
 # line whose template does not exist. This file used to list ITSELF (and the two other plugin-
 # only manifests) so that a change propagated; it no longer needs to, because a project never
@@ -36,33 +39,48 @@
 # delete.
 # scripts/doctor.sh below is the stamped LAUNCHER (it finds the installed plugin and runs its
 # skills/doctor/scripts/doctor.sh). The checks themselves ship in the plugin and are not listed.
-package.json
-package-lock.json
-playwright.config.ts
-tsconfig.json
-.mcp.json
-.mcp.explore.json
-scripts/prod-guard.sh
-scripts/prod-guard.ts
-scripts/prod-guard-core.mjs
-scripts/resolve-spec-path.sh
-scripts/spec-links.sh
-scripts/post-run-checks.sh
-scripts/init.sh
-scripts/doctor.sh
-scripts/check-last-run.sh
-scripts/bug-status.sh
-scripts/retire-delete.sh
-scripts/cli-fill-env.sh
-scripts/README.md
-scripts/runtime-dirs.txt
-scripts/oracle-keys.txt
-.github/workflows/qa-nightly.yml.example
-specs/_context/_templates/area.md
-specs/_context/_templates/app.context.md
-specs/_context/_templates/basis.md
-specs/_context/_templates/cases.md
-fixtures/schemas/README.md
-fixtures/schemas/user.ts.example
-fixtures/factories/README.md
-fixtures/factories/user.ts.example
+#
+# PROTECTION TIER — the second column of every row. It says how the stamped file is guarded
+# against an agent editing it in place (doctor Check 9's header tells the history):
+#   deny    an `Edit(...)` rule in templates/settings.json deny[] covers the path (an exact path
+#           or a glob); the edit is blocked outright. A path under an allow glob such as
+#           Edit(specs/**) or Edit(fixtures/**) is still `deny`: its deny is per-path and does
+#           NOT follow from the tree, which is why it has to be declared here.
+#   prompt  deliberately NOT denied and under no Write/Edit allow glob, so every edit is
+#           approved by a human at the prompt. These are files a user may legitimately need to
+#           touch on the spot (init.sh, the README, the two stamped data manifests, the nightly
+#           workflow example). Not a gap.
+# bin/qa-selfcheck Check 9f arm 4 holds this column against templates/settings.json: a `deny`
+# row no Edit deny covers, a `prompt` row that is denied or sits under an allow glob, and a row
+# with no tier (or any other word) all fail. Every reader other than that check takes the path
+# column only.
+package.json                              deny
+package-lock.json                         deny
+playwright.config.ts                      deny
+tsconfig.json                             deny
+.mcp.json                                 deny
+.mcp.explore.json                         deny
+scripts/prod-guard.sh                     deny
+scripts/prod-guard.ts                     deny
+scripts/prod-guard-core.mjs               deny
+scripts/resolve-spec-path.sh              deny
+scripts/spec-links.sh                     deny
+scripts/post-run-checks.sh                deny
+scripts/init.sh                           prompt
+scripts/doctor.sh                         deny
+scripts/check-last-run.sh                 deny
+scripts/bug-status.sh                     deny
+scripts/retire-delete.sh                  deny
+scripts/cli-fill-env.sh                   deny
+scripts/README.md                         prompt
+scripts/runtime-dirs.txt                  prompt
+scripts/oracle-keys.txt                   prompt
+.github/workflows/qa-nightly.yml.example  prompt
+specs/_context/_templates/area.md         deny
+specs/_context/_templates/app.context.md  deny
+specs/_context/_templates/basis.md        deny
+specs/_context/_templates/cases.md        deny
+fixtures/schemas/README.md                deny
+fixtures/schemas/user.ts.example          deny
+fixtures/factories/README.md              deny
+fixtures/factories/user.ts.example        deny

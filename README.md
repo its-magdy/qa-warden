@@ -380,7 +380,8 @@ qa-warden/                        the plugin
 ├── reference/  DESIGN.md, tutorial, how-to, glossary, ideation and sentinel references
 ├── templates/  the runtime substrate /qa-warden:init stamps into each project
 ├── manifests/  plugin-only data lists (resync set, CLAUDE.md symbols, prod-guard rails); never stamped
-├── lib/        plugin-only shell code the skill scripts source (stamped-helper.sh); never stamped
+├── lib/        plugin-only shell code the scripts source (manifest.sh: the one reader of the
+│               manifests; stamped-helper.sh); never stamped
 ├── bin/qa-scaffold      deterministic substrate installer (used by /qa-warden:init)
 ├── bin/qa-selfcheck     plugin consistency checks (not stamped into projects)
 ├── bin/qa-hooktest      hook regression tests (not stamped into projects)

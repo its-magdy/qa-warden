@@ -179,7 +179,8 @@ does not fix anything — each finding names its repair:
   refuses every run until the resync. A deleted canonical script (`prod-guard.sh`,
   `resolve-spec-path.sh`, `spec-links.sh`, `post-run-checks.sh`, `oracle-keys.txt`) is reported
   once, by Check 9's "substrate missing" ❌; Check 8 names it (a ⚠️) only where Check 9 cannot:
-  this doctor was copied out of its plugin, or the plugin lacks `manifests/resync-set.txt` or
+  this doctor was copied out of its plugin (a copy without the plugin's `lib/manifest.sh`
+  stops at once with one ❌ naming it), or the plugin lacks `manifests/resync-set.txt` or
   that file's template. A missing stock var in `.env.example` → restore it from
   the shipped template, or park it commented (`# VAR=`) — the stock list is derived from
   the template, and the file itself is shared-ownership and never byte-compared. The

@@ -923,6 +923,8 @@ qa-warden/
     │   └── test-case-ideation.md   # research grounding for intake/ideate
     ├── templates/                  # the runtime substrate /qa-warden:init stamps (see §16)
     ├── manifests/                  # plugin-only data lists read by qa-scaffold, doctor and qa-selfcheck (never stamped)
+    ├── lib/
+    │   └── manifest.sh             # the one reader of those lists (and of oracle-keys.txt), sourced by doctor, coverage and bin/
     ├── bin/
     │   ├── qa-scaffold             # the deterministic substrate installer
     │   ├── qa-selfcheck            # the plugin's own consistency checks (not shipped to projects)
