@@ -677,20 +677,26 @@ if [ -n "$TMPL" ] && [ -f "$TMPL/settings.json" ] && [ -f "$TMPL/../agents/heale
 fi
 # perm_glob_re <rule-path> — an anchored ERE for the project paths a permission-rule path covers,
 # read the gitignore way: a leading `/` or `./` anchors the rule at the project root, a rule with no
-# other `/` matches the name at any depth, `**` spans directories only as a whole segment (`**/`,
-# `/**/`, a trailing `/**`; anywhere else it is a `*`), `*` and `?` stay inside one segment,
-# `[...]` is a class, and a rule that names a directory covers everything under it.
-# `//abs` and `~/…` name paths outside the project and print nothing (they cover no row).
+# other `/` (outside a class) matches the name at any depth, `**` spans directories only as a whole
+# segment (`**/`, `/**/`, a trailing `/**`; anywhere else it is a `*`), `*`, `?` and `[...]` stay
+# inside one segment (`[!…]` negates, a leading `]` is literal), `\x` is a literal x, a rule that
+# matches a directory covers everything under it, and a trailing `/` matches directories only.
+# A rule naming the root itself (`/`, `.`, `./`) covers every path. `//abs` and `~/…` name paths
+# outside the project and print nothing. A class this reader cannot translate (`[/]`, no
+# closing `]`) prints `!`, as rule_res does for a TAB or an ERE that does not compile.
 perm_glob_re() {
-  local g=$1 out="" lit="" anchored="" seg=1 c cls
+  local g=$1 out="" lit="" anchored="" seg=1 dironly="" c cls neg first rest
   case "$g" in
     ('//'*|'~'*) return 0 ;;
     ('./'*) g=${g#./}; anchored=1 ;;
     ('/'*) g=${g#/}; anchored=1 ;;
   esac
-  g=${g%/}
+  case "$g" in
+    (''|.|./) printf '^.*$\n'; return 0 ;;
+    (*/) g=${g%/}; dironly=1 ;;
+  esac
   if [ -z "$anchored" ]; then
-    case "$g" in
+    case "$(printf '%s' "$g" | sed -e 's/\[[^]]*\]//g')" in
       (*/*) : ;;
       (*) out="(.*/)?" ;;
     esac
@@ -709,22 +715,46 @@ perm_glob_re() {
       ('**'*) out="$out$(ere_quote "$lit")[^/]*"; lit=""; g=${g#'**'}; seg="" ;;
       ('*'*) out="$out$(ere_quote "$lit")[^/]*"; lit=""; g=${g#'*'}; seg="" ;;
       ('?'*) out="$out$(ere_quote "$lit")[^/]"; lit=""; g=${g#'?'}; seg="" ;;
-      ('['*']'*)
-        cls=${g#'['}; cls=${cls%%']'*}
-        case "$cls" in
-          ('!'*) cls="^${cls#'!'}" ;;
+      ('\'?*) c=${g#?}; c=${c%"${c#?}"}; lit="$lit$c"; g=${g#??}; seg="" ;;
+      ('['*)
+        rest=${g#'['}; neg=""; first=""
+        case "$rest" in
+          ('!'*) neg=1; rest=${rest#'!'} ;;
         esac
-        out="$out$(ere_quote "$lit")[$cls]"; lit=""; g=${g#'['*']'}; seg="" ;;
+        case "$rest" in
+          (']'*) first="]"; rest=${rest#']'} ;;
+        esac
+        case "$rest" in
+          (*']'*) : ;;
+          (*) printf '!\n'; return 0 ;;
+        esac
+        cls=${rest%%']'*}; g=${rest#*']'}
+        case "$cls" in
+          (*/*) printf '!\n'; return 0 ;;
+        esac
+        if [ -n "$neg" ]; then
+          out="$out$(ere_quote "$lit")[^$first/$cls]"
+        else
+          out="$out$(ere_quote "$lit")[$first$cls]"
+        fi
+        lit=""; seg="" ;;
       (*)
         c=${g%"${g#?}"}; lit="$lit$c"; g=${g#?}
         if [ "$c" = / ]; then seg=1; else seg=""; fi ;;
     esac
   done
-  printf '^%s%s(/.*)?$\n' "$out" "$(ere_quote "$lit")"
+  if [ -n "$dironly" ]; then
+    printf '^%s%s/.*$\n' "$out" "$(ere_quote "$lit")"
+  else
+    printf '^%s%s(/.*)?$\n' "$out" "$(ere_quote "$lit")"
+  fi
 }
 # rule_res <rules> — "ERE<TAB>rule" for each permission rule (one per line), built once so the
 # row loop below only matches. `Edit(x)` / `Write(x)` -> x; a bare `Edit` or `Write` covers every
-# path. The rule itself is kept for the message.
+# path. The rule itself is kept for the message. A rule this reader cannot turn into a working
+# ERE (a TAB in it, a class it cannot translate, an ERE that does not compile, e.g. `[z-a]`)
+# comes out as "!<TAB>rule" and is reported, never read as covering nothing: in allow[] that
+# would let a `prompt` row under it pass unseen.
 rule_res() {
   local r rp re
   while IFS= read -r r; do
@@ -735,8 +765,15 @@ rule_res() {
       (*) continue ;;
     esac
     [ -n "$rp" ] || continue
+    case "$r" in
+      (*"$(printf '\t')"*) printf '!\t%s\n' "$(printf '%s' "$r" | tr '\t' ' ')"; continue ;;
+    esac
     re=$(perm_glob_re "$rp")
     [ -n "$re" ] || continue
+    if [ "$re" != "!" ]; then
+      [[ "" =~ $re ]]
+      [ $? -eq 2 ] && re="!"
+    fi
     printf '%s\t%s\n' "$re" "$r"
   done <<EOF9F
 $1
@@ -748,6 +785,7 @@ first_rule_covering() {
   local re r
   while IFS="$(printf '\t')" read -r re r; do
     [ -n "$re" ] || continue
+    [ "$re" = "!" ] && continue
     if [[ $1 =~ $re ]]; then
       printf '%s\n' "$r"
       return 0
@@ -770,6 +808,13 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   else
     tier_deny=$(rule_res "$(jq -r '.permissions.deny[]? | strings | select(test("^Edit(\\(|$)"))' "$TMPL/settings.json")")
     tier_allow=$(rule_res "$(jq -r '.permissions.allow[]? | strings | select(test("^(Edit|Write)(\\(|$)"))' "$TMPL/settings.json")")
+    while IFS="$(printf '\t')" read -r t_re t_rule; do
+      [ "$t_re" = "!" ] || continue
+      echo "❌ templates/settings.json rule $t_rule cannot be read as a path pattern (a TAB, a class with a / or no closing ], or an invalid range) — Check 9f arm 4 cannot tell which resync-set rows it covers; rewrite it"; fail=$((fail+1))
+    done <<EOF9F4R
+$tier_deny
+$tier_allow
+EOF9F4R
     while IFS="$(printf '\t')" read -r tp tt; do
       [ -n "$tp" ] || continue
       t_denied=$(first_rule_covering "$tp" "$tier_deny")
