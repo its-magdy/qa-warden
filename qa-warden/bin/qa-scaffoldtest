@@ -80,6 +80,11 @@
 #      a broken jq     stamp's .gitignore and doctor stays quiet; on the older trace.zip-only rule
 #                      doctor warns, and it names a committed one; a jq on PATH that cannot run
 #                      gets its own Check 0 line
+#  13. manifest       lib/manifest.sh driven directly on a crafted manifest (blanks, `./`, inline
+#      reader + tiers  comments, a tier column, a prose row with `#`, a dotted symbol, an arg-shape
+#                      table); doctor Check 9 and qa-scaffold --resync read one crafted row as the
+#                      same path (M-8); qa-selfcheck 9f arm 4 fails each way a resync-set tier can
+#                      disagree with templates/settings.json, on a scratch copy of the plugin
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TEMPLATES="$here/templates"
 SCAFFOLD="$here/bin/qa-scaffold"
@@ -87,13 +92,18 @@ PROD_GUARD="$TEMPLATES/scripts/prod-guard.sh"
 # The resync set is plugin-only data: it lives in manifests/, outside templates/, so it is never
 # stamped (qa-scaffold copies everything under templates/).
 MANIFEST="$here/manifests/resync-set.txt"
+# The plugin's one manifest reader: this suite parses the manifests exactly as qa-scaffold and
+# doctor do by calling the same functions (and section 13 drives them directly).
+MANIFEST_LIB="$here/lib/manifest.sh"
 # `jq -n` and not just `command -v`: a jq of the wrong CPU architecture is found but cannot run, and
 # qa-scaffold would then quietly take its "could not auto-merge" path and fail every merge case.
 jq -n 1 >/dev/null 2>&1 || { echo "qa-scaffoldtest: a working jq is required" >&2; exit 2; }
 command -v git >/dev/null || { echo "qa-scaffoldtest: git is required (qa-scaffold git-inits the target)" >&2; exit 2; }
-for f in "$SCAFFOLD" "$PROD_GUARD" "$MANIFEST" "$TEMPLATES/settings.json"; do
+for f in "$SCAFFOLD" "$PROD_GUARD" "$MANIFEST" "$MANIFEST_LIB" "$TEMPLATES/settings.json"; do
   [ -f "$f" ] || { echo "qa-scaffoldtest: missing $f" >&2; exit 2; }
 done
+# shellcheck source=qa-warden/lib/manifest.sh
+. "$MANIFEST_LIB"
 
 # A developer's global git config (core.excludesFile, say) could already ignore `*.qa-bak` and
 # hide the append path under test. Make git read nothing but the repo.
@@ -182,10 +192,10 @@ is_prefix() {
   [ "$(head -c "$(wc -c < "$1")" "$2" | cksum)" = "$(cksum < "$1")" ]
 }
 
-# manifest_files — the toolkit-owned set, parsed the way qa-scaffold parses it, minus any entry
-# with no template behind it (qa-scaffold skips those too).
+# manifest_files — the toolkit-owned set, parsed the way qa-scaffold parses it (manifest_paths),
+# minus any entry with no template behind it (qa-scaffold skips those too).
 manifest_files() {
-  sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$MANIFEST" | grep -v '^$' | while IFS= read -r rel; do
+  manifest_paths "$MANIFEST" | while IFS= read -r rel; do
     if [ -f "$TEMPLATES/$rel" ]; then printf '%s\n' "$rel"; fi
   done
 }
@@ -227,7 +237,7 @@ for m in $plugin_only; do
 done
 check_eq "no plugin-only manifest is stamped into the project" "" "$stamped_po"
 check_eq "resync-set.txt lists no plugin-only manifest" "" "$listed_po"
-RUNTIME_DIRS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$TEMPLATES/scripts/runtime-dirs.txt" | grep -v '^$')
+RUNTIME_DIRS=$(manifest_rows "$TEMPLATES/scripts/runtime-dirs.txt")
 check_nonzero "runtime-dirs.txt lists directories" "$(printf '%s\n' "$RUNTIME_DIRS" | grep -c .)"
 missing=""
 for d in $RUNTIME_DIRS; do
@@ -336,7 +346,7 @@ check_nonzero "resync-set.txt resolves to template files" "$(printf '%s\n' "$own
 # dead entry (a file moved out of templates/ but left in the list) stays green everywhere else.
 # dead_entries <manifest> — every non-comment, non-blank line with no file under templates/.
 dead_entries() {
-  sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$1" | grep -v '^$' | while IFS= read -r rel; do
+  manifest_paths "$1" | while IFS= read -r rel; do
     if [ ! -f "$TEMPLATES/$rel" ]; then printf ' %s' "$rel"; fi
   done
 }
@@ -2307,10 +2317,18 @@ dr_lacks "  and not Check 8's loop as well" "scripts/resolve-spec-path.sh missin
 check_eq "  oracle-keys.txt: one missing-file line from Checks 8 and 9 together" "1" \
   "$(grep -cE -e 'substrate missing: scripts/oracle-keys\.txt|scripts/oracle-keys\.txt missing —' <<<"$DR_OUT")"
 # A doctor copied out of its plugin has no templates/ to compare against, so Check 9 is skipped
-# and Check 8's loop is the only thing that names the missing file.
+# and Check 8's loop is the only thing that names the missing file. It still needs the plugin's
+# manifest reader three directories up; without it the doctor says so once and stops.
 new_dir; LOOSE=$DIR
 mkdir -p "$LOOSE/a/b/c"
 cp "$DOCTOR" "$LOOSE/a/b/c/doctor.sh"
+DR_OUT=$(cd "$MSP" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$LOOSE/a/b/c/doctor.sh" 2>&1)
+DR_RC=$?
+check_eq "without lib/manifest.sh: doctor prints one line" "1" "$(printf '%s\n' "$DR_OUT" | grep -c .)"
+dr_has "  naming the missing library" "❌ doctor's plugin library is missing"
+check_eq "  and exits 1" "1" "$DR_RC"
+mkdir -p "$LOOSE/lib"
+cp "$MANIFEST_LIB" "$LOOSE/lib/manifest.sh"
 DR_OUT=$(cd "$MSP" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$LOOSE/a/b/c/doctor.sh" 2>&1)
 dr_has "without templates/: Check 9 says it was skipped" "substrate-drift check SKIPPED"
 check_eq "  and resolve-spec-path.sh is named on exactly one line" "1" \
@@ -2340,8 +2358,9 @@ check_eq "  and so is oracle-keys.txt" "1" "$(grep -cF -e 'scripts/oracle-keys.t
 # Checks 8 and 9 must agree on what "listed" means. A row with leading blanks or a `./` segment
 # still lists the file for Check 9, so Check 8 must stay quiet about it, and Check 9 names the
 # canonical path.
-for row in '  scripts/resolve-spec-path.sh' 'scripts/./resolve-spec-path.sh' './scripts/resolve-spec-path.sh'; do
-  grep -vxF -e 'scripts/resolve-spec-path.sh' "$here/manifests/resync-set.txt" > "$PART/qa-warden/manifests/resync-set.txt"
+for row in '  scripts/resolve-spec-path.sh  deny' 'scripts/./resolve-spec-path.sh deny' './scripts/resolve-spec-path.sh'; do
+  # Every row carries a tier column now, so the original row is matched by its path field.
+  grep -vE -e '^scripts/resolve-spec-path\.sh[[:space:]]' "$here/manifests/resync-set.txt" > "$PART/qa-warden/manifests/resync-set.txt"
   printf '%s\n' "$row" >> "$PART/qa-warden/manifests/resync-set.txt"
   DR_OUT=$(cd "$MSP" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$PART/qa-warden/skills/doctor/scripts/doctor.sh" 2>&1)
   check_eq "manifest row '$row': resolve-spec-path is named on exactly one line" "1" \
@@ -2420,6 +2439,116 @@ dr_has "doctor names a jq that is installed but does not run" \
   "❌ jq at $TZ/fakebin/jq is installed but does not run"
 dr_lacks "  and does not call it missing" "❌ jq not installed"
 check_eq "  and exits 1" "1" "$DR_RC"
+
+echo "== 13. the manifest reader (lib/manifest.sh) and the resync-set protection tiers"
+echo "  -- the reader, driven directly"
+new_dir; ML=$DIR
+cat > "$ML/set.txt" <<EOF
+# a header comment, then a blank line
+
+   scripts/a.sh     deny   # an inline comment
+./scripts/./b.sh prompt
+scripts/c.sh
+${TAB}././d/./e/./f.md${TAB}deny
+scripts/g.sh deny extra
+EOF
+check_eq "manifest_paths: trimmed, comments and ./ segments dropped, path column only" \
+  "scripts/a.sh scripts/b.sh scripts/c.sh d/e/f.md scripts/g.sh" "$(manifest_paths "$ML/set.txt" | tr '\n' ' ' | sed 's/ $//')"
+check_eq "manifest_tiers: path<TAB>tier, empty without one, the rest of the row with extra fields" \
+  "scripts/a.sh${TAB}deny|scripts/b.sh${TAB}prompt|scripts/c.sh${TAB}|d/e/f.md${TAB}deny|scripts/g.sh${TAB}deny extra" \
+  "$(manifest_tiers "$ML/set.txt" | tr '\n' '|' | sed 's/|$//')"
+printf '  text_visible   # trailing note\n#url_is\n\ncount_equals\t\n' > "$ML/keys.txt"
+check_eq "manifest_rows: one bare key per row" "text_visible|count_equals" "$(manifest_rows "$ML/keys.txt" | tr '\n' '|' | sed 's/|$//')"
+check_eq "  and a missing file reads as no rows" "" "$(manifest_rows "$ML/no-such-file.txt")"
+printf '# comment\n  cli-fill-env.sh|the one way to type a secret (# is text here)  \n\n' > "$ML/vocab.txt"
+check_eq "manifest_prose_rows keeps a # inside the why-field" \
+  "cli-fill-env.sh|the one way to type a secret (# is text here)" "$(manifest_prose_rows "$ML/vocab.txt")"
+printf 'run cli-fill-envXsh to type it; unlock: x; a+b\n' > "$ML/nodot.md"
+printf 'run cli-fill-env.sh to type it; lock: x; f(x)\n' > "$ML/dot.md"
+check "symbol_present: a dotted symbol matches itself" symbol_present cli-fill-env.sh "$ML/dot.md"
+check "  and not the same name with any other character for the dot" test "$(symbol_present cli-fill-env.sh "$ML/nodot.md" && echo hit)" = ""
+check "  lock: matches lock:" symbol_present lock: "$ML/dot.md"
+check "  but not unlock:" test "$(symbol_present lock: "$ML/nodot.md" && echo hit)" = ""
+check "  regex metacharacters are literal: f(x) matches f(x)" symbol_present 'f(x)' "$ML/dot.md"
+printf 'aab\n' > "$ML/aab.md"
+check "  and a+b does not match aab" test "$(symbol_present 'a+b' "$ML/aab.md" && echo hit)" = ""
+printf '%s\n' '| key | shape |' '| `text_visible` | `{ locator, text }` | prose |' '| `a11y_violations_below` | `{ n }` |' \
+  '| `clock:` | `{ at }` |' '| `broken` | `{ unterminated |' > "$ML/table.md"
+check_eq "arg_shape_rows: key<TAB>shape, digits in the key, the colon rows skipped" \
+  "text_visible${TAB}{ locator, text }|a11y_violations_below${TAB}{ n }" "$(arg_shape_rows "$ML/table.md" | tr '\n' '|' | sed 's/|$//')"
+# The construct is assembled by printf, as walk_sh does in section 11, so this file never carries
+# it on a code line (qa-selfcheck 9k scans bin/).
+printf '#!/bin/sh\n[ -f "%s/${f}.json" ] && echo y\n' "artifacts/route-manifests" > "$ML/rewalk.sh"
+printf '#!/bin/sh\n# [ -f "%s/${f}.json" ] && echo y\n' "artifacts/route-manifests" > "$ML/commented.sh"
+cp "$ML/rewalk.sh" "$ML/spec-links.sh"
+check "rederives_manifest_walk: a code line that builds the path is a re-derivation" rederives_manifest_walk "$ML/rewalk.sh"
+check "  a comment that names it is not" test "$(rederives_manifest_walk "$ML/commented.sh" && echo hit)" = ""
+check "  and the owner, spec-links.sh, never is" test "$(rederives_manifest_walk "$ML/spec-links.sh" && echo hit)" = ""
+
+echo "  -- M-8: doctor and qa-scaffold --resync read a crafted row as the same path"
+new_dir; MR=$DIR
+cp -R "$here" "$MR/qa-warden"
+grep -vE -e '^scripts/resolve-spec-path\.sh[[:space:]]' "$MANIFEST" > "$MR/qa-warden/manifests/resync-set.txt"
+printf '   ./scripts/./resolve-spec-path.sh   deny   # crafted\n' >> "$MR/qa-warden/manifests/resync-set.txt"
+new_dir; MRP=$DIR
+stamp "$MRP"
+check_eq "section 13: the stamp this fixture is built on exits 0" "0" "$RC"
+rm "$MRP/scripts/resolve-spec-path.sh"
+DR_OUT=$(cd "$MRP" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$MR/qa-warden/skills/doctor/scripts/doctor.sh" 2>&1)
+dr_has "doctor names the crafted row's file by its canonical path" "❌ substrate missing: scripts/resolve-spec-path.sh absent from project"
+OUT=$("$BASH" "$MR/qa-warden/bin/qa-scaffold" "$MRP" --no-install --resync 2>&1); RC=$?
+check_eq "--resync from the same plugin exits 0" "0" "$RC"
+check "  and restores the file under the same canonical path" grep -qF -e "scripts/resolve-spec-path.sh (resynced)" <<<"$OUT"
+check "  (byte-identical to the template)" cmp -s "$TEMPLATES/scripts/resolve-spec-path.sh" "$MRP/scripts/resolve-spec-path.sh"
+check "  never under the raw row text" test "$(grep -cF -e './scripts/./resolve-spec-path.sh' <<<"$OUT")" = "0"
+DR_OUT=$(cd "$MRP" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_PLUGIN_ROOT "$BASH" "$MR/qa-warden/skills/doctor/scripts/doctor.sh" 2>&1)
+dr_lacks "doctor then has nothing to say about it" "resolve-spec-path.sh"
+
+echo "  -- qa-selfcheck 9f arm 4: each row's tier against templates/settings.json"
+new_dir; TC=$DIR
+cp -R "$here" "$TC/qa-warden"
+if [ -f "$here/../DOCUMENTATION.md" ]; then cp "$here/../DOCUMENTATION.md" "$TC/"; fi
+TC_SET="$TC/qa-warden/manifests/resync-set.txt"; TC_SJ="$TC/qa-warden/templates/settings.json"
+# tier_run [jq-filter-for-settings.json] [sed-script-for-resync-set.txt] — restores both files
+# from the real plugin, applies the edits, runs qa-selfcheck on the copy into $SC_OUT/$SC_RC.
+tier_run() {
+  cp "$MANIFEST" "$TC_SET"
+  jq "${1:-.}" "$TEMPLATES/settings.json" > "$TC_SJ"
+  if [ -n "${2:-}" ]; then sed -E -e "$2" "$MANIFEST" > "$TC_SET"; fi
+  SC_OUT=$("$BASH" "$TC/qa-warden/bin/qa-selfcheck" 2>&1); SC_RC=$?
+}
+sc_has() { check "$1" grep -qF -e "$2" <<<"$SC_OUT"; }
+tier_run
+check_eq "the shipped tiers agree with templates/settings.json: no tier finding" "0" \
+  "$(grep -cE -e 'protection tier|resync-set\.txt marks' <<<"$SC_OUT")"
+check_eq "  and qa-selfcheck passes on the copy" "0" "$SC_RC"
+tier_run '.permissions.deny -= ["Edit(scripts/spec-links.sh)"]'
+sc_has "a deny row with its Edit deny removed fails" \
+  '❌ manifests/resync-set.txt marks scripts/spec-links.sh `deny` but no Edit(...) deny in templates/settings.json covers it'
+check_eq "  and qa-selfcheck exits 1" "1" "$SC_RC"
+tier_run '.permissions.deny -= ["Edit(scripts/spec-links.sh)"] | .permissions.deny += ["Edit(*.sh)"]'
+check "a slash-less pattern covers the name at any depth (Edit(*.sh) covers scripts/spec-links.sh)" \
+  test "$(grep -cF -e 'marks scripts/spec-links.sh `deny`' <<<"$SC_OUT")" = "0"
+tier_run '.permissions.deny += ["Edit(scripts/init.sh)"]'
+sc_has "a prompt row that is denied fails" \
+  '❌ manifests/resync-set.txt marks scripts/init.sh `prompt` but templates/settings.json denies it (Edit(scripts/init.sh))'
+tier_run '.permissions.deny -= ["Edit(fixtures/schemas/README.md)"]' 's#^(fixtures/schemas/README\.md[[:space:]]+)deny#\1prompt#'
+sc_has "a prompt row under an allow glob fails" \
+  '❌ manifests/resync-set.txt marks fixtures/schemas/README.md `prompt` but it sits under the allow glob fixtures/** in templates/settings.json'
+tier_run '.permissions.deny -= ["Edit(specs/_context/_templates/**)"] | .permissions.deny += ["Edit(specs/_context/*)"]'
+sc_has "a single * does not cross a /: Edit(specs/_context/*) leaves basis.md uncovered" \
+  'marks specs/_context/_templates/basis.md `deny` but no Edit(...) deny in templates/settings.json covers it'
+sc_has "  and the finding names the allow glob that writes it without a prompt" \
+  '(Edit/Write(specs/**) even allows it without a prompt)'
+tier_run '.permissions.deny -= ["Edit(specs/_context/_templates/**)"] | .permissions.deny += ["Edit(specs/**/_templates/*.md)"]'
+check "a ** in the middle spans directories: Edit(specs/**/_templates/*.md) covers basis.md" \
+  test "$(grep -cF -e 'marks specs/_context/_templates/basis.md' <<<"$SC_OUT")" = "0"
+tier_run '.' 's#^(scripts/doctor\.sh)[[:space:]]+deny#\1#'
+sc_has "a row with no tier fails" "❌ manifests/resync-set.txt row scripts/doctor.sh declares no protection tier (got '')"
+tier_run '.' 's#^(scripts/doctor\.sh[[:space:]]+)deny#\1denied#'
+sc_has "a row with another word fails" "row scripts/doctor.sh declares no protection tier (got 'denied')"
+tier_run '.' '/^[^#]/d'
+sc_has "a manifest with no rows is reported as vacuous" "manifests/resync-set.txt missing or empty — the substrate protection tiers are UNCHECKED"
 
 echo "---"
 if [ "$bad" -ne 0 ]; then echo "qa-scaffoldtest: ❌ $bad of $((pass+bad)) cases FAILED"; exit 1; fi

@@ -37,11 +37,16 @@ TMPL="$ROOT/templates"
 # Plugin-only data manifests: read by this script, bin/qa-scaffold and doctor.sh (via the plugin
 # root), never stamped into a project — that is why they are not under templates/.
 MANIFESTS="$ROOT/manifests"
+# The plugin's one manifest reader, from the build this script ships in (the checker's own copy,
+# also when <plugin> names another build). doctor.sh, qa-scaffold and coverage.sh source it too.
+[ -f "$here/lib/manifest.sh" ] || { echo "qa-selfcheck: $here/lib/manifest.sh is missing — the plugin's manifest reader; restore it" >&2; exit 2; }
+# shellcheck source=qa-warden/lib/manifest.sh
+. "$here/lib/manifest.sh"
 fail=0; warn=0
 
 # The closed oracle vocabulary. doctor.sh reads the PROJECT's stamped copy; here the shipped
 # manifest is the only copy there is.
-KEYS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$TMPL/scripts/oracle-keys.txt" 2>/dev/null | grep -v '^$')
+KEYS=$(manifest_rows "$TMPL/scripts/oracle-keys.txt")
 [ -n "$KEYS" ] || { echo "❌ templates/scripts/oracle-keys.txt missing or empty — the vocab checks below are VACUOUS"; fail=$((fail+1)); }
 # missing_keys <file> — prints each key that <file> never names AS A KEY. A key counts in two
 # spellings only: backticked on its own (`text_visible`), or opening a list item as `key: …`
@@ -154,10 +159,11 @@ ANCHORS
     while IFS='|' read -r sym _; do
       [ -n "$sym" ] || continue
       n4=$((n4+1))
-      # Anchored exactly as doctor anchors it, so `lock:` cannot match `unlock:`.
-      grep -qE "(^|[^a-zA-Z_])$sym" "$TMPL/CLAUDE.md" && continue
+      # Anchored exactly as doctor anchors it (one function, symbol_present), so `lock:` cannot
+      # match `unlock:` and the `.` in `cli-fill-env.sh` is a dot.
+      symbol_present "$sym" "$TMPL/CLAUDE.md" && continue
       echo "❌ manifests/claude-md-vocab.txt requires \`$sym\` but templates/CLAUDE.md no longer mentions it — the manifest is stale (drop the row) or the symbol was dropped from the template by mistake. Doctor skips such a row silently, so no consumer is told the symbol is missing"; fail=$((fail+1))
-    done < <(grep -v '^[[:space:]]*#' "$vocab4" | sed 's/[[:space:]]*$//' | grep -v '^$')
+    done < <(manifest_prose_rows "$vocab4")
     [ "$n4" -gt 0 ] || { echo "❌ manifests/claude-md-vocab.txt has no rows — doctor's CLAUDE.md vocabulary containment checks nothing; Check 9b arm 4 is VACUOUS"; fail=$((fail+1)); }
   fi
 fi
@@ -183,13 +189,12 @@ fi
 #      and both remain UNGUARDED. DOCUMENTATION.md's numbered table lives outside the plugin dir
 #      and is unreachable from a scaffolded project. Do not read a green 9bb as "all mirrors agree".
 if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
-  # arg_shapes <file> — "key<TAB>canonical-shape" per arg-shape table row.
-  arg_shapes() { sed -nE 's/^\| `([a-z0-9_]+)` \| `([^`]*)`.*/\1\t\2/p' "$1" 2>/dev/null; }
+  # arg_shape_rows <file> (lib/manifest.sh) — "key<TAB>canonical-shape" per arg-shape table row.
   sot_tbl="$TMPL/../skills/test-case-contract/SKILL.md"; pln_tbl="$TMPL/../agents/planner.md"
   if [ ! -f "$sot_tbl" ] || [ ! -f "$pln_tbl" ]; then
     echo "⚠️  arg-shape mirrors not both found ($sot_tbl / $pln_tbl) — argument-shape drift is UNVERIFIED"; warn=$((warn+1))
   else
-    sot_shapes=$(arg_shapes "$sot_tbl"); pln_shapes=$(arg_shapes "$pln_tbl")
+    sot_shapes=$(arg_shape_rows "$sot_tbl"); pln_shapes=$(arg_shape_rows "$pln_tbl")
     # A table that fails to parse must not read as "no drift" — an empty side means the format
     # moved out from under the extractor, which is a silent-green risk, not a pass.
     n_sot=$(printf '%s\n' "$sot_shapes" | grep -c . || true)
@@ -378,7 +383,7 @@ rail_window_ok() {
   [ "$hits" -gt 0 ] && [ "$ok" -eq 1 ]
 }
 if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
-  RAILS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' "$MANIFESTS/prod-guard-rails.txt" 2>/dev/null | grep -v '^$')
+  RAILS=$(manifest_rows "$MANIFESTS/prod-guard-rails.txt")
   skills_dir="$TMPL/../skills"
   if [ -z "$RAILS" ]; then
     echo "❌ manifests/prod-guard-rails.txt missing or empty — prod-guard rail coverage is UNVERIFIED"; fail=$((fail+1))
@@ -472,7 +477,7 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   if [ ! -f "$sot_md" ]; then
     echo "⚠️  $sot_md not found — remaining-mirror arg-shape drift is UNVERIFIED"; warn=$((warn+1))
   else
-    sot_norm=$(sed -nE 's/^\| `([a-z0-9_]+)` \| `([^`]*)`.*/\1\t\2/p' "$sot_md" | awk "$norm_prog" | sort)
+    sot_norm=$(arg_shape_rows "$sot_md" | awk "$norm_prog" | sort)
     if [ -z "$sot_norm" ]; then
       echo "❌ the arg-shape SoT table in skills/test-case-contract/SKILL.md did not parse — remaining-mirror drift is UNCHECKED"; fail=$((fail+1))
     else
@@ -636,6 +641,25 @@ fi
 #         agent with an explicit `tools:` list cannot call it anyway.
 #     Arm 1 only. Arms 2 and 3 compare the shipped grants with a PROJECT's .claude/settings.json,
 #     so they stay in skills/doctor/scripts/doctor.sh under the same id.
+#     Arm 4 (SUBSTRATE PROTECTION TIER ↔ settings.json, another hand-kept pair). Each row of
+#       manifests/resync-set.txt declares how its stamped file is guarded: `deny` (an Edit(...)
+#       deny in templates/settings.json covers it) or `prompt` (deliberately not denied and under
+#       no allow glob, so every edit reaches a human). That used to live only in a doctor Check 9
+#       comment, which said of the tier-(c) files under Edit(specs/**) and Edit(fixtures/**) that
+#       "the deny is per-path and does not follow automatically": a new resync-set entry under an
+#       allowed tree was silently auto-writable until someone remembered. Each direction FAILs:
+#         - `deny` row no Edit deny covers -> an agent overwrites a toolkit-owned file in place
+#           (an Edit/Write allow glob writes it without a prompt), and only doctor's drift WARN
+#           ever notices;
+#         - `prompt` row that IS denied -> the user cannot make the edit the tier exists for;
+#         - `prompt` row under an Edit/Write allow glob -> no prompt at all, so it is really
+#           unprotected while the manifest says a human approves each edit;
+#         - a row with no tier, or any other word -> the row is unchecked.
+#       A rule covers a path by gitignore-style matching, which is how Claude Code reads Edit
+#       rules: `**` spans directories, `*` and `?` do not cross a `/`, and a pattern with no `/`
+#       matches the name at any depth. Only the Edit rules are consulted for coverage (Write
+#       rules are never read for file paths); both Edit and Write allow globs count as "under an
+#       allow glob", erring toward a FAIL.
 if [ -n "$TMPL" ] && [ -f "$TMPL/settings.json" ] && [ -f "$TMPL/../agents/healer.md" ] && command -v jq >/dev/null 2>&1; then
   # `tools:` is a comma-separated frontmatter scalar; settings.json is a JSON array. Normalize
   # both to a sorted line set so the comparison is of SETS, not of formatting or order.
@@ -650,6 +674,84 @@ if [ -n "$TMPL" ] && [ -f "$TMPL/settings.json" ] && [ -f "$TMPL/../agents/heale
       echo "❌ MCP mirror drift — declared in agents/healer.md 'tools:' but NOT allowed in templates/settings.json: $(printf '%s\n' "$only_h" | tr '\n' ' ')— the healer runs as a subagent, so this tool PROMPTS with nobody to answer and is effectively unavailable mid-heal. Add it to permissions.allow[]."; fail=$((fail+1)); }
     [ -n "$only_s" ] && {
       echo "❌ MCP mirror drift — allowed in templates/settings.json but NOT declared in agents/healer.md 'tools:': $(printf '%s\n' "$only_s" | tr '\n' ' ')— a standing pre-approval no agent can use (an explicit tools: list is a restriction). Add it to the healer or drop the rule."; fail=$((fail+1)); }
+  fi
+fi
+# perm_glob_re <glob> — an anchored ERE for the project paths a permission-rule path matches.
+# `//abs` and `~/…` name paths outside the project and print nothing (they cover no row).
+perm_glob_re() {
+  local g=$1 out="" lit="" c
+  case "$g" in
+    ('//'*|'~'*) return 0 ;;
+    ('./'*) g=${g#./} ;;
+    ('/'*) g=${g#/} ;;
+  esac
+  case "$g" in
+    (*/*) : ;;
+    (*) out="(.*/)?" ;;
+  esac
+  while [ -n "$g" ]; do
+    case "$g" in
+      ('**/'*) out="$out$(ere_quote "$lit")(.*/)?"; lit=""; g=${g#'**/'} ;;
+      ('**'*) out="$out$(ere_quote "$lit").*"; lit=""; g=${g#'**'} ;;
+      ('*'*) out="$out$(ere_quote "$lit")[^/]*"; lit=""; g=${g#'*'} ;;
+      ('?'*) out="$out$(ere_quote "$lit")[^/]"; lit=""; g=${g#'?'} ;;
+      (*) c=${g%"${g#?}"}; lit="$lit$c"; g=${g#?} ;;
+    esac
+  done
+  printf '^%s%s$\n' "$out" "$(ere_quote "$lit")"
+}
+# first_rule_covering <path> <rule-paths> — prints the first rule path (one per line) whose glob
+# matches <path>; prints nothing when none does.
+first_rule_covering() {
+  local rp re
+  while IFS= read -r rp; do
+    [ -n "$rp" ] || continue
+    re=$(perm_glob_re "$rp")
+    [ -n "$re" ] || continue
+    if printf '%s\n' "$1" | grep -qE -e "$re"; then
+      printf '%s\n' "$rp"
+      return 0
+    fi
+  done <<EOF9F
+$2
+EOF9F
+  return 0
+}
+# Arm 4: every resync-set row's declared tier against templates/settings.json.
+if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
+  tier_set="$MANIFESTS/resync-set.txt"
+  tier_rows=$(manifest_tiers "$tier_set")
+  if [ -z "$tier_rows" ]; then
+    echo "❌ manifests/resync-set.txt missing or empty — the substrate protection tiers are UNCHECKED (Check 9f arm 4 is VACUOUS)"; fail=$((fail+1))
+  elif [ ! -f "$TMPL/settings.json" ]; then
+    echo "❌ templates/settings.json is missing — the substrate protection tiers in manifests/resync-set.txt have nothing to hold against (Check 9f arm 4 is VACUOUS)"; fail=$((fail+1))
+  elif ! command -v jq >/dev/null 2>&1 || ! jq -e '.permissions' "$TMPL/settings.json" >/dev/null 2>&1; then
+    echo "⚠️  templates/settings.json could not be read with jq (jq missing, or no permissions block) — the substrate protection tiers are UNVERIFIED"; warn=$((warn+1))
+  else
+    # Rule paths: `Edit(x)` -> x. A rule with no parenthesised path covers every file.
+    tier_deny=$(jq -r '.permissions.deny[]? | strings | select(test("^Edit(\\(|$)"))' "$TMPL/settings.json" | sed -e 's/^Edit$/**/' -e 's/^Edit(//' -e 's/)$//')
+    tier_allow=$(jq -r '.permissions.allow[]? | strings | select(test("^(Edit|Write)(\\(|$)"))' "$TMPL/settings.json" | sed -E -e 's/^(Edit|Write)$/**/' -e 's/^(Edit|Write)\(//' -e 's/\)$//')
+    while IFS="$(printf '\t')" read -r tp tt; do
+      [ -n "$tp" ] || continue
+      t_denied=$(first_rule_covering "$tp" "$tier_deny")
+      case "$tt" in
+        (deny)
+          [ -n "$t_denied" ] && continue
+          echo "❌ manifests/resync-set.txt marks $tp \`deny\` but no Edit(...) deny in templates/settings.json covers it — an agent can overwrite a toolkit-owned file in place$(t_allow=$(first_rule_covering "$tp" "$tier_allow"); [ -n "$t_allow" ] && printf ' (Edit/Write(%s) even allows it without a prompt)' "$t_allow"). Add \"Edit($tp)\" to permissions.deny[], or mark the row \`prompt\` if a human should approve each edit"; fail=$((fail+1)) ;;
+        (prompt)
+          if [ -n "$t_denied" ]; then
+            echo "❌ manifests/resync-set.txt marks $tp \`prompt\` but templates/settings.json denies it (Edit($t_denied)) — a prompt row is deliberately left editable with approval; mark it \`deny\` or narrow the rule"; fail=$((fail+1))
+          else
+            t_allow=$(first_rule_covering "$tp" "$tier_allow")
+            [ -n "$t_allow" ] && {
+              echo "❌ manifests/resync-set.txt marks $tp \`prompt\` but it sits under the allow glob $t_allow in templates/settings.json — no human sees the edit, so the row is unprotected; add \"Edit($tp)\" to permissions.deny[] and mark it \`deny\`"; fail=$((fail+1)); }
+          fi ;;
+        (*)
+          echo "❌ manifests/resync-set.txt row $tp declares no protection tier (got '${tt}') — end the row with \`deny\` or \`prompt\` (see that file's header); until then Check 9f arm 4 cannot check it"; fail=$((fail+1)) ;;
+      esac
+    done <<EOF9F4
+$tier_rows
+EOF9F4
   fi
 fi
 
@@ -805,7 +907,7 @@ $TMPL/../agents/reviewer.md:the VALIDATOR|an unproven stub ships green"
       echo "⚠️  situation-step mirror not found at $sf — the fault:/clock: chain is UNVERIFIED"; warn=$((warn+1)); continue
     fi
     for sym in 'fault:' 'clock:'; do
-      grep -qE "(^|[^a-zA-Z_])$sym" "$sf" \
+      symbol_present "$sym" "$sf" \
         || { echo "❌ ${sf#"$TMPL"/../} never mentions \`$sym\` — that file is $srole in the situation-step chain (test-case-contract §\"Situation steps\"), so with the link dropped, $scost. Nothing else in this toolkit reads that step form, so the loss is silent."; fail=$((fail+1)); }
     done
   done <<EOF
@@ -920,8 +1022,8 @@ fi
 #     scripts are extensionless). The owner, spec-links.sh, is skipped.
 if [ -n "$TMPL" ] && [ -d "$TMPL/.." ]; then
   plug9k=$(cd "$TMPL/.." 2>/dev/null && pwd)
-  # `-e` is mandatory: the pattern begins with `-f`, which grep would otherwise take as `-f FILE`.
-  umw_re='-f[[:space:]]*"artifacts/route-manifests/\$\{'
+  # The anchor, the comment strip and the owner's exemption are rederives_manifest_walk
+  # (lib/manifest.sh), the same function doctor 9k arm 3 calls for a project's scripts.
   files9k=$({ find "$plug9k" -name '*.sh' -type f -not -path '*/node_modules/*' 2>/dev/null
               [ -d "$plug9k/bin" ] && find "$plug9k/bin" -type f 2>/dev/null
             } | sort -u)
@@ -931,8 +1033,7 @@ if [ -n "$TMPL" ] && [ -d "$TMPL/.." ]; then
   fi
   while IFS= read -r f; do
     [ -n "$f" ] || continue
-    case "$f" in */spec-links.sh) continue ;; esac
-    sed '/^[[:space:]]*#/d' "$f" 2>/dev/null | grep -qE -e "$umw_re" || continue
+    rederives_manifest_walk "$f" || continue
     echo "❌ ${f#"$plug9k"/} builds a route-manifest path from a variable — the unmanifested walk is owned by \`scripts/spec-links.sh unmanifested\` (templates/scripts/spec-links.sh, header rule 3). Call it instead: a second copy drifts silently (the twin exclusion is the half that is invisible when it is wrong), and /qa-warden:impact and /qa-warden:coverage must report the SAME invisible-spec set"
     fail=$((fail+1))
   done <<EOF9K

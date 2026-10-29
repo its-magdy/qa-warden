@@ -8,7 +8,7 @@
 #
 # Usage: bash coverage.sh "[area=<name>] [site=<id>]"
 # Exit 2 = the script refused (a bogus area=, a missing scripts/spec-links.sh, or a missing/empty
-# scripts/oracle-keys.txt), NOT a gap-free result.
+# scripts/oracle-keys.txt, or a plugin missing its lib/manifest.sh), NOT a gap-free result.
 # NOTE: deliberately NO `set -euo pipefail`. Every dimension must DEGRADE GRACEFULLY on
 # absent optional inputs (basis/cases/manifests are all optional); -e or -u would abort the
 # whole report on the first missing file, turning "no data" into "no gaps". Faithful to the
@@ -77,12 +77,20 @@ if [ -n "$SITE" ] && [ ! -d "specs/_context/$SITE" ]; then
   echo "WARN: site=$SITE has no specs/_context/$SITE/ directory — check the site name (the basis-derived dim-1 rows will be empty for it); feature dimensions are still computed."
 fi
 # The closed oracle vocabulary is READ from scripts/oracle-keys.txt (the stamped manifest: one
-# key per line, `#` comments and blank lines ignored; the same parse doctor Check 2 uses), not
+# key per line, `#` comments and blank lines ignored; the same parse doctor Check 2 uses, from the
+# plugin's lib/manifest.sh), not
 # hand-typed here. This script used to carry a 16-key copy that only a selfcheck grep policed.
 # A missing/empty manifest REFUSES (exit 2) instead of falling back to a baked-in list: a
 # fallback would keep the mirror alive, and a stale one silently under-counts assertions in
 # dimensions 1 and 2, which reads exactly like "no gaps".
-ORACLE_KEYS=$(sed -e 's/#.*$//' -e 's/[[:space:]]*$//' scripts/oracle-keys.txt 2>/dev/null | grep -v '^$')
+MANIFEST_LIB="$(dirname "${BASH_SOURCE[0]}")/../../../lib/manifest.sh"
+if [ ! -f "$MANIFEST_LIB" ]; then
+  echo "ERROR: the plugin library $MANIFEST_LIB is missing — the oracle vocabulary cannot be read. Reinstall the plugin, then re-run. This is NOT a gap-free result."
+  exit 2
+fi
+# shellcheck source=qa-warden/lib/manifest.sh
+. "$MANIFEST_LIB"
+ORACLE_KEYS=$(manifest_rows scripts/oracle-keys.txt)
 if [ -z "$ORACLE_KEYS" ]; then
   echo "ERROR: scripts/oracle-keys.txt missing or empty — the oracle vocabulary cannot be read, so assertion counts in dims 1 and 2 would be wrong. Run /qa-warden:init --resync, then re-run. This is NOT a gap-free result."
   exit 2
