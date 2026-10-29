@@ -30,11 +30,11 @@ manifest_prose_rows() {
   grep -v '^[[:space:]]*#' "$1" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -v '^$'
 }
 
-# manifest_normalised_rows <file> — manifest_rows with each row's leading `./` segments and inner
-# `/./` segments dropped, so `  ./scripts/./x.sh` reads as scripts/x.sh. Internal: the two readers
-# below are the interface.
+# manifest_normalised_rows <file> — manifest_rows with repeated `/` squeezed and each row's
+# leading `./` segments and inner `/./` segments dropped, so `  ./scripts//./x.sh` reads as
+# scripts/x.sh. Internal: the two readers below are the interface.
 manifest_normalised_rows() {
-  manifest_rows "$1" | sed -e 's#^\(\./\)*##' -e ':a' -e 's#/\./#/#' -e 'ta'
+  manifest_rows "$1" | sed -e 's#//*#/#g' -e 's#^\(\./\)*##' -e ':a' -e 's#/\./#/#' -e 'ta'
 }
 
 # manifest_paths <file> — the path column of a path manifest, one per line. For
@@ -88,8 +88,11 @@ symbol_present() {
 # includes digits (`a11y_violations_below`), and the `fault:`/`clock:` rows keep their trailing
 # colon precisely so this pattern skips them. Doctor Check 2 takes the key column; qa-selfcheck
 # Checks 9bb and 9be compare the shapes.
+# The tab is a literal one, not `\t`: an older BSD sed writes `\t` in a replacement as a `t`.
 arg_shape_rows() {
-  sed -nE 's/^\| `([a-z0-9_]+)` \| `([^`]*)`.*/\1\t\2/p' "$1" 2>/dev/null
+  local tab
+  tab=$(printf '\t')
+  sed -nE 's/^\| `([a-z0-9_]+)` \| `([^`]*)`.*/\1'"$tab"'\2/p' "$1" 2>/dev/null
 }
 
 # rederives_manifest_walk <file> — succeeds when <file> re-derives the UNMANIFESTED walk that

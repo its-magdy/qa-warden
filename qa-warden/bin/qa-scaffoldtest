@@ -2449,10 +2449,10 @@ cat > "$ML/set.txt" <<EOF
    scripts/a.sh     deny   # an inline comment
 ./scripts/./b.sh prompt
 scripts/c.sh
-${TAB}././d/./e/./f.md${TAB}deny
+${TAB}././d/./e//./f.md${TAB}deny
 scripts/g.sh deny extra
 EOF
-check_eq "manifest_paths: trimmed, comments and ./ segments dropped, path column only" \
+check_eq "manifest_paths: trimmed, comments, // and ./ segments dropped, path column only" \
   "scripts/a.sh scripts/b.sh scripts/c.sh d/e/f.md scripts/g.sh" "$(manifest_paths "$ML/set.txt" | tr '\n' ' ' | sed 's/ $//')"
 check_eq "manifest_tiers: path<TAB>tier, empty without one, the rest of the row with extra fields" \
   "scripts/a.sh${TAB}deny|scripts/b.sh${TAB}prompt|scripts/c.sh${TAB}|d/e/f.md${TAB}deny|scripts/g.sh${TAB}deny extra" \
@@ -2534,15 +2534,42 @@ sc_has "a prompt row that is denied fails" \
   '❌ manifests/resync-set.txt marks scripts/init.sh `prompt` but templates/settings.json denies it (Edit(scripts/init.sh))'
 tier_run '.permissions.deny -= ["Edit(fixtures/schemas/README.md)"]' 's#^(fixtures/schemas/README\.md[[:space:]]+)deny#\1prompt#'
 sc_has "a prompt row under an allow glob fails" \
-  '❌ manifests/resync-set.txt marks fixtures/schemas/README.md `prompt` but it sits under the allow glob fixtures/** in templates/settings.json'
-tier_run '.permissions.deny -= ["Edit(specs/_context/_templates/**)"] | .permissions.deny += ["Edit(specs/_context/*)"]'
-sc_has "a single * does not cross a /: Edit(specs/_context/*) leaves basis.md uncovered" \
+  '❌ manifests/resync-set.txt marks fixtures/schemas/README.md `prompt` but it sits under the allow rule Edit(fixtures/**) in templates/settings.json'
+# Not `specs/_context/*`: that names the _templates directory itself, and a directory rule covers
+# what is under it.
+tier_run '.permissions.deny -= ["Edit(specs/_context/_templates/**)"] | .permissions.deny += ["Edit(specs/_context/*.md)"]'
+sc_has "a single * does not cross a /: Edit(specs/_context/*.md) leaves basis.md uncovered" \
   'marks specs/_context/_templates/basis.md `deny` but no Edit(...) deny in templates/settings.json covers it'
 sc_has "  and the finding names the allow glob that writes it without a prompt" \
-  '(Edit/Write(specs/**) even allows it without a prompt)'
+  '(Edit(specs/**) even allows it without a prompt)'
 tier_run '.permissions.deny -= ["Edit(specs/_context/_templates/**)"] | .permissions.deny += ["Edit(specs/**/_templates/*.md)"]'
 check "a ** in the middle spans directories: Edit(specs/**/_templates/*.md) covers basis.md" \
   test "$(grep -cF -e 'marks specs/_context/_templates/basis.md' <<<"$SC_OUT")" = "0"
+# tier_lines <path> — how many tier findings name <path>.
+tier_lines() { grep -cE -e "(marks|row) $1 " <<<"$SC_OUT"; }
+tier_run '.permissions.deny -= ["Edit(fixtures/schemas/README.md)"] | .permissions.deny += ["Edit(/README.md)"]'
+sc_has "a leading / anchors the rule at the root: Edit(/README.md) does not cover fixtures/schemas/README.md" \
+  'marks fixtures/schemas/README.md `deny` but no Edit(...) deny in templates/settings.json covers it'
+check_eq "  nor deny scripts/README.md" "0" "$(tier_lines scripts/README.md)"
+tier_run '.permissions.deny += ["Edit(./README.md)"]'
+check_eq "a leading ./ anchors too: Edit(./README.md) does not deny scripts/README.md" "0" "$(tier_lines scripts/README.md)"
+tier_run '.permissions.allow += ["Edit(scripts/)"]'
+sc_has "a rule naming a directory covers what is under it (allow Edit(scripts/) reaches scripts/init.sh)" \
+  'marks scripts/init.sh `prompt` but it sits under the allow rule Edit(scripts/)'
+tier_run '.permissions.deny += ["Edit(.github)"]'
+sc_has "  and so does a slash-less directory name (deny Edit(.github))" \
+  'marks .github/workflows/qa-nightly.yml.example `prompt` but templates/settings.json denies it (Edit(.github))'
+tier_run '.permissions.deny += ["Edit(scripts/[i]nit.sh)"]'
+sc_has "[...] is a class: Edit(scripts/[i]nit.sh) denies scripts/init.sh" 'denies it (Edit(scripts/[i]nit.sh))'
+tier_run '.permissions.deny += ["Edit(scripts/ini?.sh)"]'
+sc_has "? is one character: Edit(scripts/ini?.sh) denies scripts/init.sh" 'denies it (Edit(scripts/ini?.sh))'
+tier_run '.permissions.deny -= ["Edit(fixtures/schemas/user.ts.example)"] | .permissions.deny += ["Edit(fixtures/**.example)"]'
+sc_has "a ** that is not a whole segment is a *: Edit(fixtures/**.example) does not reach fixtures/schemas/" \
+  'marks fixtures/schemas/user.ts.example `deny` but no Edit(...) deny'
+tier_run '.permissions.allow += ["Write(scripts/runtime-dirs.txt)"]'
+sc_has "a Write allow counts as an allow glob" 'marks scripts/runtime-dirs.txt `prompt` but it sits under the allow rule Write(scripts/runtime-dirs.txt)'
+tier_run '.permissions.allow += ["Edit"]'
+sc_has "a bare Edit allow covers every path and is named as itself" 'marks scripts/oracle-keys.txt `prompt` but it sits under the allow rule Edit in'
 tier_run '.' 's#^(scripts/doctor\.sh)[[:space:]]+deny#\1#'
 sc_has "a row with no tier fails" "❌ manifests/resync-set.txt row scripts/doctor.sh declares no protection tier (got '')"
 tier_run '.' 's#^(scripts/doctor\.sh[[:space:]]+)deny#\1denied#'

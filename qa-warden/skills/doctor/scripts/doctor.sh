@@ -416,7 +416,7 @@ fi
 #    So the loop skips exactly the files Check 9 WILL report: there is a $TMPL, its manifest is
 #    readable and lists the file, and the plugin ships its template. Any of those missing and
 #    Check 9 passes over the file without a word (no $TMPL: this doctor was copied out of its
-#    plugin; no manifest: Check 9 prints only a generic UNVERIFIED; no template: Check 9 skips
+#    plugin together with lib/manifest.sh, without which it stops at the top; no manifest: Check 9 prints only a generic UNVERIFIED; no template: Check 9 skips
 #    that line), so this loop is the only thing that names it, as a ⚠️.
 # The baseline is the plugin this script ships in: <plugin>/skills/doctor/scripts/doctor.sh, so the
 # plugin root is three directories up. No lookup, no guess. Until this script moved into the plugin
@@ -652,7 +652,8 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
 else
   # A skipped drift check must be VISIBLE (WARN, counted), not a silent green INFO — this check
   # guards the highest-value propagation class (F-015/F-027); a quiet skip hides exactly that drift.
-  # Reachable only when this file was copied out of its plugin.
+  # Reachable only when this file was copied out of its plugin (with lib/manifest.sh beside
+  # it, three directories up; without that library the doctor stops before any check).
   echo "⚠️  substrate-drift check SKIPPED — no plugin templates/ three directories above this script; it was copied out of the plugin. Run it as /qa-warden:doctor, or as bash <plugin>/skills/doctor/scripts/doctor.sh; drift to the shipped substrate is UNVERIFIED"; warn=$((warn+1))
 fi
 # Stock-var containment — .env.example is shared-ownership (excluded from the byte-compare

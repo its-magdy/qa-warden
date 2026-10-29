@@ -656,8 +656,7 @@ fi
 #           unprotected while the manifest says a human approves each edit;
 #         - a row with no tier, or any other word -> the row is unchecked.
 #       A rule covers a path by gitignore-style matching, which is how Claude Code reads Edit
-#       rules: `**` spans directories, `*` and `?` do not cross a `/`, and a pattern with no `/`
-#       matches the name at any depth. Only the Edit rules are consulted for coverage (Write
+#       rules (perm_glob_re below spells the cases out: anchoring, `**`, directories). Only the Edit rules are consulted for coverage (Write
 #       rules are never read for file paths); both Edit and Write allow globs count as "under an
 #       allow glob", erring toward a FAIL.
 if [ -n "$TMPL" ] && [ -f "$TMPL/settings.json" ] && [ -f "$TMPL/../agents/healer.md" ] && command -v jq >/dev/null 2>&1; then
@@ -676,40 +675,81 @@ if [ -n "$TMPL" ] && [ -f "$TMPL/settings.json" ] && [ -f "$TMPL/../agents/heale
       echo "❌ MCP mirror drift — allowed in templates/settings.json but NOT declared in agents/healer.md 'tools:': $(printf '%s\n' "$only_s" | tr '\n' ' ')— a standing pre-approval no agent can use (an explicit tools: list is a restriction). Add it to the healer or drop the rule."; fail=$((fail+1)); }
   fi
 fi
-# perm_glob_re <glob> — an anchored ERE for the project paths a permission-rule path matches.
+# perm_glob_re <rule-path> — an anchored ERE for the project paths a permission-rule path covers,
+# read the gitignore way: a leading `/` or `./` anchors the rule at the project root, a rule with no
+# other `/` matches the name at any depth, `**` spans directories only as a whole segment (`**/`,
+# `/**/`, a trailing `/**`; anywhere else it is a `*`), `*` and `?` stay inside one segment,
+# `[...]` is a class, and a rule that names a directory covers everything under it.
 # `//abs` and `~/…` name paths outside the project and print nothing (they cover no row).
 perm_glob_re() {
-  local g=$1 out="" lit="" c
+  local g=$1 out="" lit="" anchored="" seg=1 c cls
   case "$g" in
     ('//'*|'~'*) return 0 ;;
-    ('./'*) g=${g#./} ;;
-    ('/'*) g=${g#/} ;;
+    ('./'*) g=${g#./}; anchored=1 ;;
+    ('/'*) g=${g#/}; anchored=1 ;;
   esac
-  case "$g" in
-    (*/*) : ;;
-    (*) out="(.*/)?" ;;
-  esac
+  g=${g%/}
+  if [ -z "$anchored" ]; then
+    case "$g" in
+      (*/*) : ;;
+      (*) out="(.*/)?" ;;
+    esac
+  fi
   while [ -n "$g" ]; do
     case "$g" in
-      ('**/'*) out="$out$(ere_quote "$lit")(.*/)?"; lit=""; g=${g#'**/'} ;;
-      ('**'*) out="$out$(ere_quote "$lit").*"; lit=""; g=${g#'**'} ;;
-      ('*'*) out="$out$(ere_quote "$lit")[^/]*"; lit=""; g=${g#'*'} ;;
-      ('?'*) out="$out$(ere_quote "$lit")[^/]"; lit=""; g=${g#'?'} ;;
-      (*) c=${g%"${g#?}"}; lit="$lit$c"; g=${g#?} ;;
+      ('**/'*)
+        if [ -n "$seg" ]; then
+          out="$out$(ere_quote "$lit")(.*/)?"; lit=""; g=${g#'**/'}
+        else
+          out="$out$(ere_quote "$lit")[^/]*"; lit=""; g=${g#'**'}; seg=""
+        fi ;;
+      ('**')
+        if [ -n "$seg" ]; then out="$out$(ere_quote "$lit").*"; else out="$out$(ere_quote "$lit")[^/]*"; fi
+        lit=""; g="" ;;
+      ('**'*) out="$out$(ere_quote "$lit")[^/]*"; lit=""; g=${g#'**'}; seg="" ;;
+      ('*'*) out="$out$(ere_quote "$lit")[^/]*"; lit=""; g=${g#'*'}; seg="" ;;
+      ('?'*) out="$out$(ere_quote "$lit")[^/]"; lit=""; g=${g#'?'}; seg="" ;;
+      ('['*']'*)
+        cls=${g#'['}; cls=${cls%%']'*}
+        case "$cls" in
+          ('!'*) cls="^${cls#'!'}" ;;
+        esac
+        out="$out$(ere_quote "$lit")[$cls]"; lit=""; g=${g#'['*']'}; seg="" ;;
+      (*)
+        c=${g%"${g#?}"}; lit="$lit$c"; g=${g#?}
+        if [ "$c" = / ]; then seg=1; else seg=""; fi ;;
     esac
   done
-  printf '^%s%s$\n' "$out" "$(ere_quote "$lit")"
+  printf '^%s%s(/.*)?$\n' "$out" "$(ere_quote "$lit")"
 }
-# first_rule_covering <path> <rule-paths> — prints the first rule path (one per line) whose glob
-# matches <path>; prints nothing when none does.
-first_rule_covering() {
-  local rp re
-  while IFS= read -r rp; do
+# rule_res <rules> — "ERE<TAB>rule" for each permission rule (one per line), built once so the
+# row loop below only matches. `Edit(x)` / `Write(x)` -> x; a bare `Edit` or `Write` covers every
+# path. The rule itself is kept for the message.
+rule_res() {
+  local r rp re
+  while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    case "$r" in
+      (Edit|Write) rp="**" ;;
+      (*'('*')') rp=${r#*'('}; rp=${rp%')'} ;;
+      (*) continue ;;
+    esac
     [ -n "$rp" ] || continue
     re=$(perm_glob_re "$rp")
     [ -n "$re" ] || continue
-    if printf '%s\n' "$1" | grep -qE -e "$re"; then
-      printf '%s\n' "$rp"
+    printf '%s\t%s\n' "$re" "$r"
+  done <<EOF9F
+$1
+EOF9F
+}
+# first_rule_covering <path> <rule_res output> — prints the first rule whose ERE matches <path>;
+# prints nothing when none does.
+first_rule_covering() {
+  local re r
+  while IFS="$(printf '\t')" read -r re r; do
+    [ -n "$re" ] || continue
+    if [[ $1 =~ $re ]]; then
+      printf '%s\n' "$r"
       return 0
     fi
   done <<EOF9F
@@ -728,23 +768,22 @@ if [ -n "$TMPL" ] && [ -d "$TMPL" ]; then
   elif ! command -v jq >/dev/null 2>&1 || ! jq -e '.permissions' "$TMPL/settings.json" >/dev/null 2>&1; then
     echo "⚠️  templates/settings.json could not be read with jq (jq missing, or no permissions block) — the substrate protection tiers are UNVERIFIED"; warn=$((warn+1))
   else
-    # Rule paths: `Edit(x)` -> x. A rule with no parenthesised path covers every file.
-    tier_deny=$(jq -r '.permissions.deny[]? | strings | select(test("^Edit(\\(|$)"))' "$TMPL/settings.json" | sed -e 's/^Edit$/**/' -e 's/^Edit(//' -e 's/)$//')
-    tier_allow=$(jq -r '.permissions.allow[]? | strings | select(test("^(Edit|Write)(\\(|$)"))' "$TMPL/settings.json" | sed -E -e 's/^(Edit|Write)$/**/' -e 's/^(Edit|Write)\(//' -e 's/\)$//')
+    tier_deny=$(rule_res "$(jq -r '.permissions.deny[]? | strings | select(test("^Edit(\\(|$)"))' "$TMPL/settings.json")")
+    tier_allow=$(rule_res "$(jq -r '.permissions.allow[]? | strings | select(test("^(Edit|Write)(\\(|$)"))' "$TMPL/settings.json")")
     while IFS="$(printf '\t')" read -r tp tt; do
       [ -n "$tp" ] || continue
       t_denied=$(first_rule_covering "$tp" "$tier_deny")
       case "$tt" in
         (deny)
           [ -n "$t_denied" ] && continue
-          echo "❌ manifests/resync-set.txt marks $tp \`deny\` but no Edit(...) deny in templates/settings.json covers it — an agent can overwrite a toolkit-owned file in place$(t_allow=$(first_rule_covering "$tp" "$tier_allow"); [ -n "$t_allow" ] && printf ' (Edit/Write(%s) even allows it without a prompt)' "$t_allow"). Add \"Edit($tp)\" to permissions.deny[], or mark the row \`prompt\` if a human should approve each edit"; fail=$((fail+1)) ;;
+          echo "❌ manifests/resync-set.txt marks $tp \`deny\` but no Edit(...) deny in templates/settings.json covers it — an agent can overwrite a toolkit-owned file in place$(t_allow=$(first_rule_covering "$tp" "$tier_allow"); [ -n "$t_allow" ] && printf ' (%s even allows it without a prompt)' "$t_allow"). Add \"Edit($tp)\" to permissions.deny[], or mark the row \`prompt\` if a human should approve each edit"; fail=$((fail+1)) ;;
         (prompt)
           if [ -n "$t_denied" ]; then
-            echo "❌ manifests/resync-set.txt marks $tp \`prompt\` but templates/settings.json denies it (Edit($t_denied)) — a prompt row is deliberately left editable with approval; mark it \`deny\` or narrow the rule"; fail=$((fail+1))
+            echo "❌ manifests/resync-set.txt marks $tp \`prompt\` but templates/settings.json denies it ($t_denied) — a prompt row is deliberately left editable with approval; mark it \`deny\` or narrow the rule"; fail=$((fail+1))
           else
             t_allow=$(first_rule_covering "$tp" "$tier_allow")
             [ -n "$t_allow" ] && {
-              echo "❌ manifests/resync-set.txt marks $tp \`prompt\` but it sits under the allow glob $t_allow in templates/settings.json — no human sees the edit, so the row is unprotected; add \"Edit($tp)\" to permissions.deny[] and mark it \`deny\`"; fail=$((fail+1)); }
+              echo "❌ manifests/resync-set.txt marks $tp \`prompt\` but it sits under the allow rule $t_allow in templates/settings.json — no human sees the edit, so the row is unprotected; add \"Edit($tp)\" to permissions.deny[] and mark it \`deny\`"; fail=$((fail+1)); }
           fi ;;
         (*)
           echo "❌ manifests/resync-set.txt row $tp declares no protection tier (got '${tt}') — end the row with \`deny\` or \`prompt\` (see that file's header); until then Check 9f arm 4 cannot check it"; fail=$((fail+1)) ;;
