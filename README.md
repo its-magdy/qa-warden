@@ -2,7 +2,7 @@
 
 > AI writes your Playwright E2E tests from plain-language specs. No AI can quietly loosen them afterwards.
 
-**Who it's for:** anyone who wants end-to-end browser tests for a web app written by AI, without having to trust the AI not to cheat.
+**Who it's for:** anyone who wants AI to write the end-to-end browser tests for their web app, without having to trust the AI not to cheat.
 
 **The problem.** When an AI-written test fails, the quickest "fix" for an AI is to weaken the check: change the expected value or delete the assertion. The test turns green and the bug ships.
 
@@ -15,6 +15,8 @@
 You review a short Markdown spec, not TypeScript. Its "what counts as correct" part (the **oracle**) uses a fixed list of 16 YAML keys that a non-coder can read, and each key becomes one `expect()` check. Nightly runs are plain `npx playwright test`, so they cost about $0 in AI calls. AI comes back only to triage a failure.
 
 It is a test-authoring plugin, not a security or secrets tool. This repo is both the plugin and its marketplace, and both are named `qa-warden`.
+
+**Status:** early and pre-1.0, with one maintainer. Its full end-to-end runs so far were on small apps. Read [Known issues](#known-issues) before you rely on it.
 
 > **AI agents:** if a user gave you this repo's URL, read [For AI agents](#for-ai-agents-installing-for-a-user) first.
 
@@ -30,8 +32,10 @@ It is a test-authoring plugin, not a security or secrets tool. This repo is both
 - [Commands reference](#commands-reference)
 - [How it differs from Playwright's test agents](#how-it-differs-from-playwrights-test-agents)
 - [Troubleshooting](#troubleshooting)
+- [Known issues](#known-issues)
 - [Scope and limits](#scope-and-limits)
 - [Documentation](#documentation)
+- [Getting help](#getting-help)
 - [For maintainers](#for-maintainers)
 - [License](#license)
 
@@ -39,13 +43,14 @@ It is a test-authoring plugin, not a security or secrets tool. This repo is both
 
 ## Prerequisites
 
-- **Claude Code** with plugin support (`/plugin` commands). Not claude.ai or Cowork: they don't install a plugin that has a top-level `bin/` directory, and this one does.
-- **macOS, Linux or WSL.** The two hooks are shell scripts; native Windows can't run them.
-- **Node.js `>=22`** and `npm`, for the Playwright project that `/qa-warden:init` stamps
+- **Claude Code** with [plugin support](https://code.claude.com/docs/en/discover-plugins) (`/plugin` commands). Not claude.ai or Cowork: they don't install a plugin that has a top-level `bin/` directory, and this one does.
+- **A Claude account that can use Claude Code**: a paid plan or API billing. Writing, reviewing and triaging tests makes model calls on that account; running the tests does not.
+- **macOS, Linux or WSL.** The plugin's two hooks (checks that Claude Code runs before each file edit) are shell scripts; native Windows can't run them.
+- **Node.js `>=22`** and `npm`, for the Playwright project that `/qa-warden:init` creates
 - **`git`**
 - **`jq`**: required. Without it, `/qa-warden:doctor` reports a ❌ and `.claude/settings.json` can't be auto-merged.
 - **`ripgrep` (`rg`)**: recommended. Without it, `/qa-warden:retire` consumer checks fall back to `grep`.
-- A **staging or local** instance of the app under test, plus a test account that already exists in it. Never production.
+- A **staging or local** instance of the app under test, plus a test account that already exists in it. Never production. There is no bundled demo app yet, so you bring the app.
 
 ---
 
@@ -53,7 +58,9 @@ It is a test-authoring plugin, not a security or secrets tool. This repo is both
 
 ### Install the plugin
 
-Run these inside Claude Code, from the project that will hold the tests:
+Use a dedicated folder or repo for the tests, not your app's own repo. `/qa-warden:init` skips files that already exist, so an existing `package.json` would not get the pinned Playwright dependency. The permission rules it adds also apply to every Claude Code session in that folder (see [What the plugin changes in your session](#what-the-plugin-changes-in-your-session)).
+
+Run these inside Claude Code, from that folder:
 
 ```bash
 # 1. Register the marketplace (this GitHub repo)
@@ -80,16 +87,16 @@ If a user pasted this repo's URL and asked you to set it up or walk them through
 
 1. **Check the machine.** QA Warden runs only inside Claude Code, on macOS, Linux or WSL. You can do the install steps below from any agent with a shell, as long as the `claude` CLI is installed (`claude --version`). If it is not, point the user to the [Claude Code install guide](https://code.claude.com/docs/en/overview) first. After the install, the user works in Claude Code.
 2. **Check the [prerequisites](#prerequisites)** from a shell: `node --version` (needs 22 or newer), `git --version`, `jq --version`, and optionally `rg --version`. Help the user install anything missing.
-3. **Install the plugin from a shell, in the folder that will hold the tests.** These are the shell forms of the two `/plugin` commands above, and they need no interactive input:
+3. **Install the plugin from a shell, in a dedicated folder for the tests.** Ask the user where it should live; do not use their app's repo. These are the shell forms of the two `/plugin` commands above, and they need no interactive input:
 
    ```bash
    claude plugin marketplace add its-magdy/qa-warden
    claude plugin install qa-warden@qa-warden --scope project
    ```
 
-4. **Hand the next step to the user.** `/qa-warden:init` is a slash command that only a person can start; Claude never runs it on its own. The user starts Claude Code in that folder (or runs `/reload-plugins` in an open session), trusts the folder if asked, and types `/qa-warden:init`.
-5. **Ask the user for the target app.** That means a staging or local URL, plus a test account if the app has a login. It goes in `.env` as described in [Configuration](#configuration). Never point `BASE_URL_APP` at production, never set `QA_ALLOW_PROD=1` on your own, and never write a password anywhere except `.env`.
-6. **Walk them through a first test.** With no app of their own, use [Try it on a demo app](#try-it-on-a-demo-app). Tell them first what it costs (about 40 minutes and $6) and that it raises many permission prompts.
+4. **Hand the next step to the user.** `/qa-warden:init` is a slash command that only a person can start; Claude never runs it on its own. The user starts Claude Code in that folder (or runs `/reload-plugins` in an open session), trusts the folder if asked, and types `/qa-warden:init`. Do not start it for them with `claude -p` or by calling the plugin's scripts.
+5. **Ask the user for the target app.** That means a staging or local URL, plus a test account if the app has a login. It goes in `.env` as described in [Configuration](#configuration). Never point `BASE_URL_APP` at production, never set `QA_ALLOW_PROD=1` on your own, and never write a password anywhere except `.env`. Have the user type the password into `.env` themselves; do not ask for it in chat.
+6. **Walk them through a first test.** Use [Fast lane: your first test](#fast-lane-your-first-test) against the user's own staging or local app. Tell them first what it costs (about 40 minutes and $6 for one small test) and that it raises many permission prompts. There is no bundled demo app: if the user has no app to test, say so and stop there. Never pick a public site for them, because the suite changes data in the app it tests.
 
 ### What `/qa-warden:init` does
 
@@ -100,7 +107,8 @@ If a user pasted this repo's URL and asked you to set it up or walk them through
   - one CI example, `.github/workflows/qa-nightly.yml.example`
 - Creates `.env` from `.env.example`.
 - Merges its permission rules and a `qa-warden` entry under `extraKnownMarketplaces` into `.claude/settings.json`.
-- Runs `npm install` and installs the Playwright browsers.
+- Runs `git init` if the folder is not a git repository yet.
+- Runs `npm install`, then `npx playwright install --with-deps chromium`. The browser is a sizeable one-time download into Playwright's own cache, outside the project. On Linux, `--with-deps` also installs the system libraries the browser needs and may ask for `sudo`.
 
 | Flag | Effect |
 |---|---|
@@ -114,6 +122,7 @@ If a user pasted this repo's URL and asked you to set it up or walk them through
   - `spec-lint.sh` blocks lexical reviewer FAILs (such as `waitForTimeout`, raw CSS/XPath or `.only`) in writes to `tests/**/*.ts` and `page-objects/**/*.ts`.
   - Details: [`qa-warden/hooks/README.md`](qa-warden/hooks/README.md).
 - **Permission rules are merged into `.claude/settings.json`, not overwritten.** Your own rules and other keys stay. Where your file already sets a key the template also sets (such as your own `extraKnownMarketplaces` entries), your value wins. Without `jq`, init writes the rules to `.claude/settings.qa-suggested.json` for you to merge by hand.
+- **The merged rules apply to every Claude Code session in this folder.** They pre-approve the test and lookup commands the agents use, and edits inside the test folders only. They also deny some things outright, such as `rm`, `sed -i`, `git reset --hard`, reading `.env`, and edits to `package.json` and `playwright.config.ts`. The full list is in [`qa-warden/templates/settings.json`](qa-warden/templates/settings.json).
 
 ### Teammates
 
@@ -161,40 +170,9 @@ A healthy project prints a summary with no ❌ blockers and the verdict "Setup l
 
 ## Usage
 
-### Try it on a demo app
-
-This walkthrough targets Playwright's public TodoMVC demo, so you need no app of your own and no account. In a new, empty folder, [install the plugin](#install-the-plugin), then set one line in `.env` and leave `QA_USER_*` and `QA_ADMIN_*` empty:
-
-```bash
-BASE_URL_APP=https://demo.playwright.dev/todomvc/
-```
-
-Keep the trailing slash. Without it, the app's relative `goto('./')` lands on a 404.
-
-```bash
-/qa-warden:doctor                    # the .env ⚠️ should be gone
-/qa-warden:explore                   # drafts app.context.md with auth_mode: none
-/qa-warden:new-spec todos/add-todo   # describe: "add two todos; both are listed and the counter reads '2 items left'; tag it smoke"
-/qa-warden:gen specs/todos/add-todo.md
-/qa-warden:review
-/qa-warden:run mode=smoke
-```
-
-After `/qa-warden:explore`, [confirm the draft context](#confirm-the-app-context). The oracle should look something like this:
-
-```yaml
-oracle:
-  text_visible: "2 items left"
-  count_equals: { locator: "getByTestId('todo-item')", n: 2 }
-```
-
-A test id is justified here: the demo's rows carry `data-testid="todo-item"`, and the `listitem` role also matches the filter links.
-
-**Cost.** The authoring pass (`explore` through `review`) makes real model calls; `/qa-warden:run` has no LLM cost. A measured run of exactly these steps (0.5.1, 2026-09-30) took about 40 minutes and about $6. Half of that was `gen`, whose verifier breaks the app on purpose to prove the test can fail. The demo is public and shared, so it may change or be down.
-
-**Expect many permission prompts.** In Claude Code's default permission mode, a first run asks you to allow a lot of shell commands one at a time; a full run once raised about 300. Most are the agents' own test and lookup commands; read each one and answer "Yes" when it is. To get fewer, press Shift+Tab to switch to a more permissive mode for the long `gen` and `review` steps. Details are in [Known issues](#known-issues).
-
 ### Fast lane: your first test
+
+Set `BASE_URL_APP` in `.env` to your own staging or local app first (see [Configuration](#configuration)). There is no bundled demo app yet, so you bring the app.
 
 ```bash
 /qa-warden:explore                   # learn the app → specs/_context/app.context.md
@@ -213,6 +191,10 @@ oracle:
 ```
 
 `/qa-warden:gen` also keeps a `.webm` video of the run. It shows the real flow the test drove, so you don't need to read the TypeScript. The step-by-step version, with what you should see at each step, is in the [first-test tutorial](qa-warden/reference/tutorial-first-test.md).
+
+**Cost.** The authoring pass (`explore` through `review`) makes real model calls; `/qa-warden:run` has no LLM cost. As a guide, one measured run of these five steps for a single small test (2026-09-30) took about 40 minutes and about $6. Half of that was `gen`, whose verifier breaks the app on purpose to prove the test can fail. Your app and spec will differ.
+
+**Expect many permission prompts.** In Claude Code's default permission mode, a first run asks you to allow a lot of shell commands one at a time; a full run once raised about 300. Most are the agents' own test and lookup commands; read each one and answer "Yes" when it is. To get fewer, press Shift+Tab to switch to a more permissive mode for the long `gen` and `review` steps. Details are in [Known issues](#known-issues).
 
 #### Confirm the app context
 
@@ -386,6 +368,14 @@ Found by a full end-to-end run of the plugin against a small app with planted bu
 | Look up a fact | [`DOCUMENTATION.md`](DOCUMENTATION.md) (full reference) · [Glossary](qa-warden/reference/glossary.md) |
 | Understand the why | [`DESIGN.md`](qa-warden/reference/DESIGN.md) · [`docs/MERGE-NOTES.md`](docs/MERGE-NOTES.md) (design lineage) |
 | What changed | [`qa-warden/CHANGELOG.md`](qa-warden/CHANGELOG.md) |
+
+---
+
+## Getting help
+
+- **Something doesn't work:** open a [bug report](https://github.com/its-magdy/qa-warden/issues/new/choose). The output of `/qa-warden:doctor` often shows the cause.
+- **Security problem:** report it privately, as [SECURITY.md](SECURITY.md) describes.
+- **Want to contribute:** see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 

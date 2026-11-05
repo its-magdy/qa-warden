@@ -16,6 +16,25 @@ never carry the same number**, or the second one has no way to announce itself.
 
 ## [Unreleased]
 
+### README
+
+- **The "Try it on a demo app" walkthrough is gone.** It pointed the suite at Playwright's public
+  TodoMVC demo, a shared site the plugin does not control, and it disagreed with the first-test
+  tutorial, which says you bring your own app. The README now says the same: set `BASE_URL_APP` to
+  your own staging or local app and follow the fast lane. Its cost and permission-prompt notes moved
+  to the fast lane. The "For AI agents" section tells an agent to stop when the user has no app to
+  test, and never to pick a public site.
+- **The README says what you need and what you get into before you install.** Prerequisites names
+  the Claude account (a paid plan or API billing). A Status line says the plugin is early and
+  pre-1.0. Installation says to use a dedicated folder for the tests, not the app's repo, and why.
+  "What `/qa-warden:init` does" now lists the `git init`, the exact browser install command and
+  where the browser lands. A new line sums up what the merged permission rules allow and deny.
+- **The "For AI agents" section adds three rules:** install into a dedicated folder, never start
+  `/qa-warden:init` for the user, and have the user type the password into `.env` themselves.
+- **Known issues is in the table of contents**, and a new **Getting help** section links the bug
+  report form, `SECURITY.md` and `CONTRIBUTING.md`.
+- **"Who it's for" no longer reads as "a web app written by AI".**
+
 ---
 
 ## 0.6.1 — one resolver for stamped helpers, one manifest reader, README for first-time users (2026-11-05)
