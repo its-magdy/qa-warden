@@ -2,15 +2,21 @@
 
 > AI writes your Playwright E2E tests from plain-language specs. No AI can quietly loosen them afterwards.
 
-QA Warden is a Claude Code plugin that turns a Markdown spec into a Playwright `.spec.ts`. Each spec defines "correct" (its **oracle**) with a closed 16-key YAML vocabulary. A non-coder can read the oracle, and it compiles one-to-one into `expect()` calls. The nightly run is plain `npx playwright test`, so it costs roughly $0 in LLM calls. AI comes back only to triage a failure.
+**Who it's for:** anyone who wants end-to-end browser tests for a web app written by AI, without having to trust the AI not to cheat.
 
-The party it guards against is the AI itself, when it would weaken an assertion to turn a red test green:
+**The problem.** When an AI-written test fails, the quickest "fix" for an AI is to weaken the check: change the expected value or delete the assertion. The test turns green and the bug ships.
 
-- A **verifier** breaks the app on purpose and checks that each assertion goes red.
+**What QA Warden does.** It is a [Claude Code](https://code.claude.com/docs/en/overview) plugin. You describe a feature in plain language, and it writes a [Playwright](https://playwright.dev) test for it. Three guards then keep that test honest:
+
+- A **verifier** breaks the app on purpose, in the ways the spec says must fail, and checks that the test goes red.
 - A read-only **reviewer** blocks the PR when the spec and the test disagree.
 - The **healer** repairs selectors and waits, never the assertion. A red test stays red until a human decides whether the app or the spec is wrong.
 
+You review a short Markdown spec, not TypeScript. Its "what counts as correct" part (the **oracle**) uses a fixed list of 16 YAML keys that a non-coder can read, and each key becomes one `expect()` check. Nightly runs are plain `npx playwright test`, so they cost about $0 in AI calls. AI comes back only to triage a failure.
+
 It is a test-authoring plugin, not a security or secrets tool. This repo is both the plugin and its marketplace, and both are named `qa-warden`.
+
+> **AI agents:** if a user gave you this repo's URL, read [For AI agents](#for-ai-agents-installing-for-a-user) first.
 
 [![Release](https://img.shields.io/github/v/release/its-magdy/qa-warden)](https://github.com/its-magdy/qa-warden/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -63,10 +69,27 @@ Run these inside Claude Code, from the project that will hold the tests:
 To stay on one release, pin the marketplace to its tag with `#<tag>` (tags are `qa-warden--v<version>`):
 
 ```bash
-/plugin marketplace add its-magdy/qa-warden#qa-warden--v0.6.0
+/plugin marketplace add its-magdy/qa-warden#qa-warden--v0.6.1
 ```
 
 Updates are manual by default (see [Versioning and releasing](#versioning-and-releasing)). To get them automatically, run `/plugin`, open the **Marketplaces** tab, select `qa-warden` and choose **Enable auto-update**.
+
+### For AI agents: installing for a user
+
+If a user pasted this repo's URL and asked you to set it up or walk them through it:
+
+1. **Check the machine.** QA Warden runs only inside Claude Code, on macOS, Linux or WSL. You can do the install steps below from any agent with a shell, as long as the `claude` CLI is installed (`claude --version`). If it is not, point the user to the [Claude Code install guide](https://code.claude.com/docs/en/overview) first. After the install, the user works in Claude Code.
+2. **Check the [prerequisites](#prerequisites)** from a shell: `node --version` (needs 22 or newer), `git --version`, `jq --version`, and optionally `rg --version`. Help the user install anything missing.
+3. **Install the plugin from a shell, in the folder that will hold the tests.** These are the shell forms of the two `/plugin` commands above, and they need no interactive input:
+
+   ```bash
+   claude plugin marketplace add its-magdy/qa-warden
+   claude plugin install qa-warden@qa-warden --scope project
+   ```
+
+4. **Hand the next step to the user.** `/qa-warden:init` is a slash command that only a person can start; Claude never runs it on its own. The user starts Claude Code in that folder (or runs `/reload-plugins` in an open session), trusts the folder if asked, and types `/qa-warden:init`.
+5. **Ask the user for the target app.** That means a staging or local URL, plus a test account if the app has a login. It goes in `.env` as described in [Configuration](#configuration). Never point `BASE_URL_APP` at production, never set `QA_ALLOW_PROD=1` on your own, and never write a password anywhere except `.env`.
+6. **Walk them through a first test.** With no app of their own, use [Try it on a demo app](#try-it-on-a-demo-app). Tell them first what it costs (about 40 minutes and $6) and that it raises many permission prompts.
 
 ### What `/qa-warden:init` does
 
@@ -168,6 +191,8 @@ oracle:
 A test id is justified here: the demo's rows carry `data-testid="todo-item"`, and the `listitem` role also matches the filter links.
 
 **Cost.** The authoring pass (`explore` through `review`) makes real model calls; `/qa-warden:run` has no LLM cost. A measured run of exactly these steps (0.5.1, 2026-09-30) took about 40 minutes and about $6. Half of that was `gen`, whose verifier breaks the app on purpose to prove the test can fail. The demo is public and shared, so it may change or be down.
+
+**Expect many permission prompts.** In Claude Code's default permission mode, a first run asks you to allow a lot of shell commands one at a time; a full run once raised about 300. Most are the agents' own test and lookup commands; read each one and answer "Yes" when it is. To get fewer, press Shift+Tab to switch to a more permissive mode for the long `gen` and `review` steps. Details are in [Known issues](#known-issues).
 
 ### Fast lane: your first test
 
@@ -335,6 +360,7 @@ Why it matters: a 2026 study of autonomous test repair documented "assertion wea
 Found by a full end-to-end run of the plugin against a small app with planted bugs (it caught all of them). 0.6.0 fixes what that run found, except these:
 
 - **Many permission prompts.** A full run (explore, both lanes, gen, review) in the default permission mode raised about 300 allow-once prompts, mostly for compound shell commands the agents write themselves (`VAR=…; … $VAR`, `cd … &&`, heredoc scripts). 0.6.0 tells them to use one plain command per call, which cuts some of them, not all. Answer "Yes" once per prompt, or switch modes for long `gen` and `review` steps.
+- **`/qa-warden:review` and `/qa-warden:batch-fix` still ask for one extra "Yes".** The 0.6.0 CHANGELOG says this is fixed, but it is not. Interactive Claude Code runs the reviewer and healer in the background, and by the time they write their marker or recheck, the skill's pre-approval has expired. Answer "Yes" to that prompt.
 - **Parallel tests that share one account.** With `fullyParallel: true` and a single test account, specs that change shared state (a cart, say) collide, and `/qa-warden:review` Check 13 FAILs them. The plugin has no built-in answer yet: give each worker its own account, or run that area serially. `playwright.config.ts` is toolkit-owned, so that change is yours to make and `/qa-warden:doctor` will report it as drift.
 - **Coverage only knows the features you specced.** `/qa-warden:coverage` measures specs, cases and routes you already have. A feature your requirements describe but nobody has specced yet is not listed as a gap. List your features yourself and spec the risky ones, access rules especially.
 - **Agents may read your product's source.** QA Warden is grey-box by design: when the live app is ambiguous, agents may read the product source to settle a route, field name or API shape, though locators and expected values must still come from the live app and your requirements. If your app's repo sits next to the QA repo and you want black-box only, answer "No" to those reads, or add a deny rule such as `Read(//absolute/path/to/app/**)` to `.claude/settings.json`.
@@ -407,12 +433,12 @@ Expected tail:
 ```
 qa-selfcheck: ✅ plugin is self-consistent — all 15 checks passed
 qa-hooktest: ✅ all 62 cases passed
-qa-scaffoldtest: ✅ all 819 cases passed
+qa-scaffoldtest: ✅ all 933 cases passed
 ```
 
 CI runs `qa-scaffoldtest` and `qa-hooktest` a second time on Linux with `mawk` first on `PATH`, the
 third awk dialect (BSD awk on macOS and gawk on the Linux runner cover the other two). That run sets
-`QA_EXPECT_AWK=mawk`, which adds one case, so its tail reads 820 rather than 819.
+`QA_EXPECT_AWK=mawk`, which adds one case, so its tail reads 934 rather than 933.
 
 When you change `qa-warden/agents/reviewer.md`, also run the behavioural evals. They make real model calls (on 2026-09-30, about $0.4 and 2 minutes per case; all five cost $1.97), so run them per change, not per commit. Details: [`qa-warden/evals/README.md`](qa-warden/evals/README.md).
 
@@ -428,7 +454,7 @@ claude --plugin-dir ./qa-warden
 
 ### Versioning and releasing
 
-The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.6.0`. Users receive an update only when that string changes.
+The plugin ships in **versioned mode**: `qa-warden/.claude-plugin/plugin.json` sets an explicit `version`, currently `0.6.1`. Users receive an update only when that string changes.
 
 > **Bump `version` in the same commit as every user-visible change.** If you push without a bump, nothing ships, and `/plugin update` tells users they are already current. No error warns you.
 
