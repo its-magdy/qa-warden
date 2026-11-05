@@ -4,12 +4,12 @@
   "owner": {
     "name": "Mohamed Magdy Omar"
   },
-  "description": "Marketplace for QA Warden, the AI QA automation plugin (exploration/planner/ideation/generator/reviewer/healer + oracle-defense skills + page-object reuse layer).",
+  "description": "Marketplace for QA Warden: AI-written Playwright E2E tests that no AI can quietly loosen.",
   "plugins": [
     {
       "name": "qa-warden",
       "source": "./qa-warden",
-      "description": "AI-written Playwright E2E tests. The healer can fix selectors, never assertions. AI-authored, Playwright-replayed E2E QA suite with an AI-maintained page-object reuse layer. Run /qa-warden:init in a fresh project after install.",
+      "description": "AI-written Playwright E2E tests from plain-language specs. The healer can fix selectors, never assertions. Run /qa-warden:init in the project after install.",
       "relevance": {
         "topic": "end-to-end testing",
         "signals": {

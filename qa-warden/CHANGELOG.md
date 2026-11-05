@@ -2,14 +2,10 @@
 
 All notable consumer-facing changes to QA Warden (plugin id `qa-warden`; `qa` before 0.4.0).
 
-The **last published build was `0.2.0` (2026-07-24)**. The **`0.3.0`** section below landed in
-the repository since then: a feature release on the published `0.1.0 → 0.2.0`
-line, with no breaking change to the spec format or the `/qa:*` surface. **`0.4.0`** adds only
-the rename on top of it, and that one IS breaking (see its section). **`0.4.1`** is
-documentation fixes only; **`0.5.0`** fixes what a fresh-install test and a re-check of the
-2026-09-26 end-to-end run found; **`0.5.1`** is a one-line wording fix on top, **`0.5.2`** fixes what a full end-to-end run
-of the README walkthrough found, **`0.5.3`** fixes what a whole-plugin code review found, **`0.5.4`** fixes what a
-security review found, **`0.5.5`** hardens one step of it, **`0.5.6`** brings the nightly in line with GitHub's and Playwright's CI guidance, and **`0.6.0`** is an architecture pass plus the fixes from a full end-to-end run. `.claude-plugin/plugin.json` reads `0.6.0`; tag the build with `claude plugin tag ./qa-warden`.
+The newest release is at the top. Since `0.5.2`, every release is also a git tag
+(`qa-warden--v<version>`) with a GitHub release. `.claude-plugin/plugin.json` reads `0.6.1`; tag a build with `claude plugin tag ./qa-warden`.
+Releases before `0.4.0` used the plugin id `qa` and the `/qa:*` commands; `0.4.0` is the rename, and
+the only breaking change to the spec format or the command surface so far.
 
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/). Versions are the
 number in `plugin.json`, which is also the key the installer caches under
@@ -19,6 +15,32 @@ never carry the same number**, or the second one has no way to announce itself.
 ---
 
 ## [Unreleased]
+
+---
+
+## 0.6.1 — one resolver for stamped helpers, one manifest reader, README for first-time users (2026-11-05)
+
+**Upgrading:** nothing to do. No stamped file changed, so no `/qa-warden:init --resync` is needed.
+
+### README for first-time users and AI agents
+
+- **The opening says who the plugin is for and what problem it solves** before it uses any of the
+  plugin's own terms.
+- **A new "For AI agents: installing for a user" section.** An agent given the repo URL learns that
+  the plugin runs only in Claude Code. It also gets the shell forms of the install commands
+  (`claude plugin marketplace add`, `claude plugin install --scope project`), learns that
+  `/qa-warden:init` is for the user to type, and learns never to point the suite at production.
+- **The demo walkthrough warns about permission prompts** next to its cost note, not only under
+  Known issues.
+- **Shorter plugin and marketplace descriptions** in `plugin.json` and `marketplace.json`, the text
+  `/plugin` shows when someone browses the marketplace.
+- **`qa-warden/README.md` gives the same two install commands as the root README.** It used to give a
+  one-line `--marketplace` form and a minimum Claude Code version with no source.
+- **The README's expected `qa-scaffoldtest` tail reads 933 cases (934 under mawk)**, the count
+  since the two changes below; it still said 819.
+- **Correction to 0.6.0:** its entry below says `/qa-warden:review` and `/qa-warden:batch-fix` no
+  longer ask for an extra permission. They still do: interactive Claude Code runs their subagent in
+  the background, after the skill's pre-approval has expired. Known issues now lists it.
 
 ### One rule for which copy of a stamped helper runs
 
