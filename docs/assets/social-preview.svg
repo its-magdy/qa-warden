@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <rect width="1280" height="640" fill="#0B1118"/>
+  <g transform="translate(120 170) scale(3)">
+    <rect width="100" height="100" rx="22" fill="#121A24"/>
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 57L28 72L42 44" stroke="#F2EDE2" stroke-width="11"/>
+      <path d="M42 44L58.5 74L83 24" stroke="#121A24" stroke-width="19"/>
+      <path d="M42 44L58.5 74L83 24" stroke="#34D987" stroke-width="12"/>
+    </g>
+  </g>
+  <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+    <text x="500" y="292" font-size="96" font-weight="700" fill="#F2EDE2">QA Warden</text>
+    <text x="502" y="364" font-size="34" fill="#C4D0DB">AI writes your E2E tests.</text>
+    <text x="502" y="412" font-size="34" fill="#34D987">No AI can quietly loosen them.</text>
+    <text x="502" y="478" font-size="24" fill="#7D8B99">A Claude Code plugin for Playwright</text>
+  </g>
+</svg>

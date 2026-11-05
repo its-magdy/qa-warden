@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/qa-warden-icon.svg" width="112" alt="QA Warden logo: a cream check overlapped by a larger green check, forming a W"></p>
+
 # QA Warden
 
 > AI writes your Playwright E2E tests from plain-language specs. No AI can quietly loosen them afterwards.

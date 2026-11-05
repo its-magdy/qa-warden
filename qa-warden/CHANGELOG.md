@@ -35,6 +35,14 @@ never carry the same number**, or the second one has no way to announce itself.
   report form, `SECURITY.md` and `CONTRIBUTING.md`.
 - **"Who it's for" no longer reads as "a web app written by AI".**
 
+### Logo
+
+- **QA Warden has a logo:** a cream check overlapped by a larger green check, together forming a W.
+  The second check stands for the agent that grades a test it did not write. The README shows it
+  above the title, and `plugin.json` sets `icon` to `./assets/icon.png` for the plugin's listing in
+  Anthropic's directory (Claude Code itself ignores the field). The source SVG and the GitHub
+  social preview image are in `docs/assets/`.
+
 ---
 
 ## 0.6.1 — one resolver for stamped helpers, one manifest reader, README for first-time users (2026-11-05)
